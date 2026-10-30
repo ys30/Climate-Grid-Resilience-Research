@@ -36,6 +36,20 @@ jobs:
             --demand inputs/demand/eia930_demand_2024_summer.csv \
             --weather inputs/weather/era5_weather_2024_summer.csv \
             --output outputs/observed_2024
+      - name: Screen historical heat and low-wind event candidates
+        run: |
+          python -m grid_resilience.events \
+            --weather outputs/observed_2024/weather.csv \
+            --output outputs/observed_2024/event_candidates.csv \
+            --heat-c 35 --low-wind-cf 0.2 --min-bas 2 --min-hours 6
+      - name: Verify event candidate schema
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          d=pd.read_csv('outputs/observed_2024/event_candidates.csv')
+          assert {'event_id','event_type','start_utc','end_utc_inclusive','active_hours'}.issubset(d.columns)
+          print('Candidate events (descriptive, uncalibrated):',len(d))
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: MATCHED-OBSERVED-EIA930-ERA5-2024
