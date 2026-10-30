@@ -35,7 +35,7 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir):
     expected_d = pd.MultiIndex.from_product([times, bas], names=["timestamp", "ba"])
     if set(map(tuple, demand[["timestamp", "ba"]].itertuples(index=False, name=None))) != set(expected_d):
         raise ValueError("Incomplete demand BA-hour matrix")
-    keys = capacity[["ba", "technology"]].itertuples(index=False, name=None)
+    keys = list(capacity[["ba", "technology"]].itertuples(index=False, name=None))
     expected_a = {(t, ba, tech) for t in times for ba, tech in keys}
     actual_a = set(map(tuple, avail[["timestamp", "ba", "technology"]].itertuples(index=False, name=None)))
     if actual_a != expected_a:
