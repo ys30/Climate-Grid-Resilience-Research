@@ -26,3 +26,29 @@ def test_missing_weather_rejected(tmp_path):
     pd.read_csv(paths[1]).iloc[:-1].to_csv(paths[1],index=False)
     with pytest.raises(ValueError,match="coverage mismatch"):
         run(*paths,tmp_path/"out")
+
+
+def test_four_scenarios_with_finite_storage(tmp_path):
+    pytest.importorskip("pypsa")
+    paths = inputs(tmp_path)
+    capacity = pd.read_csv(paths[2])
+    capacity["capacity_mw"] = 0
+    capacity.to_csv(paths[2], index=False)
+    storage = tmp_path / "storage.csv"
+    pd.DataFrame([{
+        "ba": "CISO", "power_mw": 50, "energy_mwh": 50,
+        "efficiency_store": 1, "efficiency_dispatch": 1,
+        "initial_soc_fraction": 1,
+    }]).to_csv(storage, index=False)
+    result = run(*paths, tmp_path / "out", event_id="storage_synthetic", storage=storage)
+    assert result["n_bas"] == 1
+    summary = pd.read_csv(tmp_path / "out" / "multi_technology_factorial_dispatch.csv")
+    assert set(summary.scenario) == {"baseline", "heat_only", "wind_only", "heat_wind"}
+    baseline = summary.loc[summary.scenario == "baseline", "unserved_energy_mwh"].iloc[0]
+    heat = summary.loc[summary.scenario == "heat_only", "unserved_energy_mwh"].iloc[0]
+    assert baseline == pytest.approx(50, abs=1e-4)
+    assert heat > baseline
+    assert summary.loc[summary.scenario == "wind_only", "unserved_energy_mwh"].iloc[0] == pytest.approx(baseline, abs=1e-4)
+    for scenario in ("baseline", "heat_only", "wind_only", "heat_wind"):
+        soc = pd.read_csv(tmp_path / "out" / "solved" / scenario / "storage_soc_mwh.csv")
+        assert soc["CISO_battery"].between(-1e-4, 50 + 1e-4).all()
