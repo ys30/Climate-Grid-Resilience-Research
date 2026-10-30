@@ -88,6 +88,11 @@ jobs:
           python -m grid_resilience.eia_monthly_coverage_profile \
             --input outputs/eia860_intake/observed_single_fuel_candidate_ba_technology_month.csv \
             --output outputs/eia860_intake
+      - name: Select full-year observed comparison candidates
+        run: |
+          python -m grid_resilience.eia_complete_year_gate \
+            --matrix outputs/eia860_intake/candidate_monthly_coverage_matrix.csv \
+            --output outputs/eia860_intake
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -106,4 +111,6 @@ jobs:
             outputs/eia860_intake/candidate_monthly_coverage_manifest.json
             outputs/eia860_intake/candidate_monthly_coverage_matrix.csv
             outputs/eia860_intake/candidate_monthly_coverage_by_technology.csv
+            outputs/eia860_intake/complete_year_candidate_diagnostics.csv
+            outputs/eia860_intake/complete_year_gate_manifest.json
           if-no-files-found: warn
