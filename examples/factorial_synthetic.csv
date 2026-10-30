@@ -1,0 +1,5 @@
+event_id,ba,network_variant,scenario,unserved_energy_mwh,shortage_hours,peak_shortfall_mw
+synthetic_example,AZPS,illustrative,baseline,10,1,2
+synthetic_example,AZPS,illustrative,heat_only,25,2.5,5
+synthetic_example,AZPS,illustrative,wind_only,18,1.8,3.6
+synthetic_example,AZPS,illustrative,heat_wind,40,4,8
