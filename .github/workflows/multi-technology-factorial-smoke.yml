@@ -1,0 +1,21 @@
+name: Multi-technology factorial integrated smoke
+on:
+  push:
+    paths:
+      - 'src/grid_resilience/multi_technology_factorial.py'
+      - 'src/grid_resilience/multi_technology_scenarios.py'
+      - 'src/grid_resilience/multi_technology_dispatch.py'
+      - 'tests/test_multi_technology_factorial.py'
+      - '.github/workflows/multi-technology-factorial-smoke.yml'
+  workflow_dispatch:
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - run: python -m pytest -q tests/test_multi_technology_factorial.py tests/test_multi_technology_dispatch.py tests/test_multi_technology_scenarios.py
