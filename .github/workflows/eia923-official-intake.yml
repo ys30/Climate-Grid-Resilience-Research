@@ -15,7 +15,9 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install workbook reader
-        run: python -m pip install -e . openpyxl xlrd
+        run: python -m pip install -e . openpyxl xlrd pytest
+      - name: Test original-workbook extraction with Excel reader available
+        run: python -m pytest tests/test_eia923_generator_extract.py -q
       - name: Download official 2024 final archive
         run: |
           mkdir -p outputs/eia923_intake
