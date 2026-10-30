@@ -55,6 +55,7 @@ def solve(demand_path, weather_path, capacity_path, links_path, output,
     load=demand.set_index(["timestamp","ba"]).demand_mw
     climate=weather.set_index(["timestamp","ba"])
     rows=[]
+    generation_rows=[]
     for scenario,(heat,wind_penalty) in SCENARIOS.items():
         n=pypsa.Network()
         n.set_snapshots(timestamps.tz_localize(None))
@@ -78,6 +79,14 @@ def solve(demand_path, weather_path, capacity_path, links_path, output,
         if (status,condition)!=("ok","optimal"):
             raise RuntimeError(f"{scenario}: {status}/{condition}")
         for ba in sorted(bas):
+            for tech, suffix in (("generic_thermal_proxy", "gas"), ("wind", "wind")):
+                production = n.generators_t.p[f"{ba}_{suffix}"]
+                for stamp, mw in zip(timestamps, production.to_numpy()):
+                    generation_rows.append({
+                        "event_id": event_id, "network_variant": network_variant,
+                        "scenario": scenario, "timestamp": stamp.isoformat(),
+                        "ba": ba, "technology": tech, "generation_mwh": float(mw)
+                    })
             series=n.generators_t.p[f"{ba}_unserved"].clip(lower=0)
             rows.append(dict(event_id=event_id,network_variant=network_variant,scenario=scenario,ba=ba,
                              unserved_energy_mwh=float(series.sum()),
@@ -85,6 +94,15 @@ def solve(demand_path, weather_path, capacity_path, links_path, output,
                              peak_shortfall_mw=float(series.max())))
     result=pd.DataFrame(rows)
     result.to_csv(out/"factorial_dispatch.csv",index=False)
+    hourly = pd.DataFrame(generation_rows)
+    hourly.to_csv(out/"factorial_generation_hourly.csv", index=False)
+    # The observed-comparison adapter expects monthly BA/technology values.
+    # Keep baseline and the partial-fleet mapping explicit; never combine
+    # counterfactual scenarios or assign omitted technologies zero generation.
+    baseline = hourly.loc[hourly.scenario == "baseline"].copy()
+    baseline["period"] = pd.to_datetime(baseline.timestamp, utc=True).dt.strftime("%Y-%m")
+    monthly = baseline.groupby(["ba", "technology", "period"], as_index=False).generation_mwh.sum()
+    monthly.to_csv(out/"baseline_generation_monthly_partial_fleet.csv", index=False)
     from .factorial_interactions import decompose
     decompose(result).to_csv(out/"factorial_interactions.csv",index=False)
     return result
