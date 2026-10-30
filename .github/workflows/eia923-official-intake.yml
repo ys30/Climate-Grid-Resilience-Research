@@ -85,6 +85,11 @@ jobs:
           python -m grid_resilience.eia923_schema_probe \
             --archive outputs/eia923_intake/f923_2024.zip \
             --output outputs/eia923_intake/generation_schema_probe.json
+      - name: Extract original 2024 generator-month net generation for target BAs
+        run: |
+          python -m grid_resilience.eia923_generator_extract \
+            --archive outputs/eia923_intake/f923_2024.zip \
+            --output outputs/eia923_intake
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -93,4 +98,6 @@ jobs:
             outputs/eia923_intake/archive_manifest.json
             outputs/eia923_intake/workbook_structure.json
             outputs/eia923_intake/generation_schema_probe.json
+            outputs/eia923_intake/generator_extraction_manifest.json
+            outputs/eia923_intake/eia923_generator_month_net_mwh.csv
           if-no-files-found: warn
