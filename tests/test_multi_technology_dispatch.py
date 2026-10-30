@@ -28,3 +28,33 @@ def test_reject_missing_availability(tmp_path):
     df.to_csv(p[2],index=False)
     with pytest.raises(ValueError,match="availability matrix"):
         solve(*p,tmp_path/"out")
+
+
+def test_hypothetical_link_supplies_second_ba(tmp_path):
+    pytest.importorskip("pypsa")
+    demand, capacity, avail = inputs(tmp_path)
+    d = pd.read_csv(demand)
+    d["demand_mw"] = 20
+    d2 = d.copy()
+    d2["ba"] = "AZPS"
+    d2["demand_mw"] = 30
+    pd.concat([d, d2], ignore_index=True).to_csv(demand, index=False)
+    c = pd.read_csv(capacity)
+    c.loc[len(c)] = ["AZPS", "gas", 0, 70]
+    c.to_csv(capacity, index=False)
+    a = pd.read_csv(avail)
+    a2 = a.query("technology == 'gas'").copy()
+    a2["ba"] = "AZPS"
+    pd.concat([a, a2], ignore_index=True).to_csv(avail, index=False)
+    links = tmp_path / "links.csv"
+    pd.DataFrame([{"from_ba": "CISO", "to_ba": "AZPS", "capacity_mw": 40}]).to_csv(links, index=False)
+    result = solve(demand, capacity, avail, tmp_path / "out", links_csv=links)
+    assert result.unserved_energy_mwh.sum() == pytest.approx(0, abs=1e-5)
+
+def test_rejects_unrecognized_link_bus(tmp_path):
+    pytest.importorskip("pypsa")
+    paths = inputs(tmp_path)
+    links = tmp_path / "links.csv"
+    pd.DataFrame([{"from_ba": "CISO", "to_ba": "UNKNOWN", "capacity_mw": 40}]).to_csv(links, index=False)
+    with pytest.raises(ValueError, match="outside BA inventory"):
+        solve(*paths, tmp_path / "out", links_csv=links)
