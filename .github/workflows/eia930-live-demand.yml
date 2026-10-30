@@ -28,6 +28,17 @@ jobs:
             --start 2024-07-01T00:00:00Z \
             --end 2024-07-08T00:00:00Z \
             --output outputs/eia930_demand_2024_summer.csv
+      - name: Validate four-BA completeness and publish run summary
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          d=pd.read_csv('outputs/eia930_demand_2024_summer.csv')
+          assert len(d)==672, f'Expected 672 BA-hour observations, got {len(d)}'
+          assert set(d.ba)=={'CISO','AZPS','BPAT','SRP'}
+          assert d.groupby('ba').size().eq(168).all()
+          assert d.demand_mw.gt(0).all()
+          print('Verified observed demand: four BAs x 168 UTC hours')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
