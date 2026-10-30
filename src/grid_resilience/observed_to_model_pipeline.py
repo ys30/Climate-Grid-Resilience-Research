@@ -16,7 +16,8 @@ def run(observed, expected, crosswalk, modeled_hourly, output, allow_partial_fle
     # Preflight before writing: avoid misleading partial success.
     audit_dir = out / "observed_coverage"
     coverage = audit(observed, expected, audit_dir)
-    checked = pd.read_csv(audit_dir / "observed_coverage_checked.csv")
+    checked = pd.read_csv(audit_dir / "observed_coverage_checked.csv",
+                          dtype={"plant_id": str, "technology": str, "period": str})
     plant = out / "checked_plant_generation.csv"
     checked[["plant_id", "technology", "period", "generation_mwh"]].to_csv(plant, index=False)
     mapped = aggregate(plant, crosswalk, out / "ba_mapping")
