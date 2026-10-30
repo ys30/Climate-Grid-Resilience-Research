@@ -26,6 +26,10 @@ python -m grid_resilience.factorial_interactions --input examples/factorial_synt
 
 The example fixture is **synthetic unit-test input**, not observed or simulated study evidence. New multi-year EIA/ERA5/PyPSA results will require separate execution, QA and historical validation before any paper claims.
 
+## Historical input validation gate (implemented)
+
+The [historical input harmonizer](src/grid_resilience/historical_inputs.py) takes **upstream-provided** demand and weather BA-hour CSVs, plus a capacity projection with source year and provenance, checks hourly completeness and ranges, and writes strictly validated `demand.csv`, `weather.csv`, `capacity.csv`, and `input_provenance.json`. It **does not download EIA/ERA5**, validate original agency reports, estimate transmission capacities, or silently fill missing hours. Use it before the [PyPSA matched factorial dispatch](src/grid_resilience/factorial_dispatch.py). Do not call this historical calibration until EIA-860/923/930 comparisons and independent-year checks are performed.
+
 ## Scope / boundaries
 
 - Historical EIA-860/923/930 and ERA5 inputs must be reconciled before calibration.
