@@ -1,6 +1,10 @@
 name: EIA-930 live observed demand audit
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/eia930-live-demand.yml'
 jobs:
   demand:
     runs-on: ubuntu-latest
