@@ -1,0 +1,45 @@
+name: Matched factorial PyPSA solver smoke test
+on:
+  push:
+    paths:
+      - 'src/grid_resilience/factorial_dispatch.py'
+      - 'src/grid_resilience/factorial_interactions.py'
+      - 'examples/synthetic_*.csv'
+      - 'pyproject.toml'
+      - '.github/workflows/factorial-dispatch-smoke.yml'
+  workflow_dispatch:
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - name: Solve all four matched scenarios on SYNTHETIC fixture
+        run: |
+          python -m grid_resilience.factorial_dispatch \
+            --demand examples/synthetic_demand.csv \
+            --weather examples/synthetic_weather.csv \
+            --capacity examples/synthetic_capacity.csv \
+            --links examples/synthetic_links.csv \
+            --event-id synthetic_example \
+            --output outputs/synthetic_pypsa
+      - name: Assert complete scenario combinations
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          d=pd.read_csv("outputs/synthetic_pypsa/factorial_dispatch.csv")
+          assert len(d)==8
+          assert set(d.scenario)=={'baseline','heat_only','wind_only','heat_wind'}
+          assert set(d.ba)=={'AZPS','CISO'}
+          assert (d.unserved_energy_mwh>=0).all()
+          i=pd.read_csv("outputs/synthetic_pypsa/factorial_interactions.csv")
+          assert len(i)==2
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-factorial-pypsa-smoke-only
+          path: outputs/synthetic_pypsa/
