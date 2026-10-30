@@ -1,0 +1,60 @@
+name: Research pipeline provenance and PyPSA integration
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/factorial-research-pipeline.yml'
+      - 'src/grid_resilience/research_run.py'
+      - 'src/grid_resilience/historical_inputs.py'
+      - 'src/grid_resilience/factorial_dispatch.py'
+      - 'tests/test_research_run.py'
+jobs:
+  synthetic-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev,model]'
+      - run: python -m pytest -q
+      - name: Supply labeled synthetic source metadata
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          p='examples/synthetic_capacity.csv'
+          x=pd.read_csv(p)
+          x['source_year']=2024
+          x['capacity_source']='SYNTHETIC_TEST_ONLY'
+          x.to_csv('examples/synthetic_capacity_with_metadata.csv',index=False)
+          PY
+      - name: Complete validated synthetic research run
+        run: |
+          python -m grid_resilience.research_run \
+            --demand examples/synthetic_demand.csv \
+            --weather examples/synthetic_weather.csv \
+            --capacity examples/synthetic_capacity_with_metadata.csv \
+            --links examples/synthetic_links.csv \
+            --event-id SYNTHETIC_TEST_ONLY \
+            --link-evidence hypothetical \
+            --output outputs/pipeline_smoke
+      - name: Verify provenance and factorial completeness
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          root=Path('outputs/pipeline_smoke')
+          m=json.loads((root/'run_manifest.json').read_text())
+          assert m['intertie_evidence_classification']=='hypothetical'
+          assert len(m['input_sha256'])==4
+          assert m['model_result_rows']==8
+          assert set(pd.read_csv(root/'solved/factorial_dispatch.csv')['scenario'])=={'baseline','heat_only','wind_only','heat_wind'}
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SYNTHETIC-ONLY-research-integration
+          path: outputs/pipeline_smoke/
