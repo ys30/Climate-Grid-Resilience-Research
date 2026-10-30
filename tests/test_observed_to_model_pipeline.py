@@ -33,3 +33,17 @@ def test_missing_observation_fails_before_mapping(tmp_path):
     e.to_csv(paths[1],index=False)
     with pytest.raises(ValueError,match="coverage mismatch"):
         run(*paths,tmp_path/"out",allow_partial_fleet=True)
+
+def test_leading_zero_plant_id_preserved_across_pipeline(tmp_path):
+    paths = inputs(tmp_path)
+    observed, expected, crosswalk, _ = paths
+    for path in (observed, expected, crosswalk):
+        df = pd.read_csv(path, dtype=str)
+        df["plant_id"] = "00123"
+        df.to_csv(path, index=False)
+    result = run(*paths, tmp_path / "zero_id_out", allow_partial_fleet=True)
+    assert result["generation_comparison"]["comparison_rows"] == 1
+    checked = pd.read_csv(
+        tmp_path / "zero_id_out" / "checked_plant_generation.csv", dtype=str
+    )
+    assert checked.plant_id.iloc[0] == "00123"
