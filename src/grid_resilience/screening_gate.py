@@ -11,7 +11,7 @@ import pandas as pd
 SCENARIOS = {"baseline", "heat_only", "wind_only", "heat_wind"}
 
 def assess(dispatch_csv, capacity_csv, excluded_csv, output_json,
-           max_baseline_fraction=0.01, max_excluded_fraction=0.05):
+           max_baseline_fraction=0.01, max_excluded_fraction=0.05, demand_csv=None):
     for name, value in (("max_baseline_fraction", max_baseline_fraction),
                         ("max_excluded_fraction", max_excluded_fraction)):
         if not 0 <= value <= 1:
@@ -27,6 +27,9 @@ def assess(dispatch_csv, capacity_csv, excluded_csv, output_json,
         raise ValueError("Excluded inventory requires ba, technology and capacity_mw")
     if d.empty or c.empty or c.ba.duplicated().any() or d.duplicated(["scenario", "ba"]).any():
         raise ValueError("Missing or duplicate capacity/dispatch groups")
+    for name, frame in (("dispatch", d), ("capacity", c), ("excluded", e)):
+        if frame.ba.isna().any() or frame.ba.astype(str).str.strip().eq("").any():
+            raise ValueError(f"{name}: missing BA label")
     bas = set(c.ba)
     if set(d.ba) != bas or set(d.scenario) != SCENARIOS:
         raise ValueError("Dispatch BA or scenario coverage mismatch")
@@ -46,8 +49,29 @@ def assess(dispatch_csv, capacity_csv, excluded_csv, output_json,
         raise ValueError("Total inventoried nameplate must be positive")
     excluded_fraction = omitted / (included + omitted)
     baseline_mwh = float(d.loc[d.scenario == "baseline", "unserved_energy_mwh"].sum())
-    # Without hourly demand, a baseline-shortfall fraction cannot be calculated.
-    # This gate therefore does NOT silently treat EENS / installed capacity as a ratio.
+    baseline_fraction = None
+    if demand_csv is not None:
+        demand = pd.read_csv(demand_csv)
+        if not {"timestamp", "ba", "demand_mw"}.issubset(demand):
+            raise ValueError("Demand requires timestamp, ba, demand_mw")
+        if demand.empty or demand[["timestamp", "ba"]].isna().any().any() or demand.duplicated(["timestamp", "ba"]).any():
+            raise ValueError("Missing or duplicate demand BA-hour rows")
+        if set(demand.ba) != bas:
+            raise ValueError("Demand BA coverage mismatch")
+        demand["demand_mw"] = pd.to_numeric(demand.demand_mw, errors="raise")
+        if not demand.demand_mw.map(lambda x: 0 < float(x) < float("inf")).all():
+            raise ValueError("Demand must be positive and finite")
+        hours = set(demand.timestamp)
+        if any(set(group.timestamp) != hours for _, group in demand.groupby("ba")):
+            raise ValueError("Incomplete hourly demand panel")
+        times = pd.DatetimeIndex(sorted(pd.to_datetime(list(hours), utc=True, errors="raise")))
+        if len(times) > 1 and not (times[1:] - times[:-1] == pd.Timedelta(hours=1)).all():
+            raise ValueError("Demand timestamps must be contiguous hours")
+        total_load_mwh = float(demand.demand_mw.sum())
+        if baseline_mwh > total_load_mwh + 1e-6:
+            raise ValueError("Baseline shortfall exceeds total demand energy")
+        baseline_fraction = baseline_mwh / total_load_mwh
+    # Missing denominator is unknown, never zero.
     report = {
         "classification": "partial_fleet_screening_not_calibrated",
         "bas": sorted(bas),
@@ -57,13 +81,16 @@ def assess(dispatch_csv, capacity_csv, excluded_csv, output_json,
         "excluded_nameplate_fraction": excluded_fraction,
         "thresholds": {"max_excluded_fraction": max_excluded_fraction,
                        "max_baseline_fraction": max_baseline_fraction},
-        "baseline_energy_fraction": None,
+        "baseline_energy_fraction": baseline_fraction,
         "pass_for_historical_reliability_claims": False,
         "blocking_reasons": [
             "No independently benchmarked historical generation or observed intertie ratings",
-            "No hourly load totals supplied: baseline unserved-energy fraction cannot be assessed"
         ],
     }
+    if baseline_fraction is None:
+        report["blocking_reasons"].append("No hourly load totals supplied: baseline unserved-energy fraction cannot be assessed")
+    elif baseline_fraction > max_baseline_fraction:
+        report["blocking_reasons"].append("Baseline shortage fraction exceeds screening tolerance")
     if excluded_fraction > max_excluded_fraction:
         report["blocking_reasons"].append("Omitted nameplate exceeds screening tolerance")
     if baseline_mwh > 0:
@@ -80,9 +107,13 @@ def main():
     p.add_argument("--excluded", required=True)
     p.add_argument("--output", required=True)
     p.add_argument("--max-excluded-fraction", type=float, default=0.05)
+    p.add_argument("--max-baseline-fraction", type=float, default=0.01)
+    p.add_argument("--demand", default=None)
     a = p.parse_args()
     print(json.dumps(assess(a.dispatch, a.capacity, a.excluded, a.output,
-                            max_excluded_fraction=a.max_excluded_fraction), indent=2))
+                            max_excluded_fraction=a.max_excluded_fraction,
+                            max_baseline_fraction=a.max_baseline_fraction,
+                            demand_csv=a.demand), indent=2))
 
 if __name__ == "__main__":
     main()
