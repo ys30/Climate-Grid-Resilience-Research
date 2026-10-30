@@ -1,0 +1,59 @@
+name: Import official 2024 EIA-860 inventory into V2
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/eia860-import.yml'
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ys30/Climate-Grid-Resilience-PyPSA
+          path: upstream-v1
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]' openpyxl requests
+      - name: Official 2024 EIA-860 data conversion using audited V1 source adapter
+        run: |
+          PYTHONPATH=upstream-v1/src python -m grid_resilience.run_eia860 \
+            --bas CISO AZPS BPAT SRP \
+            --raw data/external/eia860_2024 \
+            --output outputs/eia860_source
+      - name: Project complete BA inventories to explicitly partial V2 thermal/wind
+        run: |
+          python -m grid_resilience.eia860_adapter \
+            --source outputs/eia860_source/eia860_ba_technology_capacity.csv \
+            --output outputs/eia860_v2
+      - name: Check source provenance and disclosed omissions
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          source=json.loads(Path('outputs/eia860_source/eia860_provenance.json').read_text())
+          projection=json.loads(Path('outputs/eia860_v2/capacity_mapping_manifest.json').read_text())
+          cap=pd.read_csv('outputs/eia860_v2/capacity.csv')
+          assert source['year']==2024 and source['status_filter'].startswith('OP')
+          assert set(cap.ba)=={'CISO','AZPS','BPAT','SRP'}
+          assert len(source['operable_generator_xlsx_sha256'])==64
+          assert projection['excluded_nameplate_mw']>=0
+          print('EIA-860 source provenance and partial-fleet exclusions audited')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EIA860-2024-FOUR-BA-EXPLICIT-PARTIAL-FLEET
+          path: |
+            outputs/eia860_source/
+            outputs/eia860_v2/
+          retention-days: 60
+          if-no-files-found: warn
