@@ -1,0 +1,25 @@
+name: Research methods CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q
+      - name: Run synthetic example through command line
+        run: python -m grid_resilience.factorial_interactions --input examples/factorial_synthetic.csv --output outputs/factorial_interactions.csv
+      - name: Verify synthetic contrast
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          p = pd.read_csv('outputs/factorial_interactions.csv')
+          assert len(p) == 1
+          assert p.loc[0, 'unserved_energy_mwh_nonadditive_interaction'] == 7
+          PY
