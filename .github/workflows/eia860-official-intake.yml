@@ -77,6 +77,12 @@ jobs:
             --eia923 outputs/eia860_intake/eia923_generator_month_net_mwh.csv \
             --eia860 outputs/eia860_intake/eia860_2024_operable_generators.csv \
             --output outputs/eia860_intake
+      - name: Build clearly labeled partial-fleet BA technology monthly candidates
+        run: |
+          python -m grid_resilience.eia_single_fuel_candidates \
+            --eia923 outputs/eia860_intake/eia923_generator_month_net_mwh.csv \
+            --eia860 outputs/eia860_intake/eia860_2024_operable_generators.csv \
+            --output outputs/eia860_intake
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -90,4 +96,6 @@ jobs:
             outputs/eia860_intake/unmatched_generator_months.csv
             outputs/eia860_intake/classification_eligibility_by_ba.csv
             outputs/eia860_intake/classification_eligibility_manifest.json
+            outputs/eia860_intake/single_fuel_candidate_manifest.json
+            outputs/eia860_intake/observed_single_fuel_candidate_ba_technology_month.csv
           if-no-files-found: warn
