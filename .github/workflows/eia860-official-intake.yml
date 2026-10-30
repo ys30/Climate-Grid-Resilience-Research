@@ -1,0 +1,56 @@
+name: EIA-860 2024 official generator inventory intake
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/eia860-official-intake.yml'
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Excel reader
+        run: python -m pip install openpyxl
+      - name: Download and audit official 2024 EIA-860
+        run: |
+          mkdir -p outputs/eia860_intake
+          python - <<'PY'
+          from urllib.request import Request,urlopen
+          from pathlib import Path
+          from zipfile import ZipFile
+          from openpyxl import load_workbook
+          import hashlib,io,json
+          url="https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip"
+          req=Request(url,headers={"User-Agent":"Mozilla/5.0"})
+          with urlopen(req,timeout=150) as r: data=r.read()
+          manifest={"source_url":url,"sha256":hashlib.sha256(data).hexdigest(),
+                    "bytes":len(data),"workbooks":[],"observed_generator_join_completed":False}
+          with ZipFile(io.BytesIO(data)) as z:
+              manifest["entries"]=z.namelist()
+              names=[n for n in z.namelist() if "3_1_Generator" in n and n.endswith(".xlsx")]
+              if len(names)!=1: raise ValueError(f"Expected one generator workbook: {names}")
+              wb=load_workbook(io.BytesIO(z.read(names[0])),read_only=True,data_only=True)
+              for ws in wb:
+                  head=[]
+                  for row in ws.iter_rows(min_row=1,max_row=6,values_only=True):
+                      head.append([str(v)[:110] if v is not None else None for v in row[:85]])
+                  manifest["workbooks"].append({"name":names[0],"sheet":ws.title,"first_six_rows":head})
+              wb.close()
+          Path("outputs/eia860_intake/official_2024_schema.json").write_text(json.dumps(manifest,indent=2))
+          print("Official archive bytes",len(data))
+          print("Generator sheets",[x["sheet"] for x in manifest["workbooks"]])
+          for x in manifest["workbooks"]:
+              if "Operable" in x["sheet"]:
+                  for i,row in enumerate(x["first_six_rows"],1):
+                      print("Operable header row",i," | ".join(f"{j+1}:{v}" for j,v in enumerate(row) if v is not None)[:7000])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: official-eia860-2024-schema
+          path: outputs/eia860_intake/official_2024_schema.json
+          if-no-files-found: warn
