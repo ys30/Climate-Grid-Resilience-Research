@@ -109,6 +109,36 @@ jobs:
           assert m['input_validation']['hours']==168
           print(d.groupby('scenario').unserved_energy_mwh.sum().to_string())
           PY
+      - name: Produce auditable modeled factorial summary
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('outputs/real_input_screening')
+          d=pd.read_csv(out/'solved/factorial_dispatch.csv')
+          metric=d.groupby('scenario',as_index=False).agg(
+              modeled_unserved_energy_mwh=('unserved_energy_mwh','sum'),
+              ba_shortage_hours_sum=('shortage_hours','sum'),
+              max_ba_shortfall_mw=('peak_shortfall_mw','max'))
+          metric.to_csv(out/'scenario_summary.csv',index=False)
+          lines=[
+              '# Historical-input partial-fleet four-scenario screening results',
+              '',
+              'EIA-930 load and ERA5 point weather are observed; EIA-860 nameplate is historical year-end.',
+              'The thermal dispatch proxy, omitted generation technologies, hypothetical interties,',
+              'wind availability mapping and heat load response are **uncalibrated assumptions**.',
+              'Modeled unserved energy is **NOT observed outage evidence**.',
+              '',
+              '## Four scenario summary',
+              '',
+              '| Scenario | Modeled unserved energy (MWh) | Sum of BA shortage hours | Maximum BA shortfall (MW) |',
+              '|---|---:|---:|---:|'
+          ]
+          for row in metric.itertuples():
+              lines.append(f'| {row.scenario} | {row.modeled_unserved_energy_mwh:,.3f} | {row.ba_shortage_hours_sum:.0f} | {row.max_ba_shortfall_mw:,.3f} |')
+          (out/'SCREENING_RESULTS.md').write_text('\n'.join(lines)+'\n')
+          print('\n'.join(lines))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
