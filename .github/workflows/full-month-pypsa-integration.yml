@@ -30,4 +30,7 @@ jobs:
             outputs/synthetic_full_month/coverage/modeled_generation_full_months.csv
             outputs/synthetic_full_month/coverage/monthly_coverage_manifest.json
             outputs/synthetic_full_month/solve/shortfall_by_ba.csv
+            outputs/synthetic_full_month/synthetic_analytical_reference.csv
+            outputs/synthetic_full_month/synthetic_comparison/generation_calibration_manifest.json
+            outputs/synthetic_full_month/synthetic_comparison/generation_matched.csv
           if-no-files-found: warn
