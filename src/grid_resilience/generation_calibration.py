@@ -61,9 +61,9 @@ def compare(observed_csv, modeled_csv, output_dir, *, allow_negative=True):
             "mae_mwh_per_period": float(group.absolute_error_mwh.mean()),
             "wape": abs_error / denominator if denominator > 0 else float("nan"),
         })
-    summary = joined.groupby(["ba", "technology"], sort=True).apply(
-        summarize, include_groups=False
-    ).reset_index()
+    summary = joined.groupby(["ba", "technology"], sort=True)[
+        ["generation_mwh_observed", "generation_mwh_modeled", "error_mwh", "absolute_error_mwh"]
+    ].apply(summarize).reset_index()
     overall = summarize(joined)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
