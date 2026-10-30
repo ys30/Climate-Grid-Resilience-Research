@@ -38,3 +38,27 @@ def test_rejects_negative_excluded(tmp_path):
     d.to_csv(paths[2], index=False)
     with pytest.raises(ValueError, match="negative"):
         assess(*paths, tmp_path / "gate.json")
+
+
+def test_baseline_fraction_with_demand(tmp_path):
+    paths = fixtures(tmp_path)
+    demand = pd.DataFrame([
+        {"timestamp": f"2024-07-01T{hour:02d}:00:00Z", "ba": ba, "demand_mw": 100}
+        for hour in range(2) for ba in ["CISO", "AZPS"]
+    ])
+    demand_path = tmp_path / "demand.csv"
+    demand.to_csv(demand_path, index=False)
+    result = assess(*paths, tmp_path / "gate.json", demand_csv=demand_path)
+    assert result["baseline_energy_fraction"] == pytest.approx(0.05)
+    assert any("Baseline shortage fraction exceeds" in x for x in result["blocking_reasons"])
+
+def test_rejects_missing_demand_hour(tmp_path):
+    paths = fixtures(tmp_path)
+    demand = pd.DataFrame([
+        {"timestamp": f"2024-07-01T{hour:02d}:00:00Z", "ba": ba, "demand_mw": 100}
+        for hour in range(2) for ba in ["CISO", "AZPS"]
+    ]).iloc[:-1]
+    demand_path = tmp_path / "demand.csv"
+    demand.to_csv(demand_path, index=False)
+    with pytest.raises(ValueError, match="Incomplete hourly demand panel"):
+        assess(*paths, tmp_path / "gate.json", demand_csv=demand_path)
