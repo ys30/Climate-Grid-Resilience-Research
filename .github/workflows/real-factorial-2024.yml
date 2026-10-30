@@ -30,6 +30,26 @@ jobs:
           run-id: 41107169962
           github-token: ${{ github.token }}
           path: inputs/inventory
+      - name: Normalize downloaded artifact paths
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          root=Path('inputs/inventory')
+          expected={
+            'capacity.csv':root/'outputs/eia860_v2/capacity.csv',
+            'eia860_provenance.json':root/'outputs/eia860_source/eia860_provenance.json',
+          }
+          for filename,destination in expected.items():
+              matches=list(root.rglob(filename))
+              if len(matches)!=1:
+                  raise RuntimeError(f'Expected exactly one {filename}; found {len(matches)}: {matches}')
+              source=matches[0]
+              destination.parent.mkdir(parents=True,exist_ok=True)
+              if source.resolve()!=destination.resolve():
+                  shutil.copyfile(source,destination)
+              print(f'Normalized {filename} from {source}')
+          PY
       - name: Audit matched source and 2024 nameplate provenance
         run: |
           python - <<'PY'
