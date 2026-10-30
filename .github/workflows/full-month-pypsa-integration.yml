@@ -1,0 +1,33 @@
+name: Full-calendar-month PyPSA integrated solve
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/full-month-pypsa-integration.yml'
+      - 'src/grid_resilience/full_month_integration.py'
+      - 'src/grid_resilience/multi_technology_dispatch.py'
+      - 'src/grid_resilience/monthly_generation_gate.py'
+jobs:
+  synthetic-full-month-solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PyPSA, solver and test dependencies
+        run: python -m pip install -e '.[model,dev]'
+      - name: Run full February 2024 hourly dispatch and calendar aggregation
+        run: |
+          python -m grid_resilience.full_month_integration --output outputs/synthetic_full_month
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-full-month-pypsa-evidence
+          path: |
+            outputs/synthetic_full_month/synthetic_full_month_manifest.json
+            outputs/synthetic_full_month/coverage/modeled_generation_full_months.csv
+            outputs/synthetic_full_month/coverage/monthly_coverage_manifest.json
+            outputs/synthetic_full_month/solve/shortfall_by_ba.csv
+          if-no-files-found: warn
