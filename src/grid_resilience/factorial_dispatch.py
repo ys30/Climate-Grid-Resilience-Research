@@ -100,9 +100,13 @@ def solve(demand_path, weather_path, capacity_path, links_path, output,
     # Keep baseline and the partial-fleet mapping explicit; never combine
     # counterfactual scenarios or assign omitted technologies zero generation.
     baseline = hourly.loc[hourly.scenario == "baseline"].copy()
-    baseline["period"] = pd.to_datetime(baseline.timestamp, utc=True).dt.strftime("%Y-%m")
-    monthly = baseline.groupby(["ba", "technology", "period"], as_index=False).generation_mwh.sum()
-    monthly.to_csv(out/"baseline_generation_monthly_partial_fleet.csv", index=False)
+    # Event windows are not necessarily complete calendar months (the July
+    # 2024 study has only seven days). Never label seven days as monthly EIA-923.
+    start = timestamps[0].strftime("%Y-%m-%dT%H:%MZ")
+    end = timestamps[-1].strftime("%Y-%m-%dT%H:%MZ")
+    baseline["period"] = f"event:{start}..{end}"
+    event_totals = baseline.groupby(["ba", "technology", "period"], as_index=False).generation_mwh.sum()
+    event_totals.to_csv(out/"baseline_generation_event_partial_fleet.csv", index=False)
     from .factorial_interactions import decompose
     decompose(result).to_csv(out/"factorial_interactions.csv",index=False)
     return result
