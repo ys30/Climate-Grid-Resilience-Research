@@ -1,6 +1,7 @@
 import io
 import zipfile
-from openpyxl import Workbook
+import pytest
+Workbook = pytest.importorskip('openpyxl').Workbook
 from grid_resilience.eia923_generator_extract import extract
 
 def fixture(path):
