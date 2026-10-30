@@ -50,6 +50,11 @@ jobs:
           assert {'event_id','event_type','start_utc','end_utc_inclusive','active_hours'}.issubset(d.columns)
           print('Candidate events (descriptive, uncalibrated):',len(d))
           PY
+      - name: Summarize demand exposure during observed temperature and proxy low wind
+        run: |
+          python -m grid_resilience.exposure \
+            --input outputs/observed_2024/matched_hourly.csv \
+            --output outputs/observed_2024/demand_weather_exposure.csv
       - uses: actions/upload-artifact@v4
         with:
           name: MATCHED-OBSERVED-EIA930-ERA5-2024
