@@ -80,6 +80,11 @@ jobs:
           for item in result:
               print(item["file"],[sheet["name"] for sheet in item["sheets"]])
           PY
+      - name: Probe actual generator and fuel worksheet columns
+        run: |
+          python -m grid_resilience.eia923_schema_probe \
+            --archive outputs/eia923_intake/f923_2024.zip \
+            --output outputs/eia923_intake/generation_schema_probe.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -87,4 +92,5 @@ jobs:
           path: |
             outputs/eia923_intake/archive_manifest.json
             outputs/eia923_intake/workbook_structure.json
+            outputs/eia923_intake/generation_schema_probe.json
           if-no-files-found: warn
