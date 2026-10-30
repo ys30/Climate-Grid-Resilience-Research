@@ -1,0 +1,41 @@
+name: ERA5 live weather proxy audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/era5-live-weather.yml'
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q tests/test_era5_proxy.py
+      - name: Fetch actual ERA5 weather at representative BA point proxies
+        run: |
+          python -m grid_resilience.era5_proxy \
+            --bas CISO AZPS BPAT SRP \
+            --start 2024-07-01T00:00:00Z \
+            --end 2024-07-08T00:00:00Z \
+            --output outputs/era5_weather_2024_summer.csv
+      - name: Validate 672 BA-hour weather rows
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          d=pd.read_csv("outputs/era5_weather_2024_summer.csv")
+          assert len(d)==672
+          assert set(d.ba)=={"CISO","AZPS","BPAT","SRP"}
+          assert d.groupby("ba").size().eq(168).all()
+          assert d.wind_availability.between(0,1).all()
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: REAL-ERA5-point-proxy-weather-2024-summer
+          path: outputs/era5_weather_2024_summer.*
+          if-no-files-found: warn
