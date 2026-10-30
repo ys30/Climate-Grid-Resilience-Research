@@ -71,6 +71,12 @@ jobs:
             --eia923 outputs/eia860_intake/eia923_generator_month_net_mwh.csv \
             --eia860 outputs/eia860_intake/eia860_2024_operable_generators.csv \
             --output outputs/eia860_intake
+      - name: Audit conservative fuel classification eligibility
+        run: |
+          python -m grid_resilience.eia_classification_eligibility \
+            --eia923 outputs/eia860_intake/eia923_generator_month_net_mwh.csv \
+            --eia860 outputs/eia860_intake/eia860_2024_operable_generators.csv \
+            --output outputs/eia860_intake
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -82,4 +88,6 @@ jobs:
             outputs/eia860_intake/generator_join_coverage_by_ba.csv
             outputs/eia860_intake/generator_join_coverage_manifest.json
             outputs/eia860_intake/unmatched_generator_months.csv
+            outputs/eia860_intake/classification_eligibility_by_ba.csv
+            outputs/eia860_intake/classification_eligibility_manifest.json
           if-no-files-found: warn
