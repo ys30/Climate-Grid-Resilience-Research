@@ -9,7 +9,7 @@ import pandas as pd
 
 DISPATCH_TECH = {"gas", "coal", "nuclear", "hydro", "solar", "wind", "geothermal", "oil", "biomass"}
 
-def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None):
+def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None, storage_csv=None):
     import pypsa
     demand = pd.read_csv(demand_csv)
     capacity = pd.read_csv(capacity_csv)
@@ -70,6 +70,28 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None
         links["capacity_mw"] = pd.to_numeric(links.capacity_mw, errors="raise")
         if not links.capacity_mw.map(lambda x: 0 <= float(x) < float("inf")).all():
             raise ValueError("Link capacity must be finite and nonnegative")
+    storage = None
+    if storage_csv is not None:
+        storage = pd.read_csv(storage_csv)
+        required_storage = {"ba", "power_mw", "energy_mwh", "efficiency_store",
+                            "efficiency_dispatch", "initial_soc_fraction"}
+        if not required_storage.issubset(storage):
+            raise ValueError("Storage missing required columns")
+        if storage.empty or storage[list(required_storage)].isna().any().any():
+            raise ValueError("Empty or null storage configuration")
+        if storage.ba.duplicated().any() or not set(storage.ba).issubset(bas):
+            raise ValueError("Duplicate or unknown storage BA")
+        for col in required_storage - {"ba"}:
+            storage[col] = pd.to_numeric(storage[col], errors="raise")
+            if not storage[col].map(lambda v: float("-inf") < float(v) < float("inf")).all():
+                raise ValueError(f"Nonfinite storage {col}")
+        if (storage[["power_mw", "energy_mwh"]] < 0).any().any():
+            raise ValueError("Storage power and energy must be nonnegative")
+        for col in ("efficiency_store", "efficiency_dispatch"):
+            if not storage[col].between(0.000001, 1).all():
+                raise ValueError(f"Storage {col} must be in (0, 1]")
+        if not storage.initial_soc_fraction.between(0, 1).all():
+            raise ValueError("Storage initial SOC fraction must be in [0, 1]")
     n = pypsa.Network()
     n.set_snapshots(times.tz_localize(None))
     for ba in bas:
@@ -83,6 +105,19 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None
         n.add("Generator", f"{row.ba}__{row.technology}", bus=row.ba,
               p_nom=float(row.capacity_mw), marginal_cost=float(row.marginal_cost),
               p_max_pu=profile.to_numpy())
+    if storage is not None:
+        for row in storage.itertuples(index=False):
+            # Fixed installed power/energy with fixed initial SOC, no cyclic
+            # artificial recharge. PyPSA StorageUnit couples consecutive hours.
+            hours = float(row.energy_mwh) / float(row.power_mw) if row.power_mw > 0 else 0.
+            if row.power_mw == 0 and row.energy_mwh != 0:
+                raise ValueError("Zero storage power requires zero energy")
+            n.add("StorageUnit", f"{row.ba}_battery", bus=row.ba,
+                  p_nom=float(row.power_mw), max_hours=hours,
+                  efficiency_store=float(row.efficiency_store),
+                  efficiency_dispatch=float(row.efficiency_dispatch),
+                  state_of_charge_initial=float(row.energy_mwh * row.initial_soc_fraction),
+                  cyclic_state_of_charge=False, marginal_cost=0)
     if links is not None:
         for i, link in links.iterrows():
             # A transport Link represents a hypothetical bidirectional transfer
@@ -105,6 +140,10 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None
     out.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(out / "generation_hourly.csv", index=False)
     pd.DataFrame(shortages).to_csv(out / "shortfall_by_ba.csv", index=False)
+    if storage is not None:
+        soc = n.storage_units_t.state_of_charge.copy()
+        soc.index.name = "timestamp"
+        soc.to_csv(out / "storage_soc_mwh.csv")
     return pd.DataFrame(shortages)
 
 def main():
@@ -112,8 +151,9 @@ def main():
     for key in ("demand", "capacity", "availability", "output"):
         p.add_argument("--" + key, required=True)
     p.add_argument("--links", default=None)
+    p.add_argument("--storage", default=None)
     a = p.parse_args()
-    print(solve(a.demand, a.capacity, a.availability, a.output, links_csv=a.links).to_string(index=False))
+    print(solve(a.demand, a.capacity, a.availability, a.output, links_csv=a.links, storage_csv=a.storage).to_string(index=False))
 
 if __name__ == "__main__":
     main()
