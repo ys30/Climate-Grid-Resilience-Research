@@ -58,3 +58,32 @@ def test_rejects_unrecognized_link_bus(tmp_path):
     pd.DataFrame([{"from_ba": "CISO", "to_ba": "UNKNOWN", "capacity_mw": 40}]).to_csv(links, index=False)
     with pytest.raises(ValueError, match="outside BA inventory"):
         solve(*paths, tmp_path / "out", links_csv=links)
+
+
+def test_storage_initial_soc_cannot_supply_unlimited_hours(tmp_path):
+    pytest.importorskip("pypsa")
+    d,c,a = inputs(tmp_path)
+    demand = pd.read_csv(d)
+    demand["demand_mw"] = 50
+    demand.to_csv(d,index=False)
+    capacity = pd.read_csv(c)
+    capacity["capacity_mw"] = 0
+    capacity.to_csv(c,index=False)
+    storage = tmp_path/"storage.csv"
+    pd.DataFrame([{"ba":"CISO","power_mw":50,"energy_mwh":50,
+                   "efficiency_store":1,"efficiency_dispatch":1,
+                   "initial_soc_fraction":1}]).to_csv(storage,index=False)
+    result = solve(d,c,a,tmp_path/"storage_out",storage_csv=storage)
+    assert result.unserved_energy_mwh.sum()==pytest.approx(50,abs=1e-4)
+    soc=pd.read_csv(tmp_path/"storage_out"/"storage_soc_mwh.csv")
+    assert soc["CISO_battery"].between(-1e-5,50+1e-5).all()
+
+def test_storage_invalid_efficiency_rejected(tmp_path):
+    pytest.importorskip("pypsa")
+    p=inputs(tmp_path)
+    storage=tmp_path/"storage.csv"
+    pd.DataFrame([{"ba":"CISO","power_mw":50,"energy_mwh":100,
+                   "efficiency_store":1.2,"efficiency_dispatch":1,
+                   "initial_soc_fraction":0.5}]).to_csv(storage,index=False)
+    with pytest.raises(ValueError,match="efficiency_store"):
+        solve(*p,tmp_path/"storage_out",storage_csv=storage)
