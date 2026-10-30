@@ -9,7 +9,7 @@ import pandas as pd
 
 DISPATCH_TECH = {"gas", "coal", "nuclear", "hydro", "solar", "wind", "geothermal", "oil", "biomass"}
 
-def solve(demand_csv, capacity_csv, availability_csv, output_dir):
+def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None):
     import pypsa
     demand = pd.read_csv(demand_csv)
     capacity = pd.read_csv(capacity_csv)
@@ -50,6 +50,26 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir):
             raise ValueError(f"Nonfinite {field}")
         if (df[field] < lower).any() or (upper is not None and (df[field] > upper).any()):
             raise ValueError(f"Invalid {field} bounds")
+    links = None
+    if links_csv is not None:
+        links = pd.read_csv(links_csv)
+        required_links = {"from_ba", "to_ba", "capacity_mw"}
+        if not required_links.issubset(links):
+            raise ValueError("Link input missing required fields")
+        if links[["from_ba", "to_ba", "capacity_mw"]].isna().any().any():
+            raise ValueError("Null link fields")
+        if (links.from_ba == links.to_ba).any():
+            raise ValueError("Self-links not allowed")
+        if not set(links.from_ba).union(links.to_ba).issubset(bas):
+            raise ValueError("Link endpoint outside BA inventory")
+        normalized = links.apply(
+            lambda row: tuple(sorted((row.from_ba, row.to_ba))), axis=1
+        )
+        if normalized.duplicated().any():
+            raise ValueError("Duplicate undirected BA links")
+        links["capacity_mw"] = pd.to_numeric(links.capacity_mw, errors="raise")
+        if not links.capacity_mw.map(lambda x: 0 <= float(x) < float("inf")).all():
+            raise ValueError("Link capacity must be finite and nonnegative")
     n = pypsa.Network()
     n.set_snapshots(times.tz_localize(None))
     for ba in bas:
@@ -63,6 +83,12 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir):
         n.add("Generator", f"{row.ba}__{row.technology}", bus=row.ba,
               p_nom=float(row.capacity_mw), marginal_cost=float(row.marginal_cost),
               p_max_pu=profile.to_numpy())
+    if links is not None:
+        for i, link in links.iterrows():
+            # A transport Link represents a hypothetical bidirectional transfer
+            # bound, NOT AC impedance-based line flow or verified physical rating.
+            n.add("Link", f"transfer_{i}", bus0=link.from_ba, bus1=link.to_ba,
+                  p_nom=float(link.capacity_mw), p_min_pu=-1, efficiency=1)
     status, condition = n.optimize(solver_name="highs")
     if (status, condition) != ("ok", "optimal"):
         raise RuntimeError(f"Optimization failed: {status}/{condition}")
@@ -85,8 +111,9 @@ def main():
     p = argparse.ArgumentParser()
     for key in ("demand", "capacity", "availability", "output"):
         p.add_argument("--" + key, required=True)
+    p.add_argument("--links", default=None)
     a = p.parse_args()
-    print(solve(a.demand, a.capacity, a.availability, a.output).to_string(index=False))
+    print(solve(a.demand, a.capacity, a.availability, a.output, links_csv=a.links).to_string(index=False))
 
 if __name__ == "__main__":
     main()
