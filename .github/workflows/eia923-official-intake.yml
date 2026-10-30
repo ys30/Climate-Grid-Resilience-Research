@@ -92,6 +92,11 @@ jobs:
           python -m grid_resilience.eia923_generator_extract \
             --archive outputs/eia923_intake/f923_2024.zip \
             --output outputs/eia923_intake
+      - name: Audit actual BA and prime mover monthly totals
+        run: |
+          python -m grid_resilience.eia923_prime_mover_audit \
+            --input outputs/eia923_intake/eia923_generator_month_net_mwh.csv \
+            --output outputs/eia923_intake
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -102,4 +107,6 @@ jobs:
             outputs/eia923_intake/generation_schema_probe.json
             outputs/eia923_intake/generator_extraction_manifest.json
             outputs/eia923_intake/eia923_generator_month_net_mwh.csv
+            outputs/eia923_intake/ba_prime_mover_month_audit.csv
+            outputs/eia923_intake/prime_mover_audit_manifest.json
           if-no-files-found: warn
