@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 from .multi_technology_dispatch import solve
 from .monthly_generation_gate import monthly_generation
+from .generation_calibration import compare
 
 def run(output, year=2024, month=2):
     from calendar import monthrange
@@ -37,8 +38,23 @@ def run(output, year=2024, month=2):
         raise ValueError("Unexpected calendar coverage")
     if shortages.unserved_energy_mwh.sum()>1e-5:
         raise AssertionError("Synthetic installed capacity should meet hourly demand")
+    # Independently specified analytical reference for this controlled setup:
+    # wind dispatches 10 MW and gas supplies remaining 70 MW in every BA-hour.
+    reference=pd.DataFrame([
+        {"ba":ba,"technology":tech,"period":f"{year}-{month:02d}",
+         "generation_mwh":hours*(70. if tech=="gas" else 10.)}
+        for ba in bas for tech in techs])
+    reference_path=out/"synthetic_analytical_reference.csv"
+    reference.to_csv(reference_path,index=False)
+    diagnostics=compare(reference_path,
+                        out/"coverage"/"modeled_generation_full_months.csv",
+                        out/"synthetic_comparison")
+    if diagnostics["comparison_rows"]!=4 or abs(diagnostics["aggregate_bias_mwh"])>1e-4 or diagnostics["aggregate_wape"]>1e-7:
+        raise AssertionError("Synthetic monthly generation differs from analytical reference")
     result={"status":"synthetic_full_month_integration_passed",
             "hours":hours,"bas":list(bas),"technologies":list(techs),
+            "synthetic_reference_wape":diagnostics["aggregate_wape"],
+            "synthetic_reference_comparison_rows":diagnostics["comparison_rows"],
             "shortfall_mwh":float(shortages.unserved_energy_mwh.sum()),
             "historical_calibration_certified":False,
             "notice":"Synthetic integration smoke; NOT empirical model validation."}
