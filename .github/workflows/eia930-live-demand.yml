@@ -1,0 +1,32 @@
+name: EIA-930 live observed demand audit
+on:
+  workflow_dispatch:
+jobs:
+  demand:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - name: Require configured EIA credentials
+        run: test -n "$EIA_API_KEY"
+      - name: Fetch real 2024 summer sample week, four BAs
+        run: |
+          python -m grid_resilience.eia930_hourly \
+            --bas CISO AZPS BPAT SRP \
+            --start 2024-07-01T00:00:00Z \
+            --end 2024-07-08T00:00:00Z \
+            --output outputs/eia930_demand_2024_summer.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: REAL-EIA930-four-BA-hourly-demand-audit
+          path: outputs/eia930_demand_2024_summer.*
+          if-no-files-found: warn
