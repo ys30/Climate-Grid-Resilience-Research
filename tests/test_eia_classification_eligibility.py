@@ -16,3 +16,13 @@ def test_multifuel_unmatched_and_clean_separation(tmp_path):
     assert result["eligibility_counts"]=={
         "clean_single_fuel_candidate":1,"multifuel_requires_review":1,"unmatched":1
     }
+
+def test_unknown_fuel_not_eligible_as_clean(tmp_path):
+    a=tmp_path/"a.csv";b=tmp_path/"b.csv"
+    pd.DataFrame([{"plant_id":"5","generator_id":"G5","reported_ba":"CISO",
+       "period":"2024-07","generation_mwh":11,"prime_mover":"CT"}]).to_csv(a,index=False)
+    pd.DataFrame([{"plant_id":"5","generator_id":"G5","energy_source_1":"UNMAPPED",
+       "energy_source_2":"","multiple_fuels":"N","prime_mover":"CT",
+       "reported_technology":"Unknown"}]).to_csv(b,index=False)
+    result=audit(a,b,tmp_path/"out")
+    assert result["eligibility_counts"] == {"unsupported_fuel_requires_review":1}
