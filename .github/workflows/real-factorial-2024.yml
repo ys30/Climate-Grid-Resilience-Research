@@ -1,0 +1,100 @@
+name: 2024 observed-input four-scenario partial-fleet PyPSA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/real-factorial-2024.yml'
+jobs:
+  solve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - uses: actions/download-artifact@v4
+        with:
+          name: MATCHED-OBSERVED-EIA930-ERA5-2024
+          run-id: 41102363806
+          github-token: ${{ github.token }}
+          path: inputs/observed
+      - uses: actions/download-artifact@v4
+        with:
+          name: EIA860-2024-FOUR-BA-EXPLICIT-PARTIAL-FLEET
+          run-id: 41107169962
+          github-token: ${{ github.token }}
+          path: inputs/inventory
+      - name: Audit matched source and 2024 nameplate provenance
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          d=pd.read_csv('inputs/observed/demand.csv')
+          w=pd.read_csv('inputs/observed/weather.csv')
+          c=pd.read_csv('inputs/inventory/outputs/eia860_v2/capacity.csv')
+          m=json.loads(Path('inputs/inventory/outputs/eia860_source/eia860_provenance.json').read_text())
+          assert len(d)==len(w)==672
+          assert set(d.ba)==set(w.ba)==set(c.ba)=={'CISO','AZPS','BPAT','SRP'}
+          assert m['year']==2024
+          assert c.capacity_source.str.contains('GENERIC_THERMAL_PROXY').all()
+          print('Observed EIA-930/ERA5 inputs and partial-fleet EIA-860 inventory checked')
+          PY
+      - name: Define explicitly hypothetical BA-to-BA link constraints
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          d=pd.read_csv('inputs/observed/demand.csv')
+          peaks=d.groupby('ba').demand_mw.max()
+          # These are selected illustrative network edges, not discovered actual links.
+          pairs=[('CISO','AZPS'),('AZPS','SRP'),('CISO','BPAT')]
+          out=Path('inputs/hypothetical');out.mkdir(parents=True,exist_ok=True)
+          rows=[{'from_ba':a,'to_ba':b,'capacity_mw':float(min(peaks[a],peaks[b])*.1),
+                 'rating_source':'HYPOTHETICAL_10pct_smaller_BA_observed_peak_NOT_PHYSICAL'}
+                for a,b in pairs]
+          pd.DataFrame(rows).to_csv(out/'links.csv',index=False)
+          PY
+      - name: Four matched scenario PyPSA runs with explicit screening assumptions
+        run: |
+          python -m grid_resilience.research_run \
+            --demand inputs/observed/demand.csv \
+            --weather inputs/observed/weather.csv \
+            --capacity inputs/inventory/outputs/eia860_v2/capacity.csv \
+            --links inputs/hypothetical/links.csv \
+            --event-id 2024-07-01_07_REAL_INPUTS_HYPOTHETICAL_NETWORK \
+            --network-variant partial_fleet_assumed_links_10pct \
+            --link-evidence hypothetical \
+            --output outputs/real_input_screening
+      - name: Verify matching, numerical completeness, and nonadditivity
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          import json
+          from pathlib import Path
+          p=Path('outputs/real_input_screening')
+          d=pd.read_csv(p/'solved/factorial_dispatch.csv')
+          assert len(d)==16
+          assert set(d.scenario)=={'baseline','heat_only','wind_only','heat_wind'}
+          assert set(d.ba)=={'CISO','AZPS','BPAT','SRP'}
+          assert d.unserved_energy_mwh.ge(-1e-6).all()
+          m=json.loads((p/'run_manifest.json').read_text())
+          assert m['intertie_evidence_classification']=='hypothetical'
+          assert m['input_validation']['hours']==168
+          print(d.groupby('scenario').unserved_energy_mwh.sum().to_string())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 2024-REAL-INPUT-PARTIAL-FLEET-FACTORIAL-NOT-CALIBRATED
+          if-no-files-found: warn
+          retention-days: 60
+          path: |
+            outputs/real_input_screening/
+            inputs/hypothetical/links.csv
