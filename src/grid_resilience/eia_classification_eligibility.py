@@ -27,10 +27,13 @@ def audit(eia923, eia860, output):
     multifuel=tidy(joined.multiple_fuels).eq("Y") | fuel2.ne("")
     storage=joined.get("reported_technology",pd.Series("",index=joined.index)).fillna("").astype(str).str.contains("Storage|Battery|Pumped",case=False,regex=True)
     missing=fuel.eq("") | fuel.eq("NAN")
+    supported={"NG","BIT","SUB","LIG","RC","NUC","WAT","SUN","WND","GEO","DFO","RFO","JF"}
+    unsupported=~fuel.isin(supported)
     conflict=tidy(joined.prime_mover_923).ne(tidy(joined.prime_mover_860))
     joined["eligibility"]="clean_single_fuel_candidate"
     joined.loc[~matched,"eligibility"]="unmatched"
     joined.loc[matched & missing,"eligibility"]="missing_fuel"
+    joined.loc[matched & unsupported & ~missing,"eligibility"]="unsupported_fuel_requires_review"
     joined.loc[matched & multifuel,"eligibility"]="multifuel_requires_review"
     joined.loc[matched & storage,"eligibility"]="storage_separate_accounting"
     joined.loc[matched & conflict,"eligibility"]="prime_mover_conflict"
