@@ -83,6 +83,11 @@ jobs:
             --eia923 outputs/eia860_intake/eia923_generator_month_net_mwh.csv \
             --eia860 outputs/eia860_intake/eia860_2024_operable_generators.csv \
             --output outputs/eia860_intake
+      - name: Audit month and technology coverage of candidate observed generation
+        run: |
+          python -m grid_resilience.eia_monthly_coverage_profile \
+            --input outputs/eia860_intake/observed_single_fuel_candidate_ba_technology_month.csv \
+            --output outputs/eia860_intake
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -98,4 +103,7 @@ jobs:
             outputs/eia860_intake/classification_eligibility_manifest.json
             outputs/eia860_intake/single_fuel_candidate_manifest.json
             outputs/eia860_intake/observed_single_fuel_candidate_ba_technology_month.csv
+            outputs/eia860_intake/candidate_monthly_coverage_manifest.json
+            outputs/eia860_intake/candidate_monthly_coverage_matrix.csv
+            outputs/eia860_intake/candidate_monthly_coverage_by_technology.csv
           if-no-files-found: warn
