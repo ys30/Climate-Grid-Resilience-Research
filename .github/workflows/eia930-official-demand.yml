@@ -1,0 +1,66 @@
+name: Official EIA-930 hourly BA demand intake
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/eia930-official-demand.yml'
+      - 'src/grid_resilience/eia930_hourly_demand.py'
+jobs:
+  eia930-february-2024:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project
+        run: python -m pip install -e .
+      - name: Query official EIA API and retain response evidence
+        run: |
+          mkdir -p outputs/eia930_2024_02
+          python - <<'PY'
+          import json,time
+          from pathlib import Path
+          from urllib.parse import urlencode
+          from urllib.request import Request,urlopen
+          params=[("frequency","hourly"),("data[0]","value"),
+                  ("facets[type][]","D"),("start","2024-02-01T00"),
+                  ("end","2024-02-29T23"),("offset","0"),
+                  ("length","5000")]
+          params += [("facets[respondent][]",ba) for ba in ("CISO","AZPS","BPAT","SRP")]
+          url="https://api.eia.gov/v2/electricity/rto/region-data/?" + urlencode(params)
+          for attempt in range(3):
+              try:
+                  with urlopen(Request(url,headers={"User-Agent":"ClimateGridResilienceResearch/2.0"}),timeout=120) as r:
+                      data=json.load(r)
+                  break
+              except Exception:
+                  if attempt==2:raise
+                  time.sleep(4*(attempt+1))
+          if "response" not in data or "data" not in data["response"]:
+              raise ValueError("Unexpected EIA API response")
+          out=Path("outputs/eia930_2024_02")
+          (out/"official_api_response.json").write_text(json.dumps(data))
+          evidence={"source_url":url,"response_total":data["response"].get("total"),
+                    "returned_rows":len(data["response"]["data"]),
+                    "historical_calibration_certified":False}
+          (out/"request_manifest.json").write_text(json.dumps(evidence,indent=2))
+          print(json.dumps(evidence,indent=2))
+          print("First API record:",data["response"]["data"][:1])
+          PY
+      - name: Normalize full-hour demand with fail-closed completeness check
+        run: |
+          python -m grid_resilience.eia930_hourly_demand \
+            --json outputs/eia930_2024_02/official_api_response.json \
+            --start 2024-02-01T00 --end 2024-02-29T23 \
+            --output outputs/eia930_2024_02
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eia930-real-2024-february-demand
+          path: |
+            outputs/eia930_2024_02/request_manifest.json
+            outputs/eia930_2024_02/hourly_ba_demand_manifest.json
+            outputs/eia930_2024_02/hourly_ba_demand.csv
+          if-no-files-found: warn
