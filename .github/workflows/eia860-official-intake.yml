@@ -14,6 +14,7 @@ on:
       - 'src/grid_resilience/bpat_reported_hydro_capacity.py'
       - 'src/grid_resilience/bpat_hydro_availability_sensitivity.py'
       - 'src/grid_resilience/bpat_eia930_hydro_observation.py'
+      - 'src/grid_resilience/bpat_hydro_energy_context.py'
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -261,6 +262,14 @@ jobs:
             --capacity outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv \
             --output outputs/eia860_intake/bpat_hydro_observation
           cat outputs/eia860_intake/bpat_hydro_observation/bpat_eia930_hydro_observation_manifest.json
+      - name: Quantify observed mixed hydro energy against demand and model shortfall
+        run: |
+          python -m grid_resilience.bpat_hydro_energy_context \
+            --observed-hourly outputs/eia860_intake/bpat_hydro_observation/bpat_eia930_reported_hydro_hourly.csv \
+            --demand outputs/eia860_intake/real_capacity_assumed_availability_solve/hourly_ba_demand.csv \
+            --shortfall outputs/eia860_intake/real_capacity_assumed_availability_solve/dispatch/shortfall_by_ba.csv \
+            --output outputs/eia860_intake/bpat_hydro_observation
+          cat outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -268,6 +277,7 @@ jobs:
           path: |
             outputs/eia860_intake/official_2024_schema.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_eia930_hydro_observation_manifest.json
+            outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_eia930_reported_hydro_hourly.csv
             outputs/eia860_intake/plant_ba_schema_probe.json
             outputs/eia860_intake/eia860_extraction_manifest.json
