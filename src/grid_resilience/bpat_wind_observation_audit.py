@@ -24,7 +24,16 @@ def audit(balance,capacity,output,year=2024,month=2):
     with Path(balance).open(newline="",encoding="utf-8-sig") as f:
         rd=csv.DictReader(f)
         col="Net Generation (MW) from Wind"
-        if col not in (rd.fieldnames or []):raise ValueError("Missing official wind generation field")
+        headers=[h.strip() for h in (rd.fieldnames or []) if h]
+        if col in headers:
+            source_cols=[col]
+        else:
+            # Beginning Q3 2024 EIA-930 divides wind into categories by storage pairing.
+            # Accept ONLY explicit wind generation categories, not ancillary flags.
+            source_cols=[h for h in headers if h.startswith("Net Generation (MW) from Wind")]
+        if not source_cols:
+            raise ValueError(f"Missing official wind generation field; generation columns: {[h for h in headers if h.startswith(chr(78)+chr(101)+chr(116)+chr(32)+chr(71))]}")
+        print(f"EIA-930 wind generation source columns: {source_cols}")
         for row in rd:
             if row["Balancing Authority"].strip()!="BPAT":continue
             t=datetime.strptime(row["UTC Time at End of Hour"],FMT).replace(tzinfo=timezone.utc)-timedelta(hours=1)
@@ -40,7 +49,7 @@ def audit(balance,capacity,output,year=2024,month=2):
     if len(values)!=n_hours:raise ValueError(f"Expected {n_hours} hours; found {len(values)}")
     df=pd.DataFrame(values);out=Path(output);out.mkdir(parents=True,exist_ok=True)
     df.to_csv(out/"bpat_reported_wind_hourly.csv",index=False)
-    res={"year":year,"month":month,"hours":len(df),"reported_eia930_wind_energy_mwh":float(df.reported_wind_mw.sum()),
+    res={"year":year,"month":month,"wind_generation_source_columns":source_cols,"hours":len(df),"reported_eia930_wind_energy_mwh":float(df.reported_wind_mw.sum()),
         "reported_eia930_mean_wind_mw":float(df.reported_wind_mw.mean()),
         "reported_eia930_min_wind_mw":float(df.reported_wind_mw.min()),
         "eia860_2024_bpat_wind_nameplate_mw":cap,
