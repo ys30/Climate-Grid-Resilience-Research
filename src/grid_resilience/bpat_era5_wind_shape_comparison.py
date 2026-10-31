@@ -15,11 +15,13 @@ def compare(proxy_csv,wind_csv,capacity_csv,output):
     if len(c)!=1:raise ValueError("Expected unique BPAT capacity")
     mw=float(c.iloc[0].nameplate_capacity_mw)
     if not 0<mw<float("inf"):raise ValueError("Invalid installed capacity")
-    for f in (p,w):
-        if f.timestamp.duplicated().any():raise ValueError("Duplicate timestamp")
+    for frame in (p,w):
+        frame["timestamp"]=pd.to_datetime(frame.timestamp,utc=True,errors="raise")
+        if frame.timestamp.duplicated().any():raise ValueError("Duplicate UTC hour")
     both=p.merge(w[["timestamp","reported_wind_mw"]],on="timestamp",how="outer",indicator=True,validate="one_to_one")
     if len(both)!=696 or not both._merge.eq("both").all():
         raise ValueError("Missing or unmatched BPAT hourly data")
+    both["timestamp"]=both["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     both["observed_generation_to_nameplate"]=both.reported_wind_mw/mw
     both["observed_nonnegative_proxy"]=both.observed_generation_to_nameplate.clip(lower=0,upper=1)
     correlation=float(both.proxy_availability_pu.corr(both.observed_nonnegative_proxy))
