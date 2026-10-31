@@ -1,5 +1,5 @@
 """Audit hourly wind proxy amplitude error, without fitting to observed output."""
-import argparse,json
+import argparse,json,calendar
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -8,8 +8,12 @@ def evaluate(hourly,output):
     x=pd.read_csv(hourly)
     a=x["capacity_weighted_proxy_availability_pu"].to_numpy(float)
     b=x["reported_ratio"].clip(0,1).to_numpy(float)
-    if len(a)!=696 or not np.isfinite(a).all() or not np.isfinite(b).all():
-        raise ValueError("Expected 696 finite hourly observations")
+    times=pd.to_datetime(x["timestamp"],utc=True,errors="raise")
+    year=times.dt.year.unique();month=times.dt.month.unique()
+    if len(year)!=1 or len(month)!=1:raise ValueError("Exactly one calendar month required")
+    expected=calendar.monthrange(int(year[0]),int(month[0]))[1]*24
+    if len(a)!=expected or times.duplicated().any() or not np.isfinite(a).all() or not np.isfinite(b).all():
+        raise ValueError(f"Expected {expected} unique finite hourly observations")
     delta=a-b
     labels=pd.to_datetime(x["timestamp"],utc=True).dt.day
     result=[]
@@ -17,7 +21,7 @@ def evaluate(hourly,output):
                        ("days_01_07",(labels<=7).to_numpy()),
                        ("days_08_14",((labels>=8)&(labels<=14)).to_numpy()),
                        ("days_15_21",((labels>=15)&(labels<=21)).to_numpy()),
-                       ("days_22_29",(labels>=22).to_numpy())]:
+                       ("days_22_end",(labels>=22).to_numpy())]:
         v=delta[mask]
         result.append({"period":label,"hours":int(mask.sum()),
                        "mean_bias_pu":float(v.mean()),
