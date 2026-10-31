@@ -41,6 +41,24 @@ jobs:
           python -m grid_resilience.eia930_bilateral_aggregation \
             --csv outputs/eia930_interchange/official_interchange.csv \
             --output outputs/eia930_interchange
+      - name: Download official EIA-930 Balance for independent reconciliation
+        run: |
+          python - <<'PY'
+          from urllib.request import Request,urlopen
+          from pathlib import Path
+          url="https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv"
+          with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=150) as f:
+              data=f.read()
+          if len(data)<1000:raise RuntimeError("Invalid balance file")
+          Path("outputs/eia930_interchange/official_balance.csv").write_bytes(data)
+          PY
+      - name: Compare bilateral sums with BA reported total interchange
+        run: |
+          python -m grid_resilience.eia930_bilateral_reconciliation \
+            --balance outputs/eia930_interchange/official_balance.csv \
+            --bilateral outputs/eia930_interchange/bilateral_hourly_totals.csv \
+            --output outputs/eia930_interchange
+          cat outputs/eia930_interchange/bilateral_vs_balance_summary.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -49,4 +67,6 @@ jobs:
             outputs/eia930_interchange/schema.json
             outputs/eia930_interchange/bilateral_hourly_totals.csv
             outputs/eia930_interchange/bilateral_manifest.json
+            outputs/eia930_interchange/bilateral_vs_balance_summary.csv
+            outputs/eia930_interchange/bilateral_vs_balance_manifest.json
           if-no-files-found: warn
