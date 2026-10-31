@@ -13,6 +13,7 @@ on:
       - 'src/grid_resilience/bpat_era5_pypsa_conditional_solve.py'
       - 'src/grid_resilience/bpat_era5_replay_dispatch_audit.py'
       - 'src/grid_resilience/bpat_era5_dispatch_balance.py'
+      - 'src/grid_resilience/bpat_era5_matched_hydro_sensitivity.py'
       - 'tests/test_bpat_era5_pypsa_availability.py'
 jobs:
   sample:
@@ -93,6 +94,25 @@ jobs:
           cat outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_pypsa_conditional_shortfall.csv
           python -m grid_resilience.bpat_era5_replay_dispatch_audit --root outputs/bpat_29site_weather/conditional_pypsa
           python -m grid_resilience.bpat_era5_dispatch_balance --root outputs/bpat_29site_weather/conditional_pypsa --output outputs/bpat_29site_weather/conditional_pypsa
+          python -m grid_resilience.bpat_eia930_hydro_observation \
+            --balance outputs/bpat_29site_weather/eia930_balance.csv \
+            --capacity outputs/bpat_29site_weather/eia860_plant_ba_capacity_candidates.csv \
+            --output outputs/bpat_29site_weather/hydro_context
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=Path("outputs/bpat_29site_weather/hydro_context")
+          m=json.loads((r/"bpat_eia930_hydro_observation_manifest.json").read_text())
+          (r/"hydro_energy_reference.json").write_text(json.dumps({
+            "reported_mixed_hydro_pumped_net_mwh":m["eia930_mixed_hydro_and_pumped_reported_monthly_net_mwh"],
+            "not_physical_hydro_budget":True},indent=2))
+          PY
+          python -m grid_resilience.bpat_era5_matched_hydro_sensitivity \
+            --root outputs/bpat_29site_weather/conditional_pypsa \
+            --hydro-capacity outputs/bpat_29site_weather/eia860_plant_ba_capacity_candidates.csv \
+            --hydro-context outputs/bpat_29site_weather/hydro_context/hydro_energy_reference.json \
+            --output outputs/bpat_29site_weather/matched_hydro_comparison
+          cat outputs/bpat_29site_weather/matched_hydro_comparison/bpat_matched_hydro_weather_comparison.csv
           cat outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_minus_replay_technology_totals.csv
       - uses: actions/upload-artifact@v4
         if: always()
@@ -111,6 +131,8 @@ jobs:
             outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_vs_replay_dispatch_audit.json
             outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_minus_replay_technology_totals.csv
             outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_replay_generation_balance_manifest.json
+            outputs/bpat_29site_weather/matched_hydro_comparison/bpat_matched_hydro_weather_comparison.csv
+            outputs/bpat_29site_weather/matched_hydro_comparison/bpat_matched_hydro_weather_manifest.json
             outputs/bpat_29site_weather/bpat_29site_time_block_correlation.csv
             outputs/bpat_29site_weather/bpat_29site_time_block_manifest.json
             outputs/bpat_29site_weather/bpat_29site_proxy_error_diagnostics.csv
