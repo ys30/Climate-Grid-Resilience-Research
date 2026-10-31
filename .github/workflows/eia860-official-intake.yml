@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - '.github/workflows/eia860-official-intake.yml'
+      - 'src/grid_resilience/eia860_generator_extract.py'
+      - 'src/grid_resilience/eia860_partial_fleet_capacity.py'
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -71,6 +73,12 @@ jobs:
             --eia923 outputs/eia860_intake/eia923_generator_month_net_mwh.csv \
             --eia860 outputs/eia860_intake/eia860_2024_operable_generators.csv \
             --output outputs/eia860_intake
+      - name: Derive actual matched EIA-860 partial-fleet nameplate capacity
+        run: |
+          python -m grid_resilience.eia860_partial_fleet_capacity \
+            --eia923 outputs/eia860_intake/eia923_generator_month_net_mwh.csv \
+            --eia860 outputs/eia860_intake/eia860_2024_operable_generators.csv \
+            --output outputs/eia860_intake
       - name: Audit conservative fuel classification eligibility
         run: |
           python -m grid_resilience.eia_classification_eligibility \
@@ -100,6 +108,8 @@ jobs:
           path: |
             outputs/eia860_intake/official_2024_schema.json
             outputs/eia860_intake/eia860_extraction_manifest.json
+            outputs/eia860_intake/partial_fleet_eia860_nameplate_capacity.csv
+            outputs/eia860_intake/partial_fleet_eia860_capacity_manifest.json
             outputs/eia860_intake/eia860_2024_operable_generators.csv
             outputs/eia860_intake/generator_join_coverage_by_ba.csv
             outputs/eia860_intake/generator_join_coverage_manifest.json
