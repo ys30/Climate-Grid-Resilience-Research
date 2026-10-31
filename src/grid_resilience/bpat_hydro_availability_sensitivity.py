@@ -18,7 +18,7 @@ def run(demand,capacity,availability,full_capacity,output):
     times=av.timestamp.drop_duplicates()
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
     results=[]
-    for factor in (0,0.25,0.5,0.75,1.0):
+    for factor in (0,0.05,0.10,0.15,0.20,0.25,0.5,0.75,1.0):
         folder=out/f"hydro_availability_{int(factor*100)}";folder.mkdir(exist_ok=True)
         cap=base.copy();hourly=av.copy()
         if factor>0:
@@ -36,7 +36,7 @@ def run(demand,capacity,availability,full_capacity,output):
     pd.DataFrame(results).to_csv(out/"hydro_availability_sensitivity.csv",index=False)
     m={"capacity_source":"2024 EIA-860 reported BPAT non-storage single-fuel hydro nameplate",
        "availability_source":"hypothetical constant factors; NOT historical profiles",
-       "tested_factors":[0,0.25,0.5,0.75,1.0],
+       "tested_factors":[0,0.05,0.10,0.15,0.20,0.25,0.5,0.75,1.0],
        "storage_and_transmission_not_modeled":True,
        "hydrological_energy_budget_not_enforced":True,
        "historical_calibration_certified":False}
