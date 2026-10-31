@@ -10,6 +10,7 @@ on:
       - 'src/grid_resilience/bpat_29site_error_diagnostics.py'
       - 'src/grid_resilience/bpat_era5_three_month_summary.py'
       - 'src/grid_resilience/bpat_july_boundary_coverage_audit.py'
+      - 'src/grid_resilience/bpat_observation_coverage_guard.py'
 jobs:
   march-validation:
     runs-on: ubuntu-latest
@@ -59,6 +60,8 @@ jobs:
           PY
           python -m grid_resilience.bpat_july_boundary_coverage_audit --observed outputs/bpat_july2024/bpat_reported_wind_hourly.csv --weather outputs/bpat_july2024/bpat_era5_capacity_weighted_hourly.csv --output outputs/bpat_july2024
           cat outputs/bpat_july2024/bpat_july_boundary_coverage_audit.json
+          python -m grid_resilience.bpat_observation_coverage_guard --coverage outputs/bpat_july2024/bpat_july_boundary_coverage_audit.json --observation-manifest outputs/bpat_july2024/bpat_wind_observation_manifest.json --output outputs/bpat_july2024
+          cat outputs/bpat_july2024/bpat_observation_coverage_guard.json
           cat outputs/bpat_july2024/bpat_wind_observation_manifest.json
           cat outputs/bpat_july2024/bpat_29site_comparison_manifest.json
           cat outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv
@@ -79,6 +82,7 @@ jobs:
             outputs/bpat_july2024/bpat_reported_wind_hourly.csv
             outputs/bpat_july2024/bpat_wind_observation_manifest.json
             outputs/bpat_july2024/bpat_july_boundary_coverage_audit.json
+            outputs/bpat_july2024/bpat_observation_coverage_guard.json
             outputs/bpat_july2024/bpat_29site_proxy_vs_reported.csv
             outputs/bpat_july2024/bpat_29site_comparison_manifest.json
             outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv
