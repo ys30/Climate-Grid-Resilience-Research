@@ -1,0 +1,42 @@
+name: Official EIA-930 bilateral interchange CSV schema
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/eia930-interchange-schema.yml'
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Retrieve and inspect official 2024 first-half interchange file
+        run: |
+          mkdir -p outputs/eia930_interchange
+          python - <<'PY'
+          import csv,hashlib,json
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          url="https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_INTERCHANGE_2024_Jan_Jun.csv"
+          with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=150) as response:
+              data=response.read()
+          if len(data)<1000:raise ValueError("Interchange CSV unexpectedly small")
+          p=Path("outputs/eia930_interchange/official_interchange.csv")
+          p.write_bytes(data)
+          with p.open(newline="",encoding="utf-8-sig") as f:
+              reader=csv.reader(f)
+              first=[next(reader) for _ in range(3)]
+          m={"source_url":url,"bytes":len(data),"sha256":hashlib.sha256(data).hexdigest(),
+             "first_three_rows":first,"historical_calibration_certified":False}
+          Path("outputs/eia930_interchange/schema.json").write_text(json.dumps(m,indent=2))
+          print(json.dumps(m,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eia930-bilateral-interchange-schema
+          path: outputs/eia930_interchange/schema.json
+          if-no-files-found: warn
