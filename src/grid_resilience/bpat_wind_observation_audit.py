@@ -38,6 +38,8 @@ def audit(balance,capacity,output,year=2024,month=2):
                 groups.append(present)
         source_cols=[group[0] for group in groups]
         used_columns={}
+        blank_category_hours={group[0]:0 for group in groups}
+        both_categories_missing_hours=0
         print(f"EIA-930 wind category candidates: {groups}")
         for row in rd:
             if row["Balancing Authority"].strip()!="BPAT":continue
@@ -46,21 +48,34 @@ def audit(balance,capacity,output,year=2024,month=2):
             if t in seen:raise ValueError("Duplicate BPAT hour")
             seen.add(t)
             values_by_group=[]
+            missing_groups=[]
             for candidates in groups:
                 valid=[(name,row.get(name,"").strip()) for name in candidates if row.get(name,"") and row.get(name,"").strip()]
-                if not valid:raise ValueError(f"Missing EIA-930 BPAT wind category at {t}")
+                if not valid:
+                    missing_groups.append(candidates[0])
+                    values_by_group.append(None)
+                    continue
                 # Favor adjusted when supplied, else imputed, else original.
                 name,raw=valid[-1]
                 used_columns[name]=used_columns.get(name,0)+1
                 values_by_group.append(float(raw))
-            value=sum(values_by_group)
+            if len(missing_groups)==len(groups):
+                both_categories_missing_hours+=1
+                raise ValueError(f"All EIA-930 BPAT wind categories missing at {t}; cannot infer generation")
+            for name in missing_groups:blank_category_hours[name]+=1
+            # Blank *one* category is provisionally interpreted as zero only when
+            # its companion wind category is reported. Audit the assumption.
+            value=sum(v for v in values_by_group if v is not None)
             if not -float("inf")<value<float("inf"):raise ValueError("Nonfinite wind")
             values.append({"timestamp":t.isoformat(),"reported_wind_mw":value,
                            "observed_generation_to_eia860_nameplate_ratio":value/cap})
     if len(values)!=n_hours:raise ValueError(f"Expected {n_hours} hours; found {len(values)}")
     df=pd.DataFrame(values);out=Path(output);out.mkdir(parents=True,exist_ok=True)
     df.to_csv(out/"bpat_reported_wind_hourly.csv",index=False)
-    res={"year":year,"month":month,"wind_generation_source_columns":source_cols,"actual_variant_column_hours":used_columns,"hours":len(df),"reported_eia930_wind_energy_mwh":float(df.reported_wind_mw.sum()),
+    res={"year":year,"month":month,"wind_generation_source_columns":source_cols,"actual_variant_column_hours":used_columns,
+        "blank_category_hours_assumed_zero":blank_category_hours,
+        "both_categories_missing_hours":both_categories_missing_hours,
+        "blank_category_zero_is_provisional_not_observed":any(blank_category_hours.values()),"hours":len(df),"reported_eia930_wind_energy_mwh":float(df.reported_wind_mw.sum()),
         "reported_eia930_mean_wind_mw":float(df.reported_wind_mw.mean()),
         "reported_eia930_min_wind_mw":float(df.reported_wind_mw.min()),
         "eia860_2024_bpat_wind_nameplate_mw":cap,
