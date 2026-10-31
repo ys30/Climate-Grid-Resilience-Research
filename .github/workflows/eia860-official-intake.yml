@@ -158,6 +158,11 @@ jobs:
             --candidates outputs/eia860_intake/direct_technology_candidates.csv \
             --output outputs/eia860_intake
           cat outputs/eia860_intake/eia930_eia860_capacity_key_manifest.json
+          python -m grid_resilience.eia930_eia860_capacity_key_audit \
+            --capacity outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv \
+            --candidates outputs/eia860_intake/direct_technology_candidates.csv \
+            --output outputs/eia860_intake/full_plant_ba
+          cat outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_manifest.json
       - name: Quantify full EIA-860 capacity inventory versus partial BA attribution
         run: |
           python -m grid_resilience.eia860_ba_capacity_gap \
@@ -181,6 +186,8 @@ jobs:
             outputs/eia860_intake/eia860_ba_capacity_gap_manifest.json
             outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv
             outputs/eia860_intake/eia860_plant_ba_capacity_manifest.json
+            outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_audit.csv
+            outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_manifest.json
             outputs/eia860_intake/eia860_2024_operable_generators.csv
             outputs/eia860_intake/generator_join_coverage_by_ba.csv
             outputs/eia860_intake/generator_join_coverage_manifest.json
