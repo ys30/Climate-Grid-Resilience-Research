@@ -18,6 +18,7 @@ on:
       - 'src/grid_resilience/bpat_hydro_monthly_budget_sensitivity.py'
       - 'src/grid_resilience/bpat_hydro_joint_constraints.py'
       - 'src/grid_resilience/bpat_compound_stress_sensitivity.py'
+      - 'src/grid_resilience/bpat_wind_observation_audit.py'
       - 'src/grid_resilience/multi_technology_dispatch.py'
 jobs:
   inspect:
@@ -314,6 +315,13 @@ jobs:
             --observed-context outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json \
             --output outputs/eia860_intake/bpat_compound_stress
           cat outputs/eia860_intake/bpat_compound_stress/bpat_hypothetical_compound_stress.csv
+      - name: Audit BPAT EIA-930 observed wind against installed wind nameplate
+        run: |
+          python -m grid_resilience.bpat_wind_observation_audit \
+            --balance outputs/eia860_intake/eia930_balance_h1_2024.csv \
+            --capacity outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv \
+            --output outputs/eia860_intake/bpat_wind_observation
+          cat outputs/eia860_intake/bpat_wind_observation/bpat_wind_observation_manifest.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -322,6 +330,8 @@ jobs:
             outputs/eia860_intake/official_2024_schema.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_eia930_hydro_observation_manifest.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json
+            outputs/eia860_intake/bpat_wind_observation/bpat_reported_wind_hourly.csv
+            outputs/eia860_intake/bpat_wind_observation/bpat_wind_observation_manifest.json
             outputs/eia860_intake/bpat_compound_stress/bpat_hypothetical_compound_stress.csv
             outputs/eia860_intake/bpat_compound_stress/bpat_hypothetical_compound_stress_manifest.json
             outputs/eia860_intake/hydro_joint_constraints/bpat_hydro_joint_constraints.csv
