@@ -15,6 +15,7 @@ on:
       - 'src/grid_resilience/bpat_era5_dispatch_balance.py'
       - 'src/grid_resilience/bpat_era5_matched_hydro_sensitivity.py'
       - 'src/grid_resilience/bpat_hydro_wind_interaction_interpretation.py'
+      - 'src/grid_resilience/bpat_hydro_wind_heatmaps.py'
       - 'tests/test_bpat_era5_pypsa_availability.py'
 jobs:
   sample:
@@ -26,7 +27,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install project and Excel reader
-        run: python -m pip install -e '.[model]' openpyxl
+        run: python -m pip install -e '.[model]' openpyxl matplotlib
       - name: Verify independent ERA5 wind availability can enter PyPSA input
         run: python tests/test_bpat_era5_pypsa_availability.py
       - name: Fetch 2024 EIA-860 and EIA-930 official historical inputs
@@ -118,6 +119,10 @@ jobs:
             --input outputs/bpat_29site_weather/matched_hydro_comparison/bpat_matched_hydro_weather_comparison.csv \
             --output outputs/bpat_29site_weather/matched_hydro_comparison
           cat outputs/bpat_29site_weather/matched_hydro_comparison/hydro_wind_interaction_interpretation.json
+          python -m grid_resilience.bpat_hydro_wind_heatmaps \
+            --input outputs/bpat_29site_weather/matched_hydro_comparison/bpat_matched_hydro_weather_comparison.csv \
+            --output outputs/bpat_29site_weather/matched_hydro_comparison/figures
+          cat outputs/bpat_29site_weather/matched_hydro_comparison/figures/crossed_hydro_wind_plot_manifest.json
           cat outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_minus_replay_technology_totals.csv
       - uses: actions/upload-artifact@v4
         if: always()
@@ -140,6 +145,7 @@ jobs:
             outputs/bpat_29site_weather/matched_hydro_comparison/bpat_matched_hydro_weather_manifest.json
             outputs/bpat_29site_weather/matched_hydro_comparison/fixed_hydro_power_energy_budget_comparison.csv
             outputs/bpat_29site_weather/matched_hydro_comparison/hydro_wind_interaction_interpretation.json
+            outputs/bpat_29site_weather/matched_hydro_comparison/figures/
             outputs/bpat_29site_weather/bpat_29site_time_block_correlation.csv
             outputs/bpat_29site_weather/bpat_29site_time_block_manifest.json
             outputs/bpat_29site_weather/bpat_29site_proxy_error_diagnostics.csv
