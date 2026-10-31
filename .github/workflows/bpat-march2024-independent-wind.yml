@@ -1,0 +1,58 @@
+name: BPAT March 2024 independent wind validation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-march2024-independent-wind.yml'
+jobs:
+  march-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install validated project dependencies
+        run: python -m pip install -e . openpyxl
+      - name: Fetch frozen fleet source and historical EIA observations
+        run: |
+          mkdir -p outputs/bpat_march2024
+          python - <<'PY'
+          from urllib.request import urlopen,Request
+          from pathlib import Path
+          root=Path("outputs/bpat_march2024")
+          sources={
+            "eia8602024.zip":"https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip",
+            "eia930_balance.csv":"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv"}
+          for name,url in sources.items():
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=150) as f:
+                  (root/name).write_bytes(f.read())
+          PY
+      - name: Select same BPAT 29 wind plant coordinates as February
+        run: |
+          python -m grid_resilience.eia860_generator_extract --archive outputs/bpat_march2024/eia8602024.zip --output outputs/bpat_march2024
+          python -m grid_resilience.eia860_wind_plant_locations --archive outputs/bpat_march2024/eia8602024.zip --generators outputs/bpat_march2024/eia860_2024_operable_generators.csv --output outputs/bpat_march2024
+          python -m grid_resilience.bpat_wind_plant_weather_sampling_plan --locations outputs/bpat_march2024/eia860_2024_wind_plant_locations.csv --output outputs/bpat_march2024 --max-points 30
+          python -m grid_resilience.eia860_plant_ba_capacity --archive outputs/bpat_march2024/eia8602024.zip --generators outputs/bpat_march2024/eia860_2024_operable_generators.csv --output outputs/bpat_march2024
+      - name: Collect completely untouched March ERA5 weather and observations
+        run: |
+          python -m grid_resilience.bpat_era5_plant_weighted --plants outputs/bpat_march2024/bpat_era5_sampling_plan.csv --output outputs/bpat_march2024 --year 2024 --month 3
+          python -m grid_resilience.bpat_wind_observation_audit --balance outputs/bpat_march2024/eia930_balance.csv --capacity outputs/bpat_march2024/eia860_plant_ba_capacity_candidates.csv --output outputs/bpat_march2024 --year 2024 --month 3
+          python -m grid_resilience.bpat_29site_weather_comparison --weighted outputs/bpat_march2024/bpat_era5_capacity_weighted_hourly.csv --observed outputs/bpat_march2024/bpat_reported_wind_hourly.csv --capacity-mw 3617.1 --output outputs/bpat_march2024
+          python -m grid_resilience.bpat_29site_error_diagnostics --hourly outputs/bpat_march2024/bpat_29site_proxy_vs_reported.csv --output outputs/bpat_march2024
+          cat outputs/bpat_march2024/bpat_29site_comparison_manifest.json
+          cat outputs/bpat_march2024/bpat_29site_proxy_error_diagnostics.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-march2024-independent-era5-wind
+          if-no-files-found: warn
+          path: |
+            outputs/bpat_march2024/bpat_era5_sampling_plan.csv
+            outputs/bpat_march2024/bpat_era5_plant_hourly.csv
+            outputs/bpat_march2024/bpat_era5_capacity_weighted_hourly.csv
+            outputs/bpat_march2024/bpat_reported_wind_hourly.csv
+            outputs/bpat_march2024/bpat_29site_proxy_vs_reported.csv
+            outputs/bpat_march2024/bpat_29site_comparison_manifest.json
+            outputs/bpat_march2024/bpat_29site_proxy_error_diagnostics.csv
