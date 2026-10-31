@@ -21,6 +21,7 @@ on:
       - 'src/grid_resilience/bpat_wind_observation_audit.py'
       - 'src/grid_resilience/bpat_reported_wind_replay.py'
       - 'src/grid_resilience/bpat_wind_replay_hydro_budget.py'
+      - 'src/grid_resilience/bpat_wind_replay_hydro_power.py'
       - 'src/grid_resilience/multi_technology_dispatch.py'
 jobs:
   inspect:
@@ -343,6 +344,14 @@ jobs:
             --observed-context outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json \
             --output outputs/eia860_intake/wind_replay_hydro_budget
           cat outputs/eia860_intake/wind_replay_hydro_budget/wind_replay_hydro_budget_sweep.csv
+      - name: Test BPAT hydro hourly power bottleneck under ample budget
+        run: |
+          python -m grid_resilience.bpat_wind_replay_hydro_power \
+            --wind-replay-dir outputs/eia860_intake/bpat_wind_replay \
+            --demand outputs/eia860_intake/real_capacity_assumed_availability_solve/hourly_ba_demand.csv \
+            --observed-context outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json \
+            --output outputs/eia860_intake/bpat_hydro_power_ceiling
+          cat outputs/eia860_intake/bpat_hydro_power_ceiling/hydro_power_ceiling_sensitivity.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -351,6 +360,8 @@ jobs:
             outputs/eia860_intake/official_2024_schema.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_eia930_hydro_observation_manifest.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json
+            outputs/eia860_intake/bpat_hydro_power_ceiling/hydro_power_ceiling_sensitivity.csv
+            outputs/eia860_intake/bpat_hydro_power_ceiling/hydro_power_ceiling_manifest.json
             outputs/eia860_intake/wind_replay_hydro_budget/wind_replay_hydro_budget_sweep.csv
             outputs/eia860_intake/wind_replay_hydro_budget/wind_replay_hydro_budget_manifest.json
             outputs/eia860_intake/bpat_wind_replay/bpat_reported_wind_replay_sensitivity.csv
