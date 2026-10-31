@@ -344,6 +344,24 @@ jobs:
             --observed-context outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json \
             --output outputs/eia860_intake/wind_replay_hydro_budget
           cat outputs/eia860_intake/wind_replay_hydro_budget/wind_replay_hydro_budget_sweep.csv
+          python - <<'PY'
+          import pandas as pd
+          table=pd.read_csv("outputs/eia860_intake/wind_replay_hydro_budget/wind_replay_hydro_budget_sweep.csv")
+          expected={"hydro_budget_fraction","hypothetical_hydro_budget_mwh",
+                    "optimized_hydro_mwh","hydro_energy_budget_binding",
+                    "max_hourly_hydro_generation_mw","hydro_power_cap_mw","bpat_shortfall_mwh"}
+          if len(table)!=5 or not expected.issubset(table):
+              raise AssertionError("Missing hydro diagnostics or incomplete five-scenario sweep")
+          if not table.hydro_budget_fraction.is_monotonic_increasing:
+              raise AssertionError("Budget order is invalid")
+          if (table.max_hourly_hydro_generation_mw>table.hydro_power_cap_mw+0.1).any():
+              raise AssertionError("Hydro hourly capacity limit exceeded")
+          if (table.optimized_hydro_mwh>table.hypothetical_hydro_budget_mwh+0.1).any():
+              raise AssertionError("Monthly budget exceeded")
+          if (table.bpat_shortfall_mwh.diff().dropna()>0.1).any():
+              raise AssertionError("Modeled shortfall increased as hydro budget rose")
+          print("Regression guard passed: five scenarios, correct columns and binding constraints")
+          PY
       - name: Test BPAT hydro hourly power bottleneck under ample budget
         run: |
           python -m grid_resilience.bpat_wind_replay_hydro_power \
