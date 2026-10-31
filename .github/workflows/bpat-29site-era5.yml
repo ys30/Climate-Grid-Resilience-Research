@@ -17,6 +17,7 @@ on:
       - 'src/grid_resilience/bpat_hydro_wind_interaction_interpretation.py'
       - 'src/grid_resilience/bpat_hydro_wind_heatmaps.py'
       - 'src/grid_resilience/bpat_hydro_constraint_regimes.py'
+      - 'src/grid_resilience/bpat_wind_temporal_holdout.py'
       - 'tests/test_bpat_era5_pypsa_availability.py'
 jobs:
   sample:
@@ -64,6 +65,10 @@ jobs:
           cat outputs/bpat_29site_weather/bpat_29site_proxy_error_diagnostics.csv
           python -m grid_resilience.bpat_29site_reference_benchmarks --hourly outputs/bpat_29site_weather/bpat_29site_proxy_vs_reported.csv --output outputs/bpat_29site_weather
           cat outputs/bpat_29site_weather/bpat_29site_reference_benchmark.csv
+          python -m grid_resilience.bpat_wind_temporal_holdout \
+            --input outputs/bpat_29site_weather/bpat_29site_proxy_vs_reported.csv \
+            --output outputs/bpat_29site_weather
+          cat outputs/bpat_29site_weather/bpat_wind_temporal_holdout.csv
       - name: Run conditional four-BA PyPSA with real ERA5 BPAT wind proxy
         run: |
           python - <<'PY'
@@ -159,3 +164,5 @@ jobs:
             outputs/bpat_29site_weather/bpat_29site_proxy_error_manifest.json
             outputs/bpat_29site_weather/bpat_29site_reference_benchmark.csv
             outputs/bpat_29site_weather/bpat_29site_reference_benchmark_manifest.json
+            outputs/bpat_29site_weather/bpat_wind_temporal_holdout.csv
+            outputs/bpat_29site_weather/bpat_wind_temporal_holdout_manifest.json
