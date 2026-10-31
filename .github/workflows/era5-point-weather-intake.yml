@@ -6,6 +6,7 @@ on:
       - '.github/workflows/era5-point-weather-intake.yml'
       - 'src/grid_resilience/era5_point_weather_intake.py'
       - 'src/grid_resilience/independent_weather_gate.py'
+      - 'src/grid_resilience/era5_point_wind_curve.py'
 jobs:
   ingest:
     runs-on: ubuntu-latest
@@ -30,12 +31,21 @@ jobs:
           assert m["wind_turbine_capacity_factor_model_completed"] is False
           print("Four proxy point ERA5 time series validated; NOT BA-area climate exposure")
           PY
+      - name: Transform ERA5 100m point winds using uncalibrated turbine power curve
+        run: |
+          python -m grid_resilience.era5_point_wind_curve \
+            --weather outputs/era5_feb2024_point_proxies/era5_proxy_points_raw.csv \
+            --output outputs/era5_feb2024_point_proxies
+          cat outputs/era5_feb2024_point_proxies/era5_point_wind_curve_summary.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: era5-feb2024-illustrative-point-weather
           path: |
             outputs/era5_feb2024_point_proxies/era5_proxy_points_raw.csv
+            outputs/era5_feb2024_point_proxies/era5_point_wind_curve_proxy.csv
+            outputs/era5_feb2024_point_proxies/era5_point_wind_curve_summary.csv
+            outputs/era5_feb2024_point_proxies/era5_point_wind_curve_manifest.json
             outputs/era5_feb2024_point_proxies/era5_proxy_point_manifest.json
             outputs/era5_feb2024_point_proxies/validated/independent_weather_validated.csv
             outputs/era5_feb2024_point_proxies/validated/independent_weather_gate_manifest.json
