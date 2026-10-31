@@ -13,6 +13,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install project
+        run: python -m pip install -e .
       - name: Retrieve and inspect official 2024 first-half interchange file
         run: |
           mkdir -p outputs/eia930_interchange
@@ -34,9 +36,17 @@ jobs:
           Path("outputs/eia930_interchange/schema.json").write_text(json.dumps(m,indent=2))
           print(json.dumps(m,indent=2))
           PY
+      - name: Aggregate official February bilateral BA interchange
+        run: |
+          python -m grid_resilience.eia930_bilateral_aggregation \
+            --csv outputs/eia930_interchange/official_interchange.csv \
+            --output outputs/eia930_interchange
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: eia930-bilateral-interchange-schema
-          path: outputs/eia930_interchange/schema.json
+          path: |
+            outputs/eia930_interchange/schema.json
+            outputs/eia930_interchange/bilateral_hourly_totals.csv
+            outputs/eia930_interchange/bilateral_manifest.json
           if-no-files-found: warn
