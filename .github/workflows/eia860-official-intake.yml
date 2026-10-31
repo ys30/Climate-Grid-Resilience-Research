@@ -53,6 +53,28 @@ jobs:
                   for i,row in enumerate(x["first_six_rows"],1):
                       print("Operable header row",i," | ".join(f"{j+1}:{v}" for j,v in enumerate(row) if v is not None)[:7000])
           PY
+      - name: Inspect official EIA-860 plant BA attribution field
+        run: |
+          python - <<'PY'
+          import io,json,zipfile
+          from openpyxl import load_workbook
+          from pathlib import Path
+          archive=Path("outputs/eia860_intake/eia8602024.zip")
+          manifest={"plant_workbooks":[],"plant_ba_extraction_verified":False}
+          with zipfile.ZipFile(archive) as z:
+              names=[x for x in z.namelist() if x.lower().endswith(".xlsx") and ("2___Plant" in x or "2_Plant" in x or "2__Plant" in x)]
+              for name in names:
+                  wb=load_workbook(io.BytesIO(z.read(name)),read_only=True,data_only=True)
+                  for ws in wb:
+                      headers=[]
+                      for row in ws.iter_rows(min_row=1,max_row=4,values_only=True):
+                          headers.append([str(x).strip() if x is not None else "" for x in row])
+                      terms=[{"row":i+1,"columns":[{"index":k+1,"name":v} for k,v in enumerate(h) if "balancing" in v.lower() or "plant code" in v.lower()]} for i,h in enumerate(headers)]
+                      manifest["plant_workbooks"].append({"workbook":name,"sheet":ws.title,"matched_columns":terms})
+                  wb.close()
+          Path("outputs/eia860_intake/plant_ba_schema_probe.json").write_text(json.dumps(manifest,indent=2))
+          print(json.dumps(manifest,indent=2)[:12000])
+          PY
       - name: Extract 2024 official EIA-860 generator inventory
         run: |
           python -m pip install -e .
@@ -142,6 +164,7 @@ jobs:
           name: official-eia860-2024-schema
           path: |
             outputs/eia860_intake/official_2024_schema.json
+            outputs/eia860_intake/plant_ba_schema_probe.json
             outputs/eia860_intake/eia860_extraction_manifest.json
             outputs/eia860_intake/partial_fleet_eia860_nameplate_capacity.csv
             outputs/eia860_intake/partial_fleet_eia860_capacity_manifest.json
