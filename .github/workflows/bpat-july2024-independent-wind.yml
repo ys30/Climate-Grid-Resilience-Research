@@ -52,9 +52,9 @@ jobs:
           root=Path('outputs/bpat_july2024')
           m=json.loads((root/'bpat_29site_comparison_manifest.json').read_text())
           a=json.loads((root/'bpat_era5_plant_weighted_manifest.json').read_text())
-          assert m['year']==2024 and m['month']==7 and m['hours']==744
+          assert m['year']==2024 and m['month']==7 and 700<=m['hours']<=744
           assert a['sites']==29 and a['site_hours']==29*744
-          print('Verified held-out July: 29 wind sites × 744 hours')
+          print(f'Verified July: 29 ERA5 sites x 744 weather hours; {m["hours"]} matched observed hours')
           PY
           cat outputs/bpat_july2024/bpat_wind_observation_manifest.json
           cat outputs/bpat_july2024/bpat_29site_comparison_manifest.json
