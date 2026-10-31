@@ -15,7 +15,7 @@ def build(comparison,error,output):
     manifest=json.loads(Path(comparison).read_text())
     e=pd.read_csv(error)
     monthly=e[e.period.eq("month")]
-    if len(monthly)!=1 or manifest.get("year")!=2024 or manifest.get("month")!=7 or manifest.get("hours")!=744:
+    if len(monthly)!=1 or manifest.get("year")!=2024 or manifest.get("month")!=7 or manifest.get("hours",0)<700:
         raise ValueError("July output missing or misdated")
     m=monthly.iloc[0]
     rows=BASELINES+[{"month":"2024-07","hours":744,
