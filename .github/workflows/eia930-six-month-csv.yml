@@ -38,9 +38,17 @@ jobs:
           (path/"official_csv_probe.json").write_text(json.dumps(manifest,indent=2))
           print(json.dumps(manifest,indent=2)[:10000])
           PY
+      - name: Extract four BA February 2024 raw demand with hour-ending shift
+        run: |
+          python -m grid_resilience.eia930_six_month_demand \
+            --csv outputs/eia930_six_month/official_2024_h1_balance.csv \
+            --output outputs/eia930_six_month
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: eia930-official-2024-h1-schema-probe
-          path: outputs/eia930_six_month/official_csv_probe.json
+          path: |
+            outputs/eia930_six_month/official_csv_probe.json
+            outputs/eia930_six_month/hourly_ba_demand_manifest.json
+            outputs/eia930_six_month/hourly_ba_demand.csv
           if-no-files-found: warn
