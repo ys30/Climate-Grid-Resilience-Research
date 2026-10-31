@@ -11,6 +11,7 @@ on:
       - 'src/grid_resilience/bpat_29site_reference_benchmarks.py'
       - 'src/grid_resilience/bpat_era5_pypsa_availability.py'
       - 'src/grid_resilience/bpat_era5_pypsa_conditional_solve.py'
+      - 'src/grid_resilience/bpat_era5_replay_dispatch_audit.py'
       - 'tests/test_bpat_era5_pypsa_availability.py'
 jobs:
   sample:
@@ -89,6 +90,7 @@ jobs:
             --observed-wind outputs/bpat_29site_weather/bpat_reported_wind_hourly.csv \
             --output outputs/bpat_29site_weather/conditional_pypsa
           cat outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_pypsa_conditional_shortfall.csv
+          python -m grid_resilience.bpat_era5_replay_dispatch_audit --root outputs/bpat_29site_weather/conditional_pypsa
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -103,6 +105,7 @@ jobs:
             outputs/bpat_29site_weather/bpat_29site_comparison_manifest.json
             outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_pypsa_conditional_shortfall.csv
             outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_pypsa_conditional_manifest.json
+            outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_vs_replay_dispatch_audit.json
             outputs/bpat_29site_weather/bpat_29site_time_block_correlation.csv
             outputs/bpat_29site_weather/bpat_29site_time_block_manifest.json
             outputs/bpat_29site_weather/bpat_29site_proxy_error_diagnostics.csv
