@@ -26,30 +26,41 @@ def audit(balance,capacity,output,year=2024,month=2):
         col="Net Generation (MW) from Wind"
         headers=[h.strip() for h in (rd.fieldnames or []) if h]
         if col in headers:
-            source_cols=[col]
+            groups=[[col]]
         else:
-            # Beginning Q3 2024 EIA-930 divides wind into categories by storage pairing.
-            # Accept ONLY explicit wind generation categories, not ancillary flags.
-            source_cols=[h for h in headers if h.startswith("Net Generation (MW) from Wind")]
-        if not source_cols:
-            raise ValueError(f"Missing official wind generation field; generation columns: {[h for h in headers if h.startswith(chr(78)+chr(101)+chr(116)+chr(32)+chr(71))]}")
-        print(f"EIA-930 wind generation source columns: {source_cols}")
+            base="Net Generation (MW) from Wind "
+            categories=["without Integrated Battery Storage","with Integrated Battery Storage"]
+            groups=[]
+            for category in categories:
+                names=[base+category+suffix for suffix in ("", " (Imputed)", " (Adjusted)")]
+                present=[name for name in names if name in headers]
+                if not present:raise ValueError(f"Missing EIA-930 wind category {category}")
+                groups.append(present)
+        source_cols=[group[0] for group in groups]
+        used_columns={}
+        print(f"EIA-930 wind category candidates: {groups}")
         for row in rd:
             if row["Balancing Authority"].strip()!="BPAT":continue
             t=datetime.strptime(row["UTC Time at End of Hour"],FMT).replace(tzinfo=timezone.utc)-timedelta(hours=1)
             if not start<=t<end:continue
             if t in seen:raise ValueError("Duplicate BPAT hour")
             seen.add(t)
-            v=row[col].strip()
-            if not v:raise ValueError("Missing observed BPAT wind hour")
-            value=float(v)
+            values_by_group=[]
+            for candidates in groups:
+                valid=[(name,row.get(name,"").strip()) for name in candidates if row.get(name,"") and row.get(name,"").strip()]
+                if not valid:raise ValueError(f"Missing EIA-930 BPAT wind category at {t}")
+                # Favor adjusted when supplied, else imputed, else original.
+                name,raw=valid[-1]
+                used_columns[name]=used_columns.get(name,0)+1
+                values_by_group.append(float(raw))
+            value=sum(values_by_group)
             if not -float("inf")<value<float("inf"):raise ValueError("Nonfinite wind")
             values.append({"timestamp":t.isoformat(),"reported_wind_mw":value,
                            "observed_generation_to_eia860_nameplate_ratio":value/cap})
     if len(values)!=n_hours:raise ValueError(f"Expected {n_hours} hours; found {len(values)}")
     df=pd.DataFrame(values);out=Path(output);out.mkdir(parents=True,exist_ok=True)
     df.to_csv(out/"bpat_reported_wind_hourly.csv",index=False)
-    res={"year":year,"month":month,"wind_generation_source_columns":source_cols,"hours":len(df),"reported_eia930_wind_energy_mwh":float(df.reported_wind_mw.sum()),
+    res={"year":year,"month":month,"wind_generation_source_columns":source_cols,"actual_variant_column_hours":used_columns,"hours":len(df),"reported_eia930_wind_energy_mwh":float(df.reported_wind_mw.sum()),
         "reported_eia930_mean_wind_mw":float(df.reported_wind_mw.mean()),
         "reported_eia930_min_wind_mw":float(df.reported_wind_mw.min()),
         "eia860_2024_bpat_wind_nameplate_mw":cap,
