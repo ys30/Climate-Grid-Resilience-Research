@@ -9,6 +9,7 @@ on:
       - 'src/grid_resilience/eia930_eia860_capacity_key_audit.py'
       - 'src/grid_resilience/eia860_ba_capacity_gap.py'
       - 'src/grid_resilience/eia860_plant_ba_capacity.py'
+      - 'src/grid_resilience/eia860_wind_plant_locations.py'
       - 'src/grid_resilience/hybrid_capacity_diagnostics.py'
       - 'src/grid_resilience/bpat_hydro_counterfactual.py'
       - 'src/grid_resilience/bpat_reported_hydro_capacity.py'
@@ -109,6 +110,13 @@ jobs:
             --generators outputs/eia860_intake/eia860_2024_operable_generators.csv \
             --output outputs/eia860_intake
           cat outputs/eia860_intake/eia860_plant_ba_capacity_manifest.json
+      - name: Extract real EIA-860 wind plant coordinates and BA coverage
+        run: |
+          python -m grid_resilience.eia860_wind_plant_locations \
+            --archive outputs/eia860_intake/eia8602024.zip \
+            --generators outputs/eia860_intake/eia860_2024_operable_generators.csv \
+            --output outputs/eia860_intake
+          cat outputs/eia860_intake/eia860_wind_plant_location_manifest.json
       - name: Fetch official EIA-923 and measure real generator matching
         run: |
           python - <<'PY'
