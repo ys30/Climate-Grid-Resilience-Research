@@ -10,6 +10,7 @@ on:
       - 'src/grid_resilience/eia860_ba_capacity_gap.py'
       - 'src/grid_resilience/eia860_plant_ba_capacity.py'
       - 'src/grid_resilience/eia860_wind_plant_locations.py'
+      - 'src/grid_resilience/bpat_wind_plant_weather_sampling_plan.py'
       - 'src/grid_resilience/hybrid_capacity_diagnostics.py'
       - 'src/grid_resilience/bpat_hydro_counterfactual.py'
       - 'src/grid_resilience/bpat_reported_hydro_capacity.py'
@@ -117,6 +118,13 @@ jobs:
             --generators outputs/eia860_intake/eia860_2024_operable_generators.csv \
             --output outputs/eia860_intake
           cat outputs/eia860_intake/eia860_wind_plant_location_manifest.json
+      - name: Prepare capacity-ranked BPAT wind plant ERA5 sampling plan
+        run: |
+          python -m grid_resilience.bpat_wind_plant_weather_sampling_plan \
+            --locations outputs/eia860_intake/eia860_2024_wind_plant_locations.csv \
+            --output outputs/eia860_intake/bpat_wind_plant_sampling \
+            --max-points 30
+          cat outputs/eia860_intake/bpat_wind_plant_sampling/bpat_era5_sampling_plan_manifest.json
       - name: Fetch official EIA-923 and measure real generator matching
         run: |
           python - <<'PY'
@@ -431,6 +439,8 @@ jobs:
             outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv
             outputs/eia860_intake/eia860_plant_ba_capacity_manifest.json
             outputs/eia860_intake/eia860_2024_wind_plant_locations.csv
+            outputs/eia860_intake/bpat_wind_plant_sampling/bpat_era5_sampling_plan.csv
+            outputs/eia860_intake/bpat_wind_plant_sampling/bpat_era5_sampling_plan_manifest.json
             outputs/eia860_intake/eia860_wind_plant_location_manifest.json
             outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_audit.csv
             outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_manifest.json
