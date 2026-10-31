@@ -9,6 +9,7 @@ on:
       - 'src/grid_resilience/bpat_29site_weather_comparison.py'
       - 'src/grid_resilience/bpat_29site_error_diagnostics.py'
       - 'src/grid_resilience/bpat_era5_three_month_summary.py'
+      - 'src/grid_resilience/bpat_july_boundary_coverage_audit.py'
 jobs:
   march-validation:
     runs-on: ubuntu-latest
@@ -56,6 +57,8 @@ jobs:
           assert a['sites']==29 and a['site_hours']==29*744
           print(f'Verified July: 29 ERA5 sites x 744 weather hours; {m["hours"]} matched observed hours')
           PY
+          python -m grid_resilience.bpat_july_boundary_coverage_audit --observed outputs/bpat_july2024/bpat_reported_wind_hourly.csv --weather outputs/bpat_july2024/bpat_era5_capacity_weighted_hourly.csv --output outputs/bpat_july2024
+          cat outputs/bpat_july2024/bpat_july_boundary_coverage_audit.json
           cat outputs/bpat_july2024/bpat_wind_observation_manifest.json
           cat outputs/bpat_july2024/bpat_29site_comparison_manifest.json
           cat outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv
@@ -75,6 +78,7 @@ jobs:
             outputs/bpat_july2024/bpat_era5_capacity_weighted_hourly.csv
             outputs/bpat_july2024/bpat_reported_wind_hourly.csv
             outputs/bpat_july2024/bpat_wind_observation_manifest.json
+            outputs/bpat_july2024/bpat_july_boundary_coverage_audit.json
             outputs/bpat_july2024/bpat_29site_proxy_vs_reported.csv
             outputs/bpat_july2024/bpat_29site_comparison_manifest.json
             outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv
