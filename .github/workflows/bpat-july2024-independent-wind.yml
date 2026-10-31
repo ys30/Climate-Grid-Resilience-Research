@@ -56,6 +56,7 @@ jobs:
           assert a['sites']==29 and a['site_hours']==29*744
           print('Verified held-out July: 29 wind sites × 744 hours')
           PY
+          cat outputs/bpat_july2024/bpat_wind_observation_manifest.json
           cat outputs/bpat_july2024/bpat_29site_comparison_manifest.json
           cat outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv
           python -m grid_resilience.bpat_era5_three_month_summary \
@@ -66,13 +67,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: bpat-march2024-independent-era5-wind
+          name: bpat-july2024-independent-era5-wind
           if-no-files-found: warn
           path: |
             outputs/bpat_july2024/bpat_era5_sampling_plan.csv
             outputs/bpat_july2024/bpat_era5_plant_hourly.csv
             outputs/bpat_july2024/bpat_era5_capacity_weighted_hourly.csv
             outputs/bpat_july2024/bpat_reported_wind_hourly.csv
+            outputs/bpat_july2024/bpat_wind_observation_manifest.json
             outputs/bpat_july2024/bpat_29site_proxy_vs_reported.csv
             outputs/bpat_july2024/bpat_29site_comparison_manifest.json
             outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv
