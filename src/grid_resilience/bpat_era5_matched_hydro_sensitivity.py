@@ -18,31 +18,38 @@ def run(root,hydro_capacity,hydro_context,output):
     hydro_mw=float(h.nameplate_capacity_mw.iloc[0])
     reference=float(json.loads(Path(hydro_context).read_text())["reported_mixed_hydro_pumped_net_mwh"])
     records=[]
-    for fraction,power in [(0.05,0.10),(0.25,0.10),(0.50,0.10),(1.0,0.20),(1.0,0.30)]:
-        cc=cap.copy();cc["energy_budget_mwh"]=float("nan")
-        cc=pd.concat([cc,pd.DataFrame([{"ba":"BPAT","technology":"hydro","capacity_mw":hydro_mw,"marginal_cost":0,
-                                       "energy_budget_mwh":reference*fraction}])],ignore_index=True)
-        for label,filename in [("era5","era5_29site_wind_availability.csv"),
-                               ("replay","observed_wind_replay_availability.csv")]:
-            aa=pd.read_csv(root/filename)
-            times=aa.loc[(aa.ba=="BPAT")&(aa.technology=="wind"),"timestamp"]
-            if len(times)!=696:raise ValueError("Missing wind hours")
-            aa=pd.concat([aa,pd.DataFrame({"timestamp":times,"ba":"BPAT","technology":"hydro",
-                                           "availability_pu":power})],ignore_index=True)
-            case=out/f"hydro_energy_{int(fraction*100)}_power_{int(power*100)}"/label
-            case.mkdir(parents=True,exist_ok=True)
-            cc.to_csv(case/"capacity.csv",index=False)
-            aa.to_csv(case/"availability.csv",index=False)
-            result=solve(demand,case/"capacity.csv",case/"availability.csv",case/"dispatch")
-            short=float(result.loc[result.ba=="BPAT","unserved_energy_mwh"].iloc[0])
-            records.append({"hydro_budget_fraction":fraction,"hydro_power_fraction":power,
-                            "scenario":label,"bpat_shortfall_mwh":short})
-    frame=pd.DataFrame(records)
+    # Full crossed design: hydro monthly energy and hourly power vary independently.
+    energy_levels=(0.05,0.25,0.50,1.0)
+    power_levels=(0.10,0.20,0.30)
+    for fraction in energy_levels:
+      for power in power_levels:
+          cc=cap.copy();cc["energy_budget_mwh"]=float("nan")
+          cc=pd.concat([cc,pd.DataFrame([{"ba":"BPAT","technology":"hydro","capacity_mw":hydro_mw,"marginal_cost":0,
+                                         "energy_budget_mwh":reference*fraction}])],ignore_index=True)
+          for label,filename in [("era5","era5_29site_wind_availability.csv"),
+                                 ("replay","observed_wind_replay_availability.csv")]:
+              aa=pd.read_csv(root/filename)
+              times=aa.loc[(aa.ba=="BPAT")&(aa.technology=="wind"),"timestamp"]
+              if len(times)!=696:raise ValueError("Missing wind hours")
+              aa=pd.concat([aa,pd.DataFrame({"timestamp":times,"ba":"BPAT","technology":"hydro",
+                                             "availability_pu":power})],ignore_index=True)
+              case=out/f"hydro_energy_{int(fraction*100)}_power_{int(power*100)}"/label
+              case.mkdir(parents=True,exist_ok=True)
+              cc.to_csv(case/"capacity.csv",index=False)
+              aa.to_csv(case/"availability.csv",index=False)
+              result=solve(demand,case/"capacity.csv",case/"availability.csv",case/"dispatch")
+              short=float(result.loc[result.ba=="BPAT","unserved_energy_mwh"].iloc[0])
+              records.append({"hydro_budget_fraction":fraction,"hydro_power_fraction":power,
+                              "scenario":label,"bpat_shortfall_mwh":short})
+      frame=pd.DataFrame(records)
     pivot=frame.pivot(index=["hydro_budget_fraction","hydro_power_fraction"],columns="scenario",values="bpat_shortfall_mwh").reset_index()
+    if len(pivot)!=len(energy_levels)*len(power_levels):raise AssertionError("Incomplete crossed hydro design")
     pivot["era5_minus_replay_shortfall_mwh"]=pivot.era5-pivot.replay
     pivot.to_csv(out/"bpat_matched_hydro_weather_comparison.csv",index=False)
     (out/"bpat_matched_hydro_weather_manifest.json").write_text(json.dumps({
-      "scenario_pairs":len(pivot),"constant_hydro_within_each_pair":True,
+      "scenario_pairs":len(pivot),"full_crossed_design":True,
+      "energy_budget_levels":list(energy_levels),"hourly_power_levels":list(power_levels),
+      "constant_hydro_within_each_pair":True,
       "hydro_capacity":"2024 EIA-860 BPAT single-fuel nonstorage hydro nameplate",
       "hydro_energy_reference":"EIA-930 hydro+pumped mixed reported output; used as hypothetical scaling only",
       "observed_historical_shortfall":False,"hydro_water_availability_calibrated":False,
