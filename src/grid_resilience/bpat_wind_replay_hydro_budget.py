@@ -27,7 +27,7 @@ def sweep(wind_replay_dir,demand,observed_context,output):
         generation=pd.read_csv(case/"dispatch"/"generation_hourly.csv")
         hydro_mwh=float(generation.loc[(generation.ba=="BPAT")&(generation.technology=="hydro"),"generation_mwh"].sum())
         if hydro_mwh>ref*fraction+0.1:raise AssertionError("Hydro energy limit violated")
-        hourly=gen[(gen.ba=="BPAT")&(gen.technology=="hydro")]
+        hourly=generation[(generation.ba=="BPAT")&(generation.technology=="hydro")]
         hydro_peak=float(hourly.generation_mwh.max())
         hydro_power_cap=float(cc.loc[hydro,"capacity_mw"].iloc[0])*0.1
         if hydro_peak>hydro_power_cap+0.1:raise AssertionError("Hydro hourly power limit violated")
