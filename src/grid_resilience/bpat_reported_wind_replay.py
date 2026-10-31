@@ -24,6 +24,9 @@ def run(demand,capacity,availability,wind_hourly,hydro_capacity,observed_context
     values=pd.to_numeric(w.reported_wind_mw,errors="raise")
     if values.isna().any():raise ValueError("Missing reported wind values")
     neg_count=int((values<0).sum())
+    exceed_count=int((values>wind_mw).sum())
+    clipped_negative_mwh=float((-values.clip(upper=0)).sum())
+    clipped_above_capacity_mwh=float((values-wind_mw).clip(lower=0).sum())
     obs=pd.DataFrame({"timestamp":w.timestamp,"availability_pu":values.clip(lower=0,upper=wind_mw)/wind_mw})
     keys=a.loc[(a.ba=="BPAT")&(a.technology=="wind"),["timestamp"]]
     if set(obs.timestamp)!=set(keys.timestamp):raise ValueError("Wind and model timestamps differ")
@@ -48,6 +51,10 @@ def run(demand,capacity,availability,wind_hourly,hydro_capacity,observed_context
     df["incremental_shortfall_mwh"]=df.bpat_shortfall_mwh-df.iloc[0].bpat_shortfall_mwh
     df.to_csv(out/"bpat_reported_wind_replay_sensitivity.csv",index=False)
     manifest={"reported_negative_wind_hours":neg_count,
+       "reported_above_nameplate_hours":exceed_count,
+       "negative_net_generation_clipped_mwh":clipped_negative_mwh,
+       "above_nameplate_generation_clipped_mwh":clipped_above_capacity_mwh,
+       "observed_wind_replay_is_not_weather_validation":True,
        "wind_input":"EIA-930 reported net generation clipped at zero and EIA-860 nameplate ceiling",
        "observed_generation_as_availability_is_not_independent_validation":True,
        "wind_halving_is_hypothetical":True,"hydro_power_availability_assumed":0.1,
