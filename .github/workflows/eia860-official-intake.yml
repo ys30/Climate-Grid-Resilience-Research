@@ -15,6 +15,8 @@ on:
       - 'src/grid_resilience/bpat_hydro_availability_sensitivity.py'
       - 'src/grid_resilience/bpat_eia930_hydro_observation.py'
       - 'src/grid_resilience/bpat_hydro_energy_context.py'
+      - 'src/grid_resilience/bpat_hydro_monthly_budget_sensitivity.py'
+      - 'src/grid_resilience/multi_technology_dispatch.py'
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -270,6 +272,16 @@ jobs:
             --shortfall outputs/eia860_intake/real_capacity_assumed_availability_solve/dispatch/shortfall_by_ba.csv \
             --output outputs/eia860_intake/bpat_hydro_observation
           cat outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json
+      - name: Solve monthly BPAT hydro energy-budget sensitivity
+        run: |
+          python -m grid_resilience.bpat_hydro_monthly_budget_sensitivity \
+            --demand outputs/eia860_intake/real_capacity_assumed_availability_solve/hourly_ba_demand.csv \
+            --capacity outputs/eia860_intake/real_capacity_assumed_availability_solve/reported_nameplate_assumed_cost.csv \
+            --availability outputs/eia860_intake/real_capacity_assumed_availability_solve/synthetic_availability.csv \
+            --full-capacity outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv \
+            --observed-context outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json \
+            --output outputs/eia860_intake/hydro_energy_budget_sweep
+          cat outputs/eia860_intake/hydro_energy_budget_sweep/hypothetical_monthly_hydro_budget_sweep.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -278,6 +290,8 @@ jobs:
             outputs/eia860_intake/official_2024_schema.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_eia930_hydro_observation_manifest.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json
+            outputs/eia860_intake/hydro_energy_budget_sweep/hypothetical_monthly_hydro_budget_sweep.csv
+            outputs/eia860_intake/hydro_energy_budget_sweep/hypothetical_monthly_hydro_budget_manifest.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_eia930_reported_hydro_hourly.csv
             outputs/eia860_intake/plant_ba_schema_probe.json
             outputs/eia860_intake/eia860_extraction_manifest.json
