@@ -10,18 +10,19 @@ on:
       - 'src/grid_resilience/bpat_29site_error_diagnostics.py'
       - 'src/grid_resilience/bpat_29site_reference_benchmarks.py'
       - 'src/grid_resilience/bpat_era5_pypsa_availability.py'
+      - 'src/grid_resilience/bpat_era5_pypsa_conditional_solve.py'
       - 'tests/test_bpat_era5_pypsa_availability.py'
 jobs:
   sample:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Install project and Excel reader
-        run: python -m pip install -e . openpyxl
+        run: python -m pip install -e '.[model]' openpyxl
       - name: Verify independent ERA5 wind availability can enter PyPSA input
         run: python tests/test_bpat_era5_pypsa_availability.py
       - name: Fetch 2024 EIA-860 and EIA-930 official historical inputs
@@ -57,6 +58,36 @@ jobs:
           cat outputs/bpat_29site_weather/bpat_29site_proxy_error_diagnostics.csv
           python -m grid_resilience.bpat_29site_reference_benchmarks --hourly outputs/bpat_29site_weather/bpat_29site_proxy_vs_reported.csv --output outputs/bpat_29site_weather
           cat outputs/bpat_29site_weather/bpat_29site_reference_benchmark.csv
+      - name: Run conditional four-BA PyPSA with real ERA5 BPAT wind proxy
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          from grid_resilience.eia930_six_month_demand import extract
+          root=Path("outputs/bpat_29site_weather")
+          extract(root/"eia930_balance.csv",root/"model_inputs")
+          c=pd.read_csv(root/"eia860_plant_ba_capacity_candidates.csv")
+          prices={"solar":0,"wind":0,"nuclear":10,"coal":35,"gas":55,"oil":110}
+          c=c[c.technology.isin(prices)].copy()
+          c=c.rename(columns={"nameplate_capacity_mw":"capacity_mw"})
+          c=c[["ba","technology","capacity_mw"]].copy()
+          c["marginal_cost"]=c.technology.map(prices)
+          assert set(c.ba)=={"AZPS","BPAT","CISO","SRP"}
+          demand=pd.read_csv(root/"model_inputs"/"hourly_ba_demand.csv")
+          ts=demand[["timestamp"]].drop_duplicates().assign(key=1)
+          plants=c[["ba","technology"]].assign(key=1)
+          a=ts.merge(plants,on="key").drop(columns="key")
+          a["availability_pu"]=1.0
+          c.to_csv(root/"model_inputs"/"capacity.csv",index=False)
+          a.to_csv(root/"model_inputs"/"availability.csv",index=False)
+          PY
+          python -m grid_resilience.bpat_era5_pypsa_conditional_solve \
+            --demand outputs/bpat_29site_weather/model_inputs/hourly_ba_demand.csv \
+            --capacity outputs/bpat_29site_weather/model_inputs/capacity.csv \
+            --availability outputs/bpat_29site_weather/model_inputs/availability.csv \
+            --weather outputs/bpat_29site_weather/bpat_era5_capacity_weighted_hourly.csv \
+            --output outputs/bpat_29site_weather/conditional_pypsa
+          cat outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_pypsa_conditional_shortfall.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -69,6 +100,8 @@ jobs:
             outputs/bpat_29site_weather/bpat_era5_plant_weighted_manifest.json
             outputs/bpat_29site_weather/bpat_29site_proxy_vs_reported.csv
             outputs/bpat_29site_weather/bpat_29site_comparison_manifest.json
+            outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_pypsa_conditional_shortfall.csv
+            outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_pypsa_conditional_manifest.json
             outputs/bpat_29site_weather/bpat_29site_time_block_correlation.csv
             outputs/bpat_29site_weather/bpat_29site_time_block_manifest.json
             outputs/bpat_29site_weather/bpat_29site_proxy_error_diagnostics.csv
