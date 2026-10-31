@@ -3,13 +3,18 @@
 EIA-930 reported net generation and EIA-860 operable nameplate are not an
 independently calibrated generation-availability relationship.
 """
-import argparse,csv,json
+import argparse,csv,json,calendar
 from datetime import datetime,timedelta,timezone
 from pathlib import Path
 import pandas as pd
 from .eia930_fuel_decomposition import FMT
 
-def audit(balance,capacity,output):
+def audit(balance,capacity,output,year=2024,month=2):
+    if not 1<=month<=12 or not 2000<=year<=2100:raise ValueError('Invalid calendar month')
+    from datetime import timezone as tz
+    start=datetime(year,month,1,tzinfo=tz.utc)
+    end=datetime(year+1,1,1,tzinfo=tz.utc) if month==12 else datetime(year,month+1,1,tzinfo=tz.utc)
+    n_hours=24*calendar.monthrange(year,month)[1]
     inventory=pd.read_csv(capacity)
     wind=inventory[(inventory.ba=="BPAT")&(inventory.technology=="wind")]
     if len(wind)!=1:raise ValueError("Missing unique BPAT wind group")
@@ -23,7 +28,7 @@ def audit(balance,capacity,output):
         for row in rd:
             if row["Balancing Authority"].strip()!="BPAT":continue
             t=datetime.strptime(row["UTC Time at End of Hour"],FMT).replace(tzinfo=timezone.utc)-timedelta(hours=1)
-            if not datetime(2024,2,1,tzinfo=timezone.utc)<=t<datetime(2024,3,1,tzinfo=timezone.utc):continue
+            if not start<=t<end:continue
             if t in seen:raise ValueError("Duplicate BPAT hour")
             seen.add(t)
             v=row[col].strip()
@@ -32,10 +37,10 @@ def audit(balance,capacity,output):
             if not -float("inf")<value<float("inf"):raise ValueError("Nonfinite wind")
             values.append({"timestamp":t.isoformat(),"reported_wind_mw":value,
                            "observed_generation_to_eia860_nameplate_ratio":value/cap})
-    if len(values)!=696:raise ValueError(f"Only {len(values)} hours")
+    if len(values)!=n_hours:raise ValueError(f"Expected {n_hours} hours; found {len(values)}")
     df=pd.DataFrame(values);out=Path(output);out.mkdir(parents=True,exist_ok=True)
     df.to_csv(out/"bpat_reported_wind_hourly.csv",index=False)
-    res={"hours":len(df),"reported_eia930_wind_energy_mwh":float(df.reported_wind_mw.sum()),
+    res={"year":year,"month":month,"hours":len(df),"reported_eia930_wind_energy_mwh":float(df.reported_wind_mw.sum()),
         "reported_eia930_mean_wind_mw":float(df.reported_wind_mw.mean()),
         "reported_eia930_min_wind_mw":float(df.reported_wind_mw.min()),
         "eia860_2024_bpat_wind_nameplate_mw":cap,
@@ -49,5 +54,7 @@ def audit(balance,capacity,output):
 def main():
     p=argparse.ArgumentParser()
     for k in ("balance","capacity","output"):p.add_argument("--"+k,required=True)
-    a=p.parse_args();print(json.dumps(audit(a.balance,a.capacity,a.output),indent=2))
+    p.add_argument("--year",type=int,default=2024)
+    p.add_argument("--month",type=int,default=2)
+    a=p.parse_args();print(json.dumps(audit(a.balance,a.capacity,a.output,a.year,a.month),indent=2))
 if __name__=="__main__":main()
