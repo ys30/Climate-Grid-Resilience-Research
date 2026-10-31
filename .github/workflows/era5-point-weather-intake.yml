@@ -7,6 +7,7 @@ on:
       - 'src/grid_resilience/era5_point_weather_intake.py'
       - 'src/grid_resilience/independent_weather_gate.py'
       - 'src/grid_resilience/era5_point_wind_curve.py'
+      - 'src/grid_resilience/bpat_era5_wind_shape_comparison.py'
 jobs:
   ingest:
     runs-on: ubuntu-latest
@@ -37,6 +38,41 @@ jobs:
             --weather outputs/era5_feb2024_point_proxies/era5_proxy_points_raw.csv \
             --output outputs/era5_feb2024_point_proxies
           cat outputs/era5_feb2024_point_proxies/era5_point_wind_curve_summary.csv
+      - name: Compare BPAT ERA5 proxy hourly shape with EIA-930 reported wind
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          import json
+          import pandas as pd
+          from grid_resilience.bpat_wind_observation_audit import audit
+          from grid_resilience.eia860_plant_ba_capacity import build
+          # Use existing official EIA-860 2024 archive and EIA-930 balance data for a standalone comparison.
+          root=Path("outputs/era5_feb2024_point_proxies")
+          sources={
+           "eia8602024.zip":"https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip",
+           "eia930_balance.csv":"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv"}
+          for name,url in sources.items():
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=150) as r:
+                  (root/name).write_bytes(r.read())
+          PY
+          python -m grid_resilience.eia860_generator_extract \
+            --archive outputs/era5_feb2024_point_proxies/eia8602024.zip \
+            --output outputs/era5_feb2024_point_proxies
+          python -m grid_resilience.eia860_plant_ba_capacity \
+            --archive outputs/era5_feb2024_point_proxies/eia8602024.zip \
+            --generators outputs/era5_feb2024_point_proxies/eia860_2024_operable_generators.csv \
+            --output outputs/era5_feb2024_point_proxies
+          python -m grid_resilience.bpat_wind_observation_audit \
+            --balance outputs/era5_feb2024_point_proxies/eia930_balance.csv \
+            --capacity outputs/era5_feb2024_point_proxies/eia860_plant_ba_capacity_candidates.csv \
+            --output outputs/era5_feb2024_point_proxies
+          python -m grid_resilience.bpat_era5_wind_shape_comparison \
+            --proxy outputs/era5_feb2024_point_proxies/era5_point_wind_curve_proxy.csv \
+            --wind outputs/era5_feb2024_point_proxies/bpat_reported_wind_hourly.csv \
+            --capacity outputs/era5_feb2024_point_proxies/eia860_plant_ba_capacity_candidates.csv \
+            --output outputs/era5_feb2024_point_proxies
+          cat outputs/era5_feb2024_point_proxies/bpat_era5_point_wind_comparison_manifest.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -44,6 +80,8 @@ jobs:
           path: |
             outputs/era5_feb2024_point_proxies/era5_proxy_points_raw.csv
             outputs/era5_feb2024_point_proxies/era5_point_wind_curve_proxy.csv
+            outputs/era5_feb2024_point_proxies/bpat_era5_point_vs_reported_wind_hourly.csv
+            outputs/era5_feb2024_point_proxies/bpat_era5_point_wind_comparison_manifest.json
             outputs/era5_feb2024_point_proxies/era5_point_wind_curve_summary.csv
             outputs/era5_feb2024_point_proxies/era5_point_wind_curve_manifest.json
             outputs/era5_feb2024_point_proxies/era5_proxy_point_manifest.json
