@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/eia930-six-month-csv.yml'
       - 'src/grid_resilience/eia930_fuel_decomposition.py'
+      - 'src/grid_resilience/eia930_fuel_reporting_coverage.py'
       - 'tests/test_eia930_fuel_decomposition.py'
 jobs:
   probe:
@@ -80,6 +81,12 @@ jobs:
           python -m grid_resilience.eia930_fuel_decomposition \
             --csv outputs/eia930_six_month/official_2024_h1_balance.csv \
             --output outputs/eia930_six_month
+      - name: Profile real hourly reporting coverage for each fuel
+        run: |
+          python -m grid_resilience.eia930_fuel_reporting_coverage \
+            --csv outputs/eia930_six_month/official_2024_h1_balance.csv \
+            --output outputs/eia930_six_month
+          cat outputs/eia930_six_month/eia930_fuel_reporting_coverage_manifest.json
       - name: Solve February 2024 using real EIA demand and explicitly assumed supply
         run: |
           python -m pip install -e '.[model]'
@@ -124,6 +131,8 @@ jobs:
             outputs/eia930_six_month/interchange_reconciliation.csv
             outputs/eia930_six_month/interchange_reconciliation_manifest.json
             outputs/eia930_six_month/eia930_fuel_generation_decomposition.json
+            outputs/eia930_six_month/eia930_fuel_reporting_coverage.csv
+            outputs/eia930_six_month/eia930_fuel_reporting_coverage_manifest.json
             outputs/eia930_six_month/historical_demand_synthetic_supply_solve/shortfall_by_ba.csv
             outputs/eia930_six_month/assumed_gas_capacity.csv
           if-no-files-found: warn
