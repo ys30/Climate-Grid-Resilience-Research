@@ -6,6 +6,7 @@ on:
       - '.github/workflows/eia860-official-intake.yml'
       - 'src/grid_resilience/eia860_generator_extract.py'
       - 'src/grid_resilience/eia860_partial_fleet_capacity.py'
+      - 'src/grid_resilience/eia930_eia860_capacity_key_audit.py'
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -101,6 +102,31 @@ jobs:
           python -m grid_resilience.eia_complete_year_gate \
             --matrix outputs/eia860_intake/candidate_monthly_coverage_matrix.csv \
             --output outputs/eia860_intake
+      - name: Reconcile partial EIA-860 capacity keys to observed EIA-930 direct fuel categories
+        run: |
+          python - <<'PY'
+          from urllib.request import Request,urlopen
+          from pathlib import Path
+          url="https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv"
+          with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=150) as r:
+              data=r.read()
+          if len(data)<1000:raise ValueError("Unexpected EIA-930 response")
+          Path("outputs/eia860_intake/eia930_balance_h1_2024.csv").write_bytes(data)
+          PY
+          python -m grid_resilience.eia930_fuel_reporting_coverage \
+            --csv outputs/eia860_intake/eia930_balance_h1_2024.csv \
+            --output outputs/eia860_intake
+          python -m grid_resilience.eia930_fuel_candidate_gate \
+            --coverage outputs/eia860_intake/eia930_fuel_reporting_coverage.csv \
+            --output outputs/eia860_intake
+          python -m grid_resilience.eia930_technology_crosswalk \
+            --eligible outputs/eia860_intake/eligible_fuel_groups.csv \
+            --output outputs/eia860_intake
+          python -m grid_resilience.eia930_eia860_capacity_key_audit \
+            --capacity outputs/eia860_intake/partial_fleet_eia860_nameplate_capacity.csv \
+            --candidates outputs/eia860_intake/direct_technology_candidates.csv \
+            --output outputs/eia860_intake
+          cat outputs/eia860_intake/eia930_eia860_capacity_key_manifest.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -110,6 +136,8 @@ jobs:
             outputs/eia860_intake/eia860_extraction_manifest.json
             outputs/eia860_intake/partial_fleet_eia860_nameplate_capacity.csv
             outputs/eia860_intake/partial_fleet_eia860_capacity_manifest.json
+            outputs/eia860_intake/eia930_eia860_capacity_key_audit.csv
+            outputs/eia860_intake/eia930_eia860_capacity_key_manifest.json
             outputs/eia860_intake/eia860_2024_operable_generators.csv
             outputs/eia860_intake/generator_join_coverage_by_ba.csv
             outputs/eia860_intake/generator_join_coverage_manifest.json
