@@ -9,6 +9,8 @@ on:
       - 'src/grid_resilience/bpat_29site_time_block_diagnostics.py'
       - 'src/grid_resilience/bpat_29site_error_diagnostics.py'
       - 'src/grid_resilience/bpat_29site_reference_benchmarks.py'
+      - 'src/grid_resilience/bpat_era5_pypsa_availability.py'
+      - 'tests/test_bpat_era5_pypsa_availability.py'
 jobs:
   sample:
     runs-on: ubuntu-latest
@@ -20,6 +22,8 @@ jobs:
           python-version: '3.11'
       - name: Install project and Excel reader
         run: python -m pip install -e . openpyxl
+      - name: Verify independent ERA5 wind availability can enter PyPSA input
+        run: python tests/test_bpat_era5_pypsa_availability.py
       - name: Fetch 2024 EIA-860 and EIA-930 official historical inputs
         run: |
           mkdir -p outputs/bpat_29site_weather
