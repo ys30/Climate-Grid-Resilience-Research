@@ -16,6 +16,7 @@ on:
       - 'src/grid_resilience/bpat_era5_matched_hydro_sensitivity.py'
       - 'src/grid_resilience/bpat_hydro_wind_interaction_interpretation.py'
       - 'src/grid_resilience/bpat_hydro_wind_heatmaps.py'
+      - 'src/grid_resilience/bpat_hydro_constraint_regimes.py'
       - 'tests/test_bpat_era5_pypsa_availability.py'
 jobs:
   sample:
@@ -123,6 +124,10 @@ jobs:
             --input outputs/bpat_29site_weather/matched_hydro_comparison/bpat_matched_hydro_weather_comparison.csv \
             --output outputs/bpat_29site_weather/matched_hydro_comparison/figures
           cat outputs/bpat_29site_weather/matched_hydro_comparison/figures/crossed_hydro_wind_plot_manifest.json
+          python -m grid_resilience.bpat_hydro_constraint_regimes \
+            --input outputs/bpat_29site_weather/matched_hydro_comparison/bpat_matched_hydro_weather_comparison.csv \
+            --output outputs/bpat_29site_weather/matched_hydro_comparison
+          cat outputs/bpat_29site_weather/matched_hydro_comparison/hydro_constraint_regimes_manifest.json
           cat outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_minus_replay_technology_totals.csv
       - uses: actions/upload-artifact@v4
         if: always()
@@ -146,6 +151,8 @@ jobs:
             outputs/bpat_29site_weather/matched_hydro_comparison/fixed_hydro_power_energy_budget_comparison.csv
             outputs/bpat_29site_weather/matched_hydro_comparison/hydro_wind_interaction_interpretation.json
             outputs/bpat_29site_weather/matched_hydro_comparison/figures/
+            outputs/bpat_29site_weather/matched_hydro_comparison/hydro_constraint_finite_differences.csv
+            outputs/bpat_29site_weather/matched_hydro_comparison/hydro_constraint_regimes_manifest.json
             outputs/bpat_29site_weather/bpat_29site_time_block_correlation.csv
             outputs/bpat_29site_weather/bpat_29site_time_block_manifest.json
             outputs/bpat_29site_weather/bpat_29site_proxy_error_diagnostics.csv
