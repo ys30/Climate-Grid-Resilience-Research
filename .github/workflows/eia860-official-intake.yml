@@ -11,6 +11,7 @@ on:
       - 'src/grid_resilience/eia860_plant_ba_capacity.py'
       - 'src/grid_resilience/hybrid_capacity_diagnostics.py'
       - 'src/grid_resilience/bpat_hydro_counterfactual.py'
+      - 'src/grid_resilience/bpat_reported_hydro_capacity.py'
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -232,6 +233,16 @@ jobs:
             --availability outputs/eia860_intake/real_capacity_assumed_availability_solve/synthetic_availability.csv \
             --output outputs/eia860_intake/real_capacity_assumed_availability_solve/hydro_counterfactual
           cat outputs/eia860_intake/real_capacity_assumed_availability_solve/hydro_counterfactual/hypothetical_hydro_sensitivity_manifest.json
+      - name: Compare reported BPAT non-pumped hydro nameplate with baseline
+        run: |
+          python -m grid_resilience.bpat_reported_hydro_capacity \
+            --demand outputs/eia860_intake/real_capacity_assumed_availability_solve/hourly_ba_demand.csv \
+            --capacity outputs/eia860_intake/real_capacity_assumed_availability_solve/reported_nameplate_assumed_cost.csv \
+            --availability outputs/eia860_intake/real_capacity_assumed_availability_solve/synthetic_availability.csv \
+            --full-capacity outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv \
+            --output outputs/eia860_intake/real_capacity_assumed_availability_solve/reported_hydro
+          cat outputs/eia860_intake/real_capacity_assumed_availability_solve/reported_hydro/reported_hydro_capacity_experiment_manifest.json
+          cat outputs/eia860_intake/real_capacity_assumed_availability_solve/reported_hydro/reported_hydro_capacity_experiment.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -250,6 +261,8 @@ jobs:
             outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_audit.csv
             outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_manifest.json
             outputs/eia860_intake/real_capacity_assumed_availability_solve/hybrid_solve_manifest.json
+            outputs/eia860_intake/real_capacity_assumed_availability_solve/reported_hydro/reported_hydro_capacity_experiment.csv
+            outputs/eia860_intake/real_capacity_assumed_availability_solve/reported_hydro/reported_hydro_capacity_experiment_manifest.json
             outputs/eia860_intake/real_capacity_assumed_availability_solve/hydro_counterfactual/hypothetical_hydro_sensitivity.csv
             outputs/eia860_intake/real_capacity_assumed_availability_solve/hydro_counterfactual/hypothetical_hydro_sensitivity_manifest.json
             outputs/eia860_intake/real_capacity_assumed_availability_solve/hybrid_model_capacity_diagnostics.csv
