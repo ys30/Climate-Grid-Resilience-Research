@@ -8,6 +8,7 @@ on:
       - 'src/grid_resilience/independent_weather_gate.py'
       - 'src/grid_resilience/era5_point_wind_curve.py'
       - 'src/grid_resilience/bpat_era5_wind_shape_comparison.py'
+      - 'tests/test_bpat_era5_utc_join.py'
 jobs:
   ingest:
     runs-on: ubuntu-latest
@@ -38,6 +39,8 @@ jobs:
             --weather outputs/era5_feb2024_point_proxies/era5_proxy_points_raw.csv \
             --output outputs/era5_feb2024_point_proxies
           cat outputs/era5_feb2024_point_proxies/era5_point_wind_curve_summary.csv
+      - name: Test ERA5 and EIA-930 timezone-normalized hourly join
+        run: python tests/test_bpat_era5_utc_join.py
       - name: Compare BPAT ERA5 proxy hourly shape with EIA-930 reported wind
         run: |
           python - <<'PY'
