@@ -17,6 +17,7 @@ on:
       - 'src/grid_resilience/bpat_hydro_energy_context.py'
       - 'src/grid_resilience/bpat_hydro_monthly_budget_sensitivity.py'
       - 'src/grid_resilience/bpat_hydro_joint_constraints.py'
+      - 'src/grid_resilience/bpat_compound_stress_sensitivity.py'
       - 'src/grid_resilience/multi_technology_dispatch.py'
 jobs:
   inspect:
@@ -303,6 +304,16 @@ jobs:
             --observed-context outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json \
             --output outputs/eia860_intake/hydro_joint_constraints
           cat outputs/eia860_intake/hydro_joint_constraints/bpat_hydro_joint_constraints.csv
+      - name: Compare BPAT paired demand and wind hypothetical stress
+        run: |
+          python -m grid_resilience.bpat_compound_stress_sensitivity \
+            --demand outputs/eia860_intake/real_capacity_assumed_availability_solve/hourly_ba_demand.csv \
+            --capacity outputs/eia860_intake/real_capacity_assumed_availability_solve/reported_nameplate_assumed_cost.csv \
+            --availability outputs/eia860_intake/real_capacity_assumed_availability_solve/synthetic_availability.csv \
+            --full-capacity outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv \
+            --observed-context outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json \
+            --output outputs/eia860_intake/bpat_compound_stress
+          cat outputs/eia860_intake/bpat_compound_stress/bpat_hypothetical_compound_stress.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -311,6 +322,8 @@ jobs:
             outputs/eia860_intake/official_2024_schema.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_eia930_hydro_observation_manifest.json
             outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json
+            outputs/eia860_intake/bpat_compound_stress/bpat_hypothetical_compound_stress.csv
+            outputs/eia860_intake/bpat_compound_stress/bpat_hypothetical_compound_stress_manifest.json
             outputs/eia860_intake/hydro_joint_constraints/bpat_hydro_joint_constraints.csv
             outputs/eia860_intake/hydro_joint_constraints/bpat_hydro_joint_constraints_manifest.json
             outputs/eia860_intake/hydro_energy_budget_sweep/hypothetical_monthly_hydro_budget_sweep.csv
