@@ -27,8 +27,15 @@ def sweep(wind_replay_dir,demand,observed_context,output):
         generation=pd.read_csv(case/"dispatch"/"generation_hourly.csv")
         hydro_mwh=float(generation.loc[(generation.ba=="BPAT")&(generation.technology=="hydro"),"generation_mwh"].sum())
         if hydro_mwh>ref*fraction+0.1:raise AssertionError("Hydro energy limit violated")
+        hourly=gen[(gen.ba=="BPAT")&(gen.technology=="hydro")]
+        hydro_peak=float(hourly.generation_mwh.max())
+        hydro_power_cap=float(cc.loc[hydro,"capacity_mw"].iloc[0])*0.1
+        if hydro_peak>hydro_power_cap+0.1:raise AssertionError("Hydro hourly power limit violated")
         data.append({"hydro_budget_fraction":fraction,"hypothetical_hydro_budget_mwh":ref*fraction,
                      "optimized_hydro_mwh":hydro_mwh,
+                     "hydro_energy_budget_binding":abs(hydro_mwh-ref*fraction)<0.1,
+                     "max_hourly_hydro_generation_mw":hydro_peak,
+                     "hydro_power_cap_mw":hydro_power_cap,
                      "bpat_shortfall_mwh":float(result.loc[result.ba=="BPAT","unserved_energy_mwh"].iloc[0])})
     frame=pd.DataFrame(data)
     if (frame.bpat_shortfall_mwh.diff().dropna()>0.1).any():raise AssertionError("Shortfall increased with more hydro energy")
