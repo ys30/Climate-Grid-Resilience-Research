@@ -21,7 +21,7 @@ def run(demand,capacity,availability,full_capacity,observed_context,output):
     times=avail.timestamp.drop_duplicates()
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
     results=[]
-    for budget_fraction in (0.05,0.1,0.25,0.5,1.0):
+    for budget_fraction in (0.0,0.01,0.02,0.03,0.04,0.05,0.1,0.25,0.5,1.0):
         case=out/("budget_"+str(int(budget_fraction*100))+"pct")
         case.mkdir(exist_ok=True)
         c=cap.copy();a=avail.copy()
