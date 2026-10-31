@@ -50,6 +50,12 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None
             raise ValueError(f"Nonfinite {field}")
         if (df[field] < lower).any() or (upper is not None and (df[field] > upper).any()):
             raise ValueError(f"Invalid {field} bounds")
+    if "energy_budget_mwh" in capacity.columns:
+        # A finite optional horizon-wide energy limit (not hourly availability).
+        budget = pd.to_numeric(capacity.energy_budget_mwh,errors="coerce")
+        if budget.notna().any() and not budget.dropna().map(lambda x: 0 <= float(x) < float("inf")).all():
+            raise ValueError("Invalid energy budget")
+        capacity["energy_budget_mwh"] = budget
     links = None
     if links_csv is not None:
         links = pd.read_csv(links_csv)
@@ -102,9 +108,12 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None
     for row in capacity.itertuples(index=False):
         profile = avail[(avail.ba == row.ba) & (avail.technology == row.technology)]
         profile = profile.set_index("timestamp").availability_pu.reindex(times)
+        extra = {}
+        if "energy_budget_mwh" in capacity.columns and pd.notna(row.energy_budget_mwh):
+            extra["e_sum_max"] = float(row.energy_budget_mwh)
         n.add("Generator", f"{row.ba}__{row.technology}", bus=row.ba,
               p_nom=float(row.capacity_mw), marginal_cost=float(row.marginal_cost),
-              p_max_pu=profile.to_numpy())
+              p_max_pu=profile.to_numpy(), **extra)
     if storage is not None:
         for row in storage.itertuples(index=False):
             # Fixed installed power/energy with fixed initial SOC, no cyclic
