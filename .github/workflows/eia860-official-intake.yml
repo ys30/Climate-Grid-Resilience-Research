@@ -8,6 +8,7 @@ on:
       - 'src/grid_resilience/eia860_partial_fleet_capacity.py'
       - 'src/grid_resilience/eia930_eia860_capacity_key_audit.py'
       - 'src/grid_resilience/eia860_ba_capacity_gap.py'
+      - 'src/grid_resilience/eia860_plant_ba_capacity.py'
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -81,6 +82,13 @@ jobs:
           python -m grid_resilience.eia860_generator_extract \
             --archive outputs/eia860_intake/eia8602024.zip \
             --output outputs/eia860_intake
+      - name: Attribute EIA-860 2024 generator nameplate capacity using Plant BA
+        run: |
+          python -m grid_resilience.eia860_plant_ba_capacity \
+            --archive outputs/eia860_intake/eia8602024.zip \
+            --generators outputs/eia860_intake/eia860_2024_operable_generators.csv \
+            --output outputs/eia860_intake
+          cat outputs/eia860_intake/eia860_plant_ba_capacity_manifest.json
       - name: Fetch official EIA-923 and measure real generator matching
         run: |
           python - <<'PY'
@@ -171,6 +179,8 @@ jobs:
             outputs/eia860_intake/eia930_eia860_capacity_key_audit.csv
             outputs/eia860_intake/eia930_eia860_capacity_key_manifest.json
             outputs/eia860_intake/eia860_ba_capacity_gap_manifest.json
+            outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv
+            outputs/eia860_intake/eia860_plant_ba_capacity_manifest.json
             outputs/eia860_intake/eia860_2024_operable_generators.csv
             outputs/eia860_intake/generator_join_coverage_by_ba.csv
             outputs/eia860_intake/generator_join_coverage_manifest.json
