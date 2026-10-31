@@ -8,10 +8,10 @@ from pathlib import Path
 import pandas as pd
 from .multi_technology_dispatch import solve
 
-def sweep(wind_replay_dir,observed_context,output):
+def sweep(wind_replay_dir,demand,observed_context,output):
     root=Path(wind_replay_dir)/"reported_wind_ceiling"
     c=pd.read_csv(root/"capacity.csv")
-    a=root/"availability.csv";d=root/"../.."/"hourly_ba_demand.csv"
+    a=root/"availability.csv";d=Path(demand)
     if not d.exists():raise ValueError(f"Expected historical demand file at {d}")
     hydro=(c.ba=="BPAT")&(c.technology=="hydro")
     if hydro.sum()!=1 or "energy_budget_mwh" not in c:raise ValueError("No unique hydro budget row")
@@ -42,7 +42,7 @@ def sweep(wind_replay_dir,observed_context,output):
     return frame
 def main():
     p=argparse.ArgumentParser()
-    for key in ("wind-replay-dir","observed-context","output"):p.add_argument("--"+key,required=True)
+    for key in ("wind-replay-dir","demand","observed-context","output"):p.add_argument("--"+key,required=True)
     a=p.parse_args()
-    print(sweep(a.wind_replay_dir,a.observed_context,a.output).to_string(index=False))
+    print(sweep(a.wind_replay_dir,a.demand,a.observed_context,a.output).to_string(index=False))
 if __name__=="__main__":main()
