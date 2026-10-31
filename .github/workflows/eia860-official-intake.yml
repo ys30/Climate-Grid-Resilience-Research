@@ -282,6 +282,16 @@ jobs:
             --observed-context outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json \
             --output outputs/eia860_intake/hydro_energy_budget_sweep
           cat outputs/eia860_intake/hydro_energy_budget_sweep/hypothetical_monthly_hydro_budget_sweep.csv
+          python - <<'PY'
+          import pandas as pd
+          p='outputs/eia860_intake/hydro_energy_budget_sweep/hypothetical_monthly_hydro_budget_sweep.csv'
+          t=pd.read_csv(p)
+          assert len(t)==10
+          assert t.assumed_budget_fraction_of_mixed_observed_energy.is_monotonic_increasing
+          assert (t.bpat_shortfall_mwh.diff().dropna()<=1e-4).all()
+          assert t.iloc[0].bpat_shortfall_mwh>0
+          print('Hydro monthly energy budget monotonicity and zero-budget baseline verified')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
