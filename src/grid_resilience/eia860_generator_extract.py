@@ -10,7 +10,10 @@ import json
 import zipfile
 from pathlib import Path
 
-HEADERS={"Plant Code":"plant_id","Generator ID":"generator_id",
+HEADERS={"Nameplate Capacity (MW)":"nameplate_capacity_mw",
+         "Summer Capacity (MW)":"summer_capacity_mw",
+         "Winter Capacity (MW)":"winter_capacity_mw",
+         "Plant Code":"plant_id","Generator ID":"generator_id",
          "Energy Source 1":"energy_source_1","Prime Mover":"prime_mover",
          "Energy Source 2":"energy_source_2","Multiple Fuels?":"multiple_fuels",
          "Technology":"reported_technology","Status":"status"}
