@@ -18,7 +18,7 @@ def build(comparison,error,output):
     if len(monthly)!=1 or manifest.get("year")!=2024 or manifest.get("month")!=7 or manifest.get("hours",0)<700:
         raise ValueError("July output missing or misdated")
     m=monthly.iloc[0]
-    rows=BASELINES+[{"month":"2024-07","hours":744,
+    rows=BASELINES+[{"month":"2024-07","hours":int(manifest["hours"]),
         "pearson_r":float(manifest["pearson_r_29_site_capacity_weighted"]),
         "mae_pu":float(m.mae_pu),"rmse_pu":float(m.rmse_pu),
         "mean_bias_pu":float(m.mean_bias_pu),"ci_run":None}]
@@ -27,6 +27,8 @@ def build(comparison,error,output):
     d.to_csv(out/"bpat_era5_three_month_validation.csv",index=False)
     summary={"reference_runs":[41227782144,41238968791],
       "july_pearson_r":float(d.iloc[-1].pearson_r),
+      "july_observed_hours":int(manifest["hours"]),
+      "july_missing_hours":744-int(manifest["hours"]),
       "july_minus_feb_pearson_r":float(d.iloc[-1].pearson_r-d.iloc[0].pearson_r),
       "july_minus_march_pearson_r":float(d.iloc[-1].pearson_r-d.iloc[1].pearson_r),
       "july_mae_pu":float(d.iloc[-1].mae_pu),
