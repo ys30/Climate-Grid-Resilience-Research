@@ -1,0 +1,46 @@
+name: Official EIA-930 six-month CSV probe
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/eia930-six-month-csv.yml'
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Retrieve 2024 January-June official balance CSV and inspect schema
+        run: |
+          mkdir -p outputs/eia930_six_month
+          python - <<'PY'
+          import csv,hashlib,json
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          url="https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv"
+          request=Request(url,headers={"User-Agent":"Mozilla/5.0"})
+          with urlopen(request,timeout=150) as r:
+              raw=r.read()
+              final_url=r.geturl()
+          if len(raw)<1000: raise ValueError("Unexpectedly small EIA CSV")
+          path=Path("outputs/eia930_six_month")
+          (path/"official_2024_h1_balance.csv").write_bytes(raw)
+          with (path/"official_2024_h1_balance.csv").open(newline="",encoding="utf-8-sig") as f:
+              reader=csv.reader(f)
+              first=[next(reader) for _ in range(4)]
+          manifest={"requested_url":url,"resolved_url":final_url,
+              "sha256":hashlib.sha256(raw).hexdigest(),"bytes":len(raw),
+              "first_four_rows":first,"demand_extracted":False,
+              "historical_calibration_certified":False}
+          (path/"official_csv_probe.json").write_text(json.dumps(manifest,indent=2))
+          print(json.dumps(manifest,indent=2)[:10000])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eia930-official-2024-h1-schema-probe
+          path: outputs/eia930_six_month/official_csv_probe.json
+          if-no-files-found: warn
