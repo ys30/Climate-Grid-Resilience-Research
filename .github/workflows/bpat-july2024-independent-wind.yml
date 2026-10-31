@@ -8,6 +8,7 @@ on:
       - 'src/grid_resilience/bpat_wind_observation_audit.py'
       - 'src/grid_resilience/bpat_29site_weather_comparison.py'
       - 'src/grid_resilience/bpat_29site_error_diagnostics.py'
+      - 'src/grid_resilience/bpat_era5_three_month_summary.py'
 jobs:
   march-validation:
     runs-on: ubuntu-latest
@@ -57,6 +58,11 @@ jobs:
           PY
           cat outputs/bpat_july2024/bpat_29site_comparison_manifest.json
           cat outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv
+          python -m grid_resilience.bpat_era5_three_month_summary \
+            --comparison outputs/bpat_july2024/bpat_29site_comparison_manifest.json \
+            --error outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv \
+            --output outputs/bpat_july2024
+          cat outputs/bpat_july2024/bpat_era5_three_month_validation.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -70,3 +76,5 @@ jobs:
             outputs/bpat_july2024/bpat_29site_proxy_vs_reported.csv
             outputs/bpat_july2024/bpat_29site_comparison_manifest.json
             outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv
+            outputs/bpat_july2024/bpat_era5_three_month_validation.csv
+            outputs/bpat_july2024/bpat_era5_three_month_manifest.json
