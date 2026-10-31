@@ -4,6 +4,10 @@ on:
   push:
     paths:
       - '.github/workflows/bpat-march2024-independent-wind.yml'
+      - 'src/grid_resilience/bpat_era5_plant_weighted.py'
+      - 'src/grid_resilience/bpat_wind_observation_audit.py'
+      - 'src/grid_resilience/bpat_29site_weather_comparison.py'
+      - 'src/grid_resilience/bpat_29site_error_diagnostics.py'
 jobs:
   march-validation:
     runs-on: ubuntu-latest
@@ -41,6 +45,16 @@ jobs:
           python -m grid_resilience.bpat_wind_observation_audit --balance outputs/bpat_march2024/eia930_balance.csv --capacity outputs/bpat_march2024/eia860_plant_ba_capacity_candidates.csv --output outputs/bpat_march2024 --year 2024 --month 3
           python -m grid_resilience.bpat_29site_weather_comparison --weighted outputs/bpat_march2024/bpat_era5_capacity_weighted_hourly.csv --observed outputs/bpat_march2024/bpat_reported_wind_hourly.csv --capacity-mw 3617.1 --output outputs/bpat_march2024
           python -m grid_resilience.bpat_29site_error_diagnostics --hourly outputs/bpat_march2024/bpat_29site_proxy_vs_reported.csv --output outputs/bpat_march2024
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('outputs/bpat_march2024')
+          m=json.loads((root/'bpat_29site_comparison_manifest.json').read_text())
+          a=json.loads((root/'bpat_era5_plant_weighted_manifest.json').read_text())
+          assert m['year']==2024 and m['month']==3 and m['hours']==744
+          assert a['sites']==29 and a['site_hours']==29*744
+          print('Verified held-out March: 29 wind sites × 744 hours')
+          PY
           cat outputs/bpat_march2024/bpat_29site_comparison_manifest.json
           cat outputs/bpat_march2024/bpat_29site_proxy_error_diagnostics.csv
       - uses: actions/upload-artifact@v4
