@@ -430,6 +430,8 @@ jobs:
             outputs/eia860_intake/eia860_ba_capacity_gap_manifest.json
             outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv
             outputs/eia860_intake/eia860_plant_ba_capacity_manifest.json
+            outputs/eia860_intake/eia860_2024_wind_plant_locations.csv
+            outputs/eia860_intake/eia860_wind_plant_location_manifest.json
             outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_audit.csv
             outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_manifest.json
             outputs/eia860_intake/real_capacity_assumed_availability_solve/hybrid_solve_manifest.json
