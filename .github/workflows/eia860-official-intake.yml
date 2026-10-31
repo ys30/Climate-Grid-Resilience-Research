@@ -336,6 +336,20 @@ jobs:
             --observed-context outputs/eia860_intake/bpat_hydro_observation/bpat_hydro_energy_context.json \
             --output outputs/eia860_intake/bpat_wind_replay
           cat outputs/eia860_intake/bpat_wind_replay/bpat_reported_wind_replay_sensitivity.csv
+          cat outputs/eia860_intake/bpat_wind_replay/bpat_reported_wind_replay_manifest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/eia860_intake/bpat_wind_replay/bpat_reported_wind_replay_manifest.json")
+          m=json.loads(p.read_text())
+          for key in ("reported_negative_wind_hours","reported_above_nameplate_hours",
+                      "negative_net_generation_clipped_mwh","above_nameplate_generation_clipped_mwh"):
+              if key not in m or m[key]<0:
+                  raise AssertionError("Missing or invalid wind clipping audit: "+key)
+          if m["observed_wind_replay_is_not_weather_validation"] is not True:
+              raise AssertionError("Wind replay must not be labeled independent weather validation")
+          print("Wind replay input clipping and provenance audit passed")
+          PY
       - name: Hydro energy budget sensitivity under observed wind generation ceiling
         run: |
           python -m grid_resilience.bpat_wind_replay_hydro_budget \
