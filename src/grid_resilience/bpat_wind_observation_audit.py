@@ -69,10 +69,15 @@ def audit(balance,capacity,output,year=2024,month=2):
             if not -float("inf")<value<float("inf"):raise ValueError("Nonfinite wind")
             values.append({"timestamp":t.isoformat(),"reported_wind_mw":value,
                            "observed_generation_to_eia860_nameplate_ratio":value/cap})
-    if len(values)!=n_hours:raise ValueError(f"Expected {n_hours} hours; found {len(values)}")
+    if len(values)>n_hours or len(values)<int(0.95*n_hours):raise ValueError(f"Insufficient valid observed hours: {len(values)}/{n_hours}")
+    expected={start+timedelta(hours=i) for i in range(n_hours)}
+    missing=sorted(expected-seen)
+    if len(values)!=len(seen):raise ValueError("Observation accounting inconsistency")
     df=pd.DataFrame(values);out=Path(output);out.mkdir(parents=True,exist_ok=True)
     df.to_csv(out/"bpat_reported_wind_hourly.csv",index=False)
     res={"year":year,"month":month,"wind_generation_source_columns":source_cols,"actual_variant_column_hours":used_columns,
+        "expected_hours":n_hours,"observed_coverage_fraction":len(values)/n_hours,
+        "missing_timestamp_utc":[t.isoformat() for t in missing],
         "blank_category_hours_assumed_zero":blank_category_hours,
         "both_categories_missing_hours":both_categories_missing_hours,
         "blank_category_zero_is_provisional_not_observed":any(blank_category_hours.values()),"hours":len(df),"reported_eia930_wind_energy_mwh":float(df.reported_wind_mw.sum()),
