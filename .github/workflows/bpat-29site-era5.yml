@@ -8,6 +8,7 @@ on:
       - 'src/grid_resilience/bpat_29site_weather_comparison.py'
       - 'src/grid_resilience/bpat_29site_time_block_diagnostics.py'
       - 'src/grid_resilience/bpat_29site_error_diagnostics.py'
+      - 'src/grid_resilience/bpat_29site_reference_benchmarks.py'
 jobs:
   sample:
     runs-on: ubuntu-latest
@@ -50,6 +51,8 @@ jobs:
           cat outputs/bpat_29site_weather/bpat_29site_time_block_correlation.csv
           python -m grid_resilience.bpat_29site_error_diagnostics --hourly outputs/bpat_29site_weather/bpat_29site_proxy_vs_reported.csv --output outputs/bpat_29site_weather
           cat outputs/bpat_29site_weather/bpat_29site_proxy_error_diagnostics.csv
+          python -m grid_resilience.bpat_29site_reference_benchmarks --hourly outputs/bpat_29site_weather/bpat_29site_proxy_vs_reported.csv --output outputs/bpat_29site_weather
+          cat outputs/bpat_29site_weather/bpat_29site_reference_benchmark.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -66,3 +69,5 @@ jobs:
             outputs/bpat_29site_weather/bpat_29site_time_block_manifest.json
             outputs/bpat_29site_weather/bpat_29site_proxy_error_diagnostics.csv
             outputs/bpat_29site_weather/bpat_29site_proxy_error_manifest.json
+            outputs/bpat_29site_weather/bpat_29site_reference_benchmark.csv
+            outputs/bpat_29site_weather/bpat_29site_reference_benchmark_manifest.json
