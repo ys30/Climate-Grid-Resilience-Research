@@ -9,6 +9,7 @@ on:
       - 'src/grid_resilience/eia930_eia860_capacity_key_audit.py'
       - 'src/grid_resilience/eia860_ba_capacity_gap.py'
       - 'src/grid_resilience/eia860_plant_ba_capacity.py'
+      - 'src/grid_resilience/hybrid_capacity_diagnostics.py'
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -214,6 +215,14 @@ jobs:
           print(json.dumps(meta,indent=2))
           print(result.to_string(index=False))
           PY
+      - name: Diagnose modeled BA capacity versus peak demand
+        run: |
+          python -m grid_resilience.hybrid_capacity_diagnostics \
+            --demand outputs/eia860_intake/real_capacity_assumed_availability_solve/hourly_ba_demand.csv \
+            --capacity outputs/eia860_intake/real_capacity_assumed_availability_solve/reported_nameplate_assumed_cost.csv \
+            --shortfall outputs/eia860_intake/real_capacity_assumed_availability_solve/dispatch/shortfall_by_ba.csv \
+            --output outputs/eia860_intake/real_capacity_assumed_availability_solve
+          cat outputs/eia860_intake/real_capacity_assumed_availability_solve/hybrid_model_capacity_diagnostics.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -232,6 +241,8 @@ jobs:
             outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_audit.csv
             outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_manifest.json
             outputs/eia860_intake/real_capacity_assumed_availability_solve/hybrid_solve_manifest.json
+            outputs/eia860_intake/real_capacity_assumed_availability_solve/hybrid_model_capacity_diagnostics.csv
+            outputs/eia860_intake/real_capacity_assumed_availability_solve/hybrid_model_capacity_diagnostics_manifest.json
             outputs/eia860_intake/real_capacity_assumed_availability_solve/dispatch/shortfall_by_ba.csv
             outputs/eia860_intake/eia860_2024_operable_generators.csv
             outputs/eia860_intake/generator_join_coverage_by_ba.csv
