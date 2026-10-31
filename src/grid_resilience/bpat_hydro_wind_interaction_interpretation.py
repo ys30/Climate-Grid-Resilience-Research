@@ -23,6 +23,8 @@ def analyze(input_csv,output):
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
     same_power["difference_gwh"]=same_power.era5_minus_replay_shortfall_mwh/1000
     same_power.to_csv(out/"fixed_hydro_power_energy_budget_comparison.csv",index=False)
+    full_grid=(len(d)==len(d.hydro_budget_fraction.unique())*len(d.hydro_power_fraction.unique()))
+    if not full_grid:raise AssertionError("Hydro power and energy grid incomplete")
     result={
       "matched_scenarios":int(len(d)),
       "fixed_hydro_power_fraction":0.1,
@@ -31,10 +33,12 @@ def analyze(input_csv,output):
       "all_scenarios_era5_minus_replay_delta_gwh":(delta/1000).tolist(),
       "largest_observed_difference_gwh":float(delta.max()/1000),
       "smallest_observed_difference_gwh":float(delta.min()/1000),
-      "joint_power_and_energy_changes_confounded":True,
-      "factorial_interaction_coefficient_estimable":False,
+      "joint_power_and_energy_changes_confounded":False,
+      "energy_and_power_crossed_independently":True,
+      "factorial_interaction_coefficient_estimable":True,
+      "interaction_coefficients_fitted":False,
       "observed_outage_or_reliability_risk":False,
-      "guidance":"Report fixed-10%-power subset as hydro-energy sensitivity. Joint 20%-30% power comparisons do not isolate hydro energy effects."}
+      "guidance":"Full crossed grid supports controlled comparisons of energy/power effects; no causal coefficient or physical hydro calibration is claimed."}
     (out/"hydro_wind_interaction_interpretation.json").write_text(json.dumps(result,indent=2)+"\n")
     return result
 
