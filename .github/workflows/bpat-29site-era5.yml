@@ -6,6 +6,7 @@ on:
       - '.github/workflows/bpat-29site-era5.yml'
       - 'src/grid_resilience/bpat_era5_plant_weighted.py'
       - 'src/grid_resilience/bpat_29site_weather_comparison.py'
+      - 'src/grid_resilience/bpat_29site_time_block_diagnostics.py'
 jobs:
   sample:
     runs-on: ubuntu-latest
@@ -44,6 +45,8 @@ jobs:
           python -m grid_resilience.bpat_wind_observation_audit --balance outputs/bpat_29site_weather/eia930_balance.csv --capacity outputs/bpat_29site_weather/eia860_plant_ba_capacity_candidates.csv --output outputs/bpat_29site_weather
           python -m grid_resilience.bpat_29site_weather_comparison --weighted outputs/bpat_29site_weather/bpat_era5_capacity_weighted_hourly.csv --observed outputs/bpat_29site_weather/bpat_reported_wind_hourly.csv --capacity-mw 3617.1 --output outputs/bpat_29site_weather
           cat outputs/bpat_29site_weather/bpat_29site_comparison_manifest.json
+          python -m grid_resilience.bpat_29site_time_block_diagnostics --hourly outputs/bpat_29site_weather/bpat_29site_proxy_vs_reported.csv --output outputs/bpat_29site_weather
+          cat outputs/bpat_29site_weather/bpat_29site_time_block_correlation.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -56,3 +59,5 @@ jobs:
             outputs/bpat_29site_weather/bpat_era5_plant_weighted_manifest.json
             outputs/bpat_29site_weather/bpat_29site_proxy_vs_reported.csv
             outputs/bpat_29site_weather/bpat_29site_comparison_manifest.json
+            outputs/bpat_29site_weather/bpat_29site_time_block_correlation.csv
+            outputs/bpat_29site_weather/bpat_29site_time_block_manifest.json
