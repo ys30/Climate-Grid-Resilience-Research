@@ -7,6 +7,7 @@ on:
       - 'src/grid_resilience/eia860_generator_extract.py'
       - 'src/grid_resilience/eia860_partial_fleet_capacity.py'
       - 'src/grid_resilience/eia930_eia860_capacity_key_audit.py'
+      - 'src/grid_resilience/eia860_ba_capacity_gap.py'
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -127,6 +128,14 @@ jobs:
             --candidates outputs/eia860_intake/direct_technology_candidates.csv \
             --output outputs/eia860_intake
           cat outputs/eia860_intake/eia930_eia860_capacity_key_manifest.json
+      - name: Quantify full EIA-860 capacity inventory versus partial BA attribution
+        run: |
+          python -m grid_resilience.eia860_ba_capacity_gap \
+            --inventory outputs/eia860_intake/eia860_2024_operable_generators.csv \
+            --partial outputs/eia860_intake/partial_fleet_eia860_nameplate_capacity.csv \
+            --keys outputs/eia860_intake/eia930_eia860_capacity_key_audit.csv \
+            --output outputs/eia860_intake
+          cat outputs/eia860_intake/eia860_ba_capacity_gap_manifest.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -138,6 +147,7 @@ jobs:
             outputs/eia860_intake/partial_fleet_eia860_capacity_manifest.json
             outputs/eia860_intake/eia930_eia860_capacity_key_audit.csv
             outputs/eia860_intake/eia930_eia860_capacity_key_manifest.json
+            outputs/eia860_intake/eia860_ba_capacity_gap_manifest.json
             outputs/eia860_intake/eia860_2024_operable_generators.csv
             outputs/eia860_intake/generator_join_coverage_by_ba.csv
             outputs/eia860_intake/generator_join_coverage_manifest.json
