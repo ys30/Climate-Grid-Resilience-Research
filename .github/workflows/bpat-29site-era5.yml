@@ -86,6 +86,7 @@ jobs:
             --capacity outputs/bpat_29site_weather/model_inputs/capacity.csv \
             --availability outputs/bpat_29site_weather/model_inputs/availability.csv \
             --weather outputs/bpat_29site_weather/bpat_era5_capacity_weighted_hourly.csv \
+            --observed-wind outputs/bpat_29site_weather/bpat_reported_wind_hourly.csv \
             --output outputs/bpat_29site_weather/conditional_pypsa
           cat outputs/bpat_29site_weather/conditional_pypsa/bpat_era5_pypsa_conditional_shortfall.csv
       - uses: actions/upload-artifact@v4
