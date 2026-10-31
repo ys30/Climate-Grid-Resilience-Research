@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - '.github/workflows/eia930-six-month-csv.yml'
+      - 'src/grid_resilience/eia930_fuel_decomposition.py'
+      - 'tests/test_eia930_fuel_decomposition.py'
 jobs:
   probe:
     runs-on: ubuntu-latest
