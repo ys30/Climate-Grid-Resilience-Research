@@ -41,9 +41,16 @@ def run(root,hydro_capacity,hydro_context,output):
               short=float(result.loc[result.ba=="BPAT","unserved_energy_mwh"].iloc[0])
               records.append({"hydro_budget_fraction":fraction,"hydro_power_fraction":power,
                               "scenario":label,"bpat_shortfall_mwh":short})
-      frame=pd.DataFrame(records)
+    frame=pd.DataFrame(records)
     pivot=frame.pivot(index=["hydro_budget_fraction","hydro_power_fraction"],columns="scenario",values="bpat_shortfall_mwh").reset_index()
     if len(pivot)!=len(energy_levels)*len(power_levels):raise AssertionError("Incomplete crossed hydro design")
+    for scenario in ("era5","replay"):
+        for power, group in pivot.groupby("hydro_power_fraction"):
+            if (group.sort_values("hydro_budget_fraction")[scenario].diff().dropna()>0.1).any():
+                raise AssertionError(f"{scenario} shortage rises with hydro energy at power {power}")
+        for energy, group in pivot.groupby("hydro_budget_fraction"):
+            if (group.sort_values("hydro_power_fraction")[scenario].diff().dropna()>0.1).any():
+                raise AssertionError(f"{scenario} shortage rises with hydro power at energy {energy}")
     pivot["era5_minus_replay_shortfall_mwh"]=pivot.era5-pivot.replay
     pivot.to_csv(out/"bpat_matched_hydro_weather_comparison.csv",index=False)
     (out/"bpat_matched_hydro_weather_manifest.json").write_text(json.dumps({
