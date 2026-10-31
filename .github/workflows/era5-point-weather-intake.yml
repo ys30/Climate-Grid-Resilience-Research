@@ -1,0 +1,42 @@
+name: Independent ERA5 February 2024 point weather intake
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/era5-point-weather-intake.yml'
+      - 'src/grid_resilience/era5_point_weather_intake.py'
+      - 'src/grid_resilience/independent_weather_gate.py'
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install data validation dependencies
+        run: python -m pip install -e .
+      - name: Download independent ERA5 hourly point proxies and validate four BA hourly matrices
+        run: |
+          python -m grid_resilience.era5_point_weather_intake --output outputs/era5_feb2024_point_proxies
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/era5_feb2024_point_proxies/era5_proxy_point_manifest.json")
+          m=json.loads(p.read_text())
+          assert m["hourly_rows"]==2784 and len(m["points"])==4
+          assert m["regional_weather_calibration_completed"] is False
+          assert m["wind_turbine_capacity_factor_model_completed"] is False
+          print("Four proxy point ERA5 time series validated; NOT BA-area climate exposure")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: era5-feb2024-illustrative-point-weather
+          path: |
+            outputs/era5_feb2024_point_proxies/era5_proxy_points_raw.csv
+            outputs/era5_feb2024_point_proxies/era5_proxy_point_manifest.json
+            outputs/era5_feb2024_point_proxies/validated/independent_weather_validated.csv
+            outputs/era5_feb2024_point_proxies/validated/independent_weather_gate_manifest.json
+          if-no-files-found: warn
