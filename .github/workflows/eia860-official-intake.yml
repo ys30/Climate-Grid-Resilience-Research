@@ -171,6 +171,49 @@ jobs:
             --keys outputs/eia860_intake/eia930_eia860_capacity_key_audit.csv \
             --output outputs/eia860_intake
           cat outputs/eia860_intake/eia860_ba_capacity_gap_manifest.json
+      - name: Test February dispatch with reported demand and EIA-860 capacity candidates
+        run: |
+          python -m pip install -e '.[model]'
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from grid_resilience.eia930_six_month_demand import extract
+          from grid_resilience.multi_technology_dispatch import solve
+          root=Path("outputs/eia860_intake")
+          out=root/"real_capacity_assumed_availability_solve"
+          extract(root/"eia930_balance_h1_2024.csv",out)
+          demand=pd.read_csv(out/"hourly_ba_demand.csv")
+          cap=pd.read_csv(root/"eia860_plant_ba_capacity_candidates.csv")
+          observed=pd.read_csv(root/"direct_technology_candidates.csv")
+          keys=observed[["ba","pypsa_technology"]].rename(columns={"pypsa_technology":"technology"})
+          capacity=cap.merge(keys,on=["ba","technology"],how="inner",validate="one_to_one")
+          # Include all matching candidate technologies; unmatched fleet is NOT assumed absent.
+          if len(capacity)!=19:raise ValueError(f"Expected 19 observed-capacity keys, got {len(capacity)}")
+          # For a reproducible test, only synthetic availability is supplied.
+          capacity=capacity[["ba","technology","nameplate_capacity_mw"]].rename(columns={"nameplate_capacity_mw":"capacity_mw"})
+          # Demand requires capacity inventory for all four BAs.
+          if set(capacity.ba)!=set(demand.ba):raise ValueError("Missing model BA capacity")
+          prices={"solar":0,"wind":0,"nuclear":10,"coal":35,"gas":55,"oil":110}
+          capacity["marginal_cost"]=capacity.technology.map(prices)
+          if capacity.marginal_cost.isna().any():raise ValueError("Unknown marginal cost")
+          times=demand[["timestamp"]].drop_duplicates().assign(_k=1)
+          plants=capacity[["ba","technology"]].assign(_k=1)
+          availability=times.merge(plants,on="_k").drop(columns="_k")
+          availability["availability_pu"]=1.0
+          capacity.to_csv(out/"reported_nameplate_assumed_cost.csv",index=False)
+          availability.to_csv(out/"synthetic_availability.csv",index=False)
+          result=solve(out/"hourly_ba_demand.csv",out/"reported_nameplate_assumed_cost.csv",
+                       out/"synthetic_availability.csv",out/"dispatch")
+          meta={"source_capacity":"EIA-860 2024 Plant BA matched nameplate single-fuel candidates",
+                "source_demand":"EIA-930 February 2024 reported hourly demand",
+                "availability_assumed":True,"marginal_costs_assumed":True,
+                "transmission_links_included":False,"technology_groups":len(capacity),
+                "historical_calibration_certified":False}
+          (out/"hybrid_solve_manifest.json").write_text(json.dumps(meta,indent=2))
+          print(json.dumps(meta,indent=2))
+          print(result.to_string(index=False))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -188,6 +231,8 @@ jobs:
             outputs/eia860_intake/eia860_plant_ba_capacity_manifest.json
             outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_audit.csv
             outputs/eia860_intake/full_plant_ba/eia930_eia860_capacity_key_manifest.json
+            outputs/eia860_intake/real_capacity_assumed_availability_solve/hybrid_solve_manifest.json
+            outputs/eia860_intake/real_capacity_assumed_availability_solve/dispatch/shortfall_by_ba.csv
             outputs/eia860_intake/eia860_2024_operable_generators.csv
             outputs/eia860_intake/generator_join_coverage_by_ba.csv
             outputs/eia860_intake/generator_join_coverage_manifest.json
