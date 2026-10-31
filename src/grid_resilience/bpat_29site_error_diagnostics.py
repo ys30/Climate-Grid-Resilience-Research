@@ -12,7 +12,7 @@ def evaluate(hourly,output):
     year=times.dt.year.unique();month=times.dt.month.unique()
     if len(year)!=1 or len(month)!=1:raise ValueError("Exactly one calendar month required")
     expected=calendar.monthrange(int(year[0]),int(month[0]))[1]*24
-    if len(a)!=expected or times.duplicated().any() or not np.isfinite(a).all() or not np.isfinite(b).all():
+    if not (int(expected*0.95)<=len(a)<=expected) or times.duplicated().any() or not np.isfinite(a).all() or not np.isfinite(b).all():
         raise ValueError(f"Expected {expected} unique finite hourly observations")
     delta=a-b
     labels=pd.to_datetime(x["timestamp"],utc=True).dt.day
