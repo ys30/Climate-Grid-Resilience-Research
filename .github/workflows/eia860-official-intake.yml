@@ -21,6 +21,8 @@ on:
       - 'src/grid_resilience/bpat_wind_observation_audit.py'
       - 'src/grid_resilience/bpat_reported_wind_replay.py'
       - 'src/grid_resilience/bpat_wind_replay_hydro_budget.py'
+      - 'src/grid_resilience/independent_weather_gate.py'
+      - 'tests/test_independent_weather_gate_smoke.py'
       - 'src/grid_resilience/bpat_wind_replay_hydro_power.py'
       - 'src/grid_resilience/multi_technology_dispatch.py'
 jobs:
@@ -34,6 +36,10 @@ jobs:
           python-version: '3.11'
       - name: Install Excel reader
         run: python -m pip install openpyxl
+      - name: Test independent meteorological input guard
+        run: |
+          python -m pip install -e .
+          python tests/test_independent_weather_gate_smoke.py
       - name: Download and audit official 2024 EIA-860
         run: |
           mkdir -p outputs/eia860_intake
