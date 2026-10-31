@@ -13,7 +13,11 @@ def compare(weighted_csv,observed_csv,capacity_mw,output):
     years=weather.timestamp.dt.year.unique()
     if len(month)!=1 or len(years)!=1:raise ValueError("Weather records must span exactly one calendar month")
     expected=24*calendar.monthrange(int(years[0]),int(month[0]))[1]
-    if len(aligned)!=expected or not aligned._merge.eq("both").all():raise ValueError("Missing matching month hours")
+    if len(weather)!=expected or len(aligned)!=expected:raise ValueError("Weather time coverage incomplete")
+    if (aligned._merge=="right_only").any():raise ValueError("Unexpected observation timestamps")
+    missing=aligned.loc[aligned._merge.eq("left_only"),"timestamp"].astype(str).tolist()
+    aligned=aligned.loc[aligned._merge.eq("both")].copy()
+    if len(aligned)<int(expected*0.95):raise ValueError("Insufficient observation coverage")
     aligned["reported_ratio"]=aligned.reported_wind_mw/float(capacity_mw)
     aligned["observed_nonnegative_ratio"]=aligned.reported_ratio.clip(lower=0,upper=1)
     r=float(aligned.capacity_weighted_proxy_availability_pu.corr(aligned.observed_nonnegative_ratio))
@@ -21,6 +25,7 @@ def compare(weighted_csv,observed_csv,capacity_mw,output):
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
     aligned.drop(columns="_merge").to_csv(out/"bpat_29site_proxy_vs_reported.csv",index=False)
     manifest={"year":int(years[0]),"month":int(month[0]),"hours":len(aligned),
+      "expected_hours":expected,"missing_observation_timestamps":missing,
       "pearson_r_29_site_capacity_weighted":r,
       "mean_29site_idealized_proxy":float(aligned.capacity_weighted_proxy_availability_pu.mean()),
       "mean_reported_generation_to_nameplate":float(aligned.reported_ratio.mean()),
