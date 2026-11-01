@@ -54,6 +54,25 @@ def run(artifact, output, api_key):
         hours_balance_nonclosure=("reported_balance_closure_flag",lambda x:int((~x).sum())),
         charging_hours_during_balance_nonclosure=("charging_during_nonclosure","sum"),
         max_absolute_reported_balance_residual_mw=("reported_balance_residual_absolute_mw","max")).reset_index()
+    # Do not silently choose interchange sign: publish both accounting hypotheses.
+    merged["balance_residual_ti_plus_mw"]=merged.eia930_ng_mw-merged.demand_mw+merged.eia930_ti_mw
+    diagnostics=[]
+    for ba,part in merged[merged.scenario=="baseline"].groupby("ba"):
+        threshold=part.demand_mw.mul(0.01).clip(lower=1)
+        minus=part.reported_balance_residual_if_ti_outflow_mw
+        plus=part.balance_residual_ti_plus_mw
+        diagnostics.append({"ba":ba,"hours":len(part),
+          "ng_minus_d_minus_ti_nonclosing_hours":int((minus.abs()>threshold).sum()),
+          "ng_minus_d_plus_ti_nonclosing_hours":int((plus.abs()>threshold).sum()),
+          "ng_minus_d_minus_ti_abs_sum_mwh":float(minus.abs().sum()),
+          "ng_minus_d_plus_ti_abs_sum_mwh":float(plus.abs().sum()),
+          "ng_minus_d_minus_ti_signed_sum_mwh":float(minus.sum()),
+          "ng_minus_d_plus_ti_signed_sum_mwh":float(plus.sum())})
+    diagnostic=pd.DataFrame(diagnostics)
+    assert len(diagnostic)==4 and diagnostic.hours.eq(168).all()
+    diagnostic.to_csv(out/"eia930_interchange_sign_hypotheses.csv",index=False)
+    print("ALTERNATIVE INTERCHANGE SIGN HYPOTHESES (not physical calibration):")
+    print(diagnostic.to_string(index=False))
     summary.to_csv(out/"charging_vs_observed_eia930_summary.csv",index=False)
     assert len(summary)==16 and summary.hours.eq(168).all()
     print("Caution: TI sign convention and BA accounting closure must be independently verified.")
