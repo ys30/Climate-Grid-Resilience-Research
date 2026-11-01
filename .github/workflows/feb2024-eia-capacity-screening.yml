@@ -7,6 +7,7 @@ on:
       - 'src/grid_resilience/eia2024_feb_screening_inputs.py'
       - 'src/grid_resilience/feb2024_capacity_availability_stress.py'
       - 'src/grid_resilience/feb2024_capacity_margin_audit.py'
+      - 'src/grid_resilience/eia930_import_dependence_audit.py'
       - 'tests/test_eia2024_feb_screening_inputs.py'
 jobs:
   empirical-input-screening:
@@ -48,6 +49,11 @@ jobs:
         run: |
           python -m grid_resilience.eia930_interchange_reconciliation --csv outputs/feb2024_screening/eia930.csv --month 2024-02 --output outputs/feb2024_screening/interchange
           cat outputs/feb2024_screening/interchange/interchange_reconciliation.csv
+      - name: Audit EIA-930 reported net-import dependence and accounting discrepancies
+        run: |
+          python -m grid_resilience.eia930_import_dependence_audit --interchange outputs/feb2024_screening/interchange/interchange_reconciliation.csv --demand outputs/feb2024_screening/hourly_ba_demand.csv --output outputs/feb2024_screening/interchange
+          cat outputs/feb2024_screening/interchange/reported_interchange_dependence_2024_02.csv
+          cat outputs/feb2024_screening/interchange/reported_interchange_dependence_manifest.json
       - name: Extract EIA-860 operable inventory and official BA capacity
         run: |
           python -m grid_resilience.eia860_generator_extract --archive outputs/feb2024_screening/eia860.zip --output outputs/feb2024_screening
@@ -80,6 +86,8 @@ jobs:
             outputs/feb2024_screening/eia860_plant_ba_capacity_manifest.json
             outputs/feb2024_screening/interchange/interchange_reconciliation.csv
             outputs/feb2024_screening/interchange/interchange_reconciliation_manifest.json
+            outputs/feb2024_screening/interchange/reported_interchange_dependence_2024_02.csv
+            outputs/feb2024_screening/interchange/reported_interchange_dependence_manifest.json
             outputs/feb2024_screening/inputs/screening_input_manifest.json
             outputs/feb2024_screening/solve/shortfall_by_ba.csv
             outputs/feb2024_screening/monthly/modeled_generation_full_months.csv
