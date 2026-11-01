@@ -11,6 +11,8 @@ on:
       - 'src/grid_resilience/eia923_page1_hydro_probe.py'
       - 'src/grid_resilience/eia923_page1_ba_hydro_audit.py'
       - 'src/grid_resilience/eia923_page1_ps_netgen.py'
+      - 'src/grid_resilience/eia923_page1_ps_reconciliation.py'
+      - 'tests/test_eia923_page1_ps_reconciliation.py'
       - 'tests/test_eia923_page1_ps_netgen.py'
       - 'src/grid_resilience/eia923_archive.py'
 jobs:
@@ -123,6 +125,10 @@ jobs:
         run: |
           python -m grid_resilience.eia923_page1_ps_netgen --archive outputs/eia923_intake/f923_2024.zip --output outputs/eia923_intake
           cat outputs/eia923_intake/eia923_page1_ps_manifest.json
+      - name: Reconcile observed Page 1 PS BA-month coverage
+        run: |
+          python -m grid_resilience.eia923_page1_ps_reconciliation --input outputs/eia923_intake/eia923_page1_ps_plant_month_net_mwh.csv --output outputs/eia923_intake
+          cat outputs/eia923_intake/page1_ps_ba_month_manifest.json
       - name: Extract distinct real hydro and pumped storage monthly evidence
         run: |
           python -m grid_resilience.eia923_hydro_monthly_evidence --input outputs/eia923_intake/ba_prime_mover_month_audit.csv --output outputs/eia923_intake
@@ -149,6 +155,8 @@ jobs:
             outputs/eia923_intake/page1_ba_hydro_audit.json
             outputs/eia923_intake/eia923_page1_ps_plant_month_net_mwh.csv
             outputs/eia923_intake/eia923_page1_ps_manifest.json
+            outputs/eia923_intake/page1_ps_ba_month_2024.csv
+            outputs/eia923_intake/page1_ps_ba_month_manifest.json
             outputs/eia923_intake/hydro_ps_coverage_2024.csv
             outputs/eia923_intake/hydro_ps_coverage_manifest.json
           if-no-files-found: warn
