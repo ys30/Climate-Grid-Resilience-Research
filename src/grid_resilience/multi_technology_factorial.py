@@ -39,6 +39,17 @@ def run(demand, weather, capacity, availability, output, links=None, event_id="e
     summary.insert(0, "event_id", event_id)
     combined.to_csv(out / "multi_technology_factorial_dispatch.csv", index=False)
     summary.to_csv(out / "multi_technology_interactions.csv", index=False)
+    # Factorial interaction is a contrast, not a causal climate attribution.
+    # Explicitly preserve the four ingredients for numerical traceability.
+    audit = piv[["baseline", "heat_only", "wind_only", "heat_wind"]].copy()
+    audit["interaction_mwh"] = interaction
+    audit.reset_index().to_csv(out / "factorial_interaction_audit.csv", index=False)
+    system_by_scenario = combined.groupby("scenario").unserved_energy_mwh.sum()
+    system_interaction = float(system_by_scenario["heat_wind"] - system_by_scenario["heat_only"]
+                               - system_by_scenario["wind_only"] + system_by_scenario["baseline"])
+    if abs(system_interaction - float(interaction.sum())) > 1e-5:
+        raise AssertionError("System and BA-level interaction accounting mismatch")
+
     manifest = {
         "event_id": event_id, "scenario_assumptions": settings,
         "network_classification": "hypothetical_transfer_link" if links is not None else "isolated_bas",
@@ -47,6 +58,9 @@ def run(demand, weather, capacity, availability, output, links=None, event_id="e
         "generation_calibration_certified": False,
         "n_bas": len(piv),
         "total_nonadditive_interaction_mwh": float(interaction.sum()),
+        "system_nonadditive_interaction_mwh": system_interaction,
+        "factorial_accounting_verified": True,
+        "interaction_is_causal_attribution": False,
     }
     (out / "multi_technology_run_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
