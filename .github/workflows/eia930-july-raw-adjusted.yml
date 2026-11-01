@@ -36,7 +36,8 @@ jobs:
         run: |
           python -m grid_resilience.eia930_adjusted_balance_comparison \
             --csv outputs/eia930_july_adjusted/official_2024_h2_balance.csv \
-            --month 2024-07 --output outputs/eia930_july_adjusted
+            --month 2024-07 --allow-incomplete --output outputs/eia930_july_adjusted
+          cat outputs/eia930_july_adjusted/eia930_hour_coverage.json
           cat outputs/eia930_july_adjusted/eia930_raw_vs_adjusted_balance.csv
       - uses: actions/upload-artifact@v4
         if: always()
