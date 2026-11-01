@@ -28,6 +28,13 @@ def compare(observed_csv, modeled_csv, output):
             raise ValueError(f"Invalid {label} BA/technology/month")
     if not obs.coverage_status.isin(["observed_source_rows","missing_source_rows"]).all():
         raise ValueError("Unknown observation coverage status")
+    # Source absence and numeric zero are not interchangeable. Refuse a
+    # contradictory source manifest rather than silently dropping a value.
+    absent=obs.loc[obs.coverage_status=="missing_source_rows"]
+    if absent.net_generation_mwh.notna().any() and absent.net_generation_mwh.astype(str).str.strip().ne("").any():
+        raise ValueError("Missing source rows must have blank MWh, never zero or other numerical values")
+    if obs.loc[obs.coverage_status=="observed_source_rows","net_generation_mwh"].isna().any() or obs.loc[obs.coverage_status=="observed_source_rows","net_generation_mwh"].astype(str).str.strip().eq("").any():
+        raise ValueError("Observed source rows require explicit numeric MWh")
     measured=obs.loc[obs.coverage_status=="observed_source_rows"].copy()
     if measured.empty:raise ValueError("No observed source rows for comparison")
     measured["net_generation_mwh"]=pd.to_numeric(measured.net_generation_mwh,errors="raise")
