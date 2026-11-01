@@ -25,6 +25,7 @@ def run(artifact, output, api_key):
     ng,meta=fetch(BAS,times[0].isoformat(),(times[-1]+pd.Timedelta(hours=1)).isoformat(),api_key,data_type="NG")
     ng=ng.rename(columns={"demand_mw":"observed_eia930_ng_mw"})
     rows=[]
+    technology_rows=[]
     for scenario in SCENARIOS:
         path=root/"no_storage"/"solved"/scenario/"generation_hourly.csv"
         mod=pd.read_csv(path)
@@ -33,7 +34,11 @@ def run(artifact, output, api_key):
             raise ValueError("Duplicate modeled generation")
         if not {"gas","wind"}.issubset(set(mod.technology)):
             raise ValueError("Missing partial fleet technology")
-        mod=mod[mod.ba.isin(BAS)].groupby(["timestamp","ba"],as_index=False).generation_mwh.sum()
+        mod=mod[mod.ba.isin(BAS)].copy()
+        bytech=mod.groupby(["ba","technology"],as_index=False).generation_mwh.sum()
+        bytech["scenario"]=scenario
+        technology_rows.append(bytech)
+        mod=mod.groupby(["timestamp","ba"],as_index=False).generation_mwh.sum()
         matched=ng.merge(mod,on=["timestamp","ba"],how="outer",validate="one_to_one",indicator=True)
         if len(matched)!=336 or not matched._merge.eq("both").all():
             raise ValueError("Incomplete modeled-vs-observed BA hour match")
@@ -42,6 +47,8 @@ def run(artifact, output, api_key):
         matched["partial_fleet_minus_observed_ng_mw"]=matched.generation_mwh-matched.observed_eia930_ng_mw
         matched["absolute_difference_mw"]=matched.partial_fleet_minus_observed_ng_mw.abs()
         rows.append(matched)
+    by_technology=pd.concat(technology_rows,ignore_index=True)
+    by_technology.to_csv(out/"partial_fleet_generation_by_technology.csv",index=False)
     hourly=pd.concat(rows,ignore_index=True).sort_values(["scenario","ba","timestamp"])
     hourly.to_csv(out/"partial_fleet_vs_observed_ng_hourly.csv",index=False)
     stats=[]
@@ -64,6 +71,8 @@ def run(artifact, output, api_key):
         "weather_scenarios_are_counterfactual":True,
         "not_a_full_fleet_error_metric":True,
         "historical_calibration_certified":False,"api_metadata":meta},indent=2)+"\\n")
+    print("PARTIAL FLEET MODELLED TECHNOLOGY MIX (not whole-BA composition):")
+    print(by_technology.to_string(index=False))
     print(summary.to_string(index=False))
     return summary
 
