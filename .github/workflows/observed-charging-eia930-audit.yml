@@ -1,0 +1,41 @@
+name: July 2024 observed EIA-930 generation and interchange charging audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/observed-charging-eia930-audit.yml'
+      - 'src/grid_resilience/observed_charging_audit.py'
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    env:
+      EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - name: Require EIA key
+        run: test -n "$EIA_API_KEY"
+      - uses: actions/download-artifact@v4
+        with:
+          name: July2024-observed-input-official-storage-screening
+          run-id: 41285853425
+          github-token: ${{ github.token }}
+          path: inputs/observed_storage_2024
+      - name: Fetch EIA-930 NG and TI and compare to paired 168-hour modeled charging
+        run: |
+          python -m grid_resilience.observed_charging_audit \
+            --artifact inputs/observed_storage_2024 \
+            --output outputs/observed_charging_audit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: JULY2024-EIA930-NG-TI-CHARGING-DIAGNOSTIC
+          path: outputs/observed_charging_audit
+          if-no-files-found: warn
