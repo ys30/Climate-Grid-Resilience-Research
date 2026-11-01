@@ -229,3 +229,20 @@ SRP official included hydro nameplate is 94.1 MW; the hypothetical total energy 
 | **Sum across technologies** | **0** | **0** |
 
 Thus the constrained hydro energy is fully offset by coal and gas in this specific **model solution**. The exact substitutions reflect assumed marginal costs, fixed availability, official EIA-860 single-fuel candidate nameplates, and isolated-BA topology. They do not demonstrate measured dispatch, environmental emissions changes, or realistic availability under stress. Nuclear/solar/wind outputs staying constant is a model result, not evidence of their real operational inflexibility. Future historical comparisons require verified hourly output and unit status by technology.
+
+## CI-verified SRP coal and nuclear assumed availability stress
+
+[CI 41349694470](../../actions/runs/41349694470) verifies the following 168-hour SRP model outcomes with illustrative solar daylight profile, hydro 48-full-load-hour budget (binding at 4,516.8 MWh), no storage/transfers and 100% **assumed** gas availability.
+
+| Scenario | Coal availability | Nuclear availability | Coal generation MWh | Gas generation MWh | Simulated unserved MWh |
+|---|---:|---:|---:|---:|---:|
+| Baseline | 100% | 100% | 86,381.459 | 96,353.636 | 0 |
+| Baseline | 50% | 100% | 48,162.573 | 134,572.522 | 0 |
+| Baseline | 100% | 75% | 133,408.548 | 214,735.423 | 0 |
+| Baseline | 50% | 75% | 68,978.201 | 279,165.770 | 0 |
+| Heat+wind | 100% | 100% | 100,252.123 | 130,512.078 | 0 |
+| Heat+wind | 50% | 100% | 55,687.090 | 175,077.112 | 0 |
+| Heat+wind | 100% | 75% | 137,200.915 | 266,219.003 | 0 |
+| Heat+wind | 50% | 75% | 69,031.200 | 334,388.719 | 0 |
+
+All eight scenarios retain zero simulated shortage because other model resources can redispatch. This **does not establish reliability** under actual coal/nuclear outages; gas availability remains unconstrained and the single-fuel BA inventory, solar profile and import boundary have not been historically validated. Follow-up priorities are gas derating/marginal dispatch headroom and documented nuclear operating schedules, not further broad claims of supply adequacy.
