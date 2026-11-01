@@ -133,6 +133,40 @@ jobs:
           print('AZPS/SRP OFFICIAL EIA-860 CAPACITY CANDIDATES (NOT CALIBRATION)')
           print(subset.to_string(index=False))
           PY
+      - name: Audit omitted AZPS/SRP fuel classes and excluded nameplate MW
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path('outputs/eia860_intake')
+          fleet=pd.read_csv(root/'eia860_plant_ba_capacity_candidates.csv')
+          attr=pd.read_csv(root/'eia860_plant_ba_roster_attrition_by_fuel.csv')
+          bas=['AZPS','SRP']
+          other=fleet[fleet.ba.isin(bas) & ~fleet.technology.isin(['gas','wind'])].copy()
+          other.sort_values(['ba','technology']).to_csv(root/'azps_srp_other_eligible_technology_capacity.csv',index=False)
+          excluded=attr[attr.ba.isin(bas)&attr.exclusion_reason.ne('included')].copy()
+          excluded.sort_values(['ba','exclusion_reason','primary_fuel_code']).to_csv(
+              root/'azps_srp_excluded_generator_capacity.csv',index=False)
+          summary=[]
+          for ba in bas:
+              a=fleet[fleet.ba.eq(ba)]
+              b=excluded[excluded.ba.eq(ba)]
+              summary.append({'ba':ba,
+                'single_fuel_gas_wind_nameplate_mw':float(a[a.technology.isin(['gas','wind'])].nameplate_capacity_mw.sum()),
+                'other_eligible_single_fuel_nameplate_mw':float(a[~a.technology.isin(['gas','wind'])].nameplate_capacity_mw.sum()),
+                'excluded_reported_positive_nameplate_mw':float(b.positive_nameplate_mw.sum()),
+                'excluded_generator_rows':int(b.generator_rows.sum()),
+                'excluded_capacity_not_additive_to_dispatch_without_classification':True,
+                'full_fleet_calibrated':False})
+          pd.DataFrame(summary).to_csv(root/'azps_srp_fleet_scope_gaps.csv',index=False)
+          print('AZPS/SRP ELIGIBLE OTHER FUEL CLASSES')
+          print(other.to_string(index=False))
+          print('AZPS/SRP EXCLUDED GENERATORS BY FUEL')
+          print(excluded.to_string(index=False))
+          print('AZPS/SRP FLEET SCOPE SUMMARY')
+          print(pd.DataFrame(summary).to_string(index=False))
+          PY
       - name: Extract real EIA-860 wind plant coordinates and BA coverage
         run: |
           python -m grid_resilience.eia860_wind_plant_locations \
@@ -462,6 +496,9 @@ jobs:
             outputs/eia860_intake/eia860_plant_ba_capacity_manifest.json
             outputs/eia860_intake/azps_srp_official_ba_capacity_candidates.csv
             outputs/eia860_intake/azps_srp_capacity_candidates_manifest.json
+            outputs/eia860_intake/azps_srp_other_eligible_technology_capacity.csv
+            outputs/eia860_intake/azps_srp_excluded_generator_capacity.csv
+            outputs/eia860_intake/azps_srp_fleet_scope_gaps.csv
             outputs/eia860_intake/eia860_2024_wind_plant_locations.csv
             outputs/eia860_intake/bpat_wind_plant_sampling/bpat_era5_sampling_plan.csv
             outputs/eia860_intake/bpat_wind_plant_sampling/bpat_era5_sampling_plan_manifest.json
