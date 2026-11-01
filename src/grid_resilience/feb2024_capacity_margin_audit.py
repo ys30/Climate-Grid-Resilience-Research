@@ -28,6 +28,8 @@ def audit(demand_csv,capacity_csv,shortfall_csv,output):
     rows["assumed_available_mw"]=rows.included_nameplate_mw*rows.availability_fraction_assumed
     rows["peak_capacity_margin_mw"]=rows.assumed_available_mw-rows.peak_reported_demand_mw
     rows["capacity_to_peak_demand_ratio"]=rows.included_nameplate_mw/rows.peak_reported_demand_mw
+    rows["peak_break_even_availability_fraction"]=rows.peak_reported_demand_mw/rows.included_nameplate_mw
+    rows["availability_exceeds_peak_break_even"]=rows.availability_fraction_assumed>=rows.peak_break_even_availability_fraction
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
     rows.sort_values(["ba","availability_fraction_assumed"],ascending=[True,False]).to_csv(out/"screening_ba_capacity_margin.csv",index=False)
     manifest={"ba_count":len(peak),"case_rows":len(rows),
