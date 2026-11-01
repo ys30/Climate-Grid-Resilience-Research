@@ -153,6 +153,14 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None
         soc = n.storage_units_t.state_of_charge.copy()
         soc.index.name = "timestamp"
         soc.to_csv(out / "storage_soc_mwh.csv")
+        charge = n.storage_units_t.p_store.copy()
+        discharge = n.storage_units_t.p_dispatch.copy()
+        charge.index.name = "timestamp"
+        discharge.index.name = "timestamp"
+        charge.to_csv(out / "storage_charge_mw.csv")
+        discharge.to_csv(out / "storage_discharge_mw.csv")
+        # Positive charge/discharge are separate, allowing explicit energy accounting.
+
     return pd.DataFrame(shortages)
 
 def main():
