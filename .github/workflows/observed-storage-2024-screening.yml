@@ -154,7 +154,7 @@ jobs:
                   assert (charge>=-1e-4).all() and (discharge>=-1e-4).all()
                   assert (states>=-1e-4).all() and (states<=energy+1e-4).all()
                   # PyPSA hourly StorageUnit state: soc[t]=soc[t-1]+eta_c*charge[t]-discharge[t]/eta_d.
-                  previous=pd.Series(states).shift(1).to_numpy()
+                  previous=pd.Series(states).shift(1).to_numpy(copy=True)
                   previous[0]=initial
                   residual=states-previous-eta_c*charge+discharge/eta_d
                   assert abs(residual).max()<1e-3,(scenario,ba,abs(residual).max())
