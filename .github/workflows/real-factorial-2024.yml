@@ -144,6 +144,19 @@ jobs:
               'historical_calibration_certified':False
           },indent=2)+'\\n')
           print('Four-scenario total modeled interaction MWh:',round(interaction,3))
+
+          # Preserve BA-level contrast rather than claiming system totals
+          # characterize every BA; verify exact aggregation identity.
+          pivot=d.pivot(index='ba',columns='scenario',values='unserved_energy_mwh')
+          assert len(pivot)==4 and not pivot.isna().any().any()
+          by_ba=pivot[['baseline','heat_only','wind_only','heat_wind']].copy()
+          by_ba['interaction_mwh']=(by_ba['heat_wind']-by_ba['heat_only']
+                                    -by_ba['wind_only']+by_ba['baseline'])
+          if abs(float(by_ba.interaction_mwh.sum())-interaction)>1e-4:
+              raise AssertionError('BA interaction does not match system factorial contrast')
+          by_ba.reset_index().to_csv(out/'factorial_interaction_by_ba.csv',index=False)
+          print('BA-level modeled interaction MWh:')
+          print(by_ba[['interaction_mwh']].to_string())
           lines=[
               '# Historical-input partial-fleet four-scenario screening results',
               '',
