@@ -58,6 +58,15 @@ jobs:
           d=json.load(open('hourly_input_paths.json'))
           result=evaluate(d['feb'],d['march'],d['july'],'outputs/bpat_cross_month_holdout')
           assert len(result)==6
+          print('TRAIN AND HOLDOUT METRICS:')
+          print(result.to_csv(index=False))
+          hold=result[result.period.str.contains('holdout')]
+          for month,g in hold.groupby('period'):
+              a=g.set_index('method')
+              raw=a.loc['raw_proxy']
+              fitted=a.loc['feb_trained_scale']
+              print(f'{month}: MAE change calibrated-minus-raw = {fitted.mae_pu-raw.mae_pu:+.6f} pu; RMSE change = {fitted.rmse_pu-raw.rmse_pu:+.6f} pu')
+          assert hold.groupby('period').method.nunique().eq(2).all()
           PY
           cat outputs/bpat_cross_month_holdout/bpat_cross_month_holdout_manifest.json
       - uses: actions/upload-artifact@v4
