@@ -27,3 +27,25 @@ def test_requires_full_model_coverage(tmp_path):
     pd.DataFrame(columns=["reported_ba","prime_mover","period","modeled_net_generation_mwh"]).to_csv(mod,index=False)
     with pytest.raises(ValueError,match="does not cover"):
         compare(obs,mod,tmp_path/"out")
+
+def test_missing_source_with_numeric_zero_rejected(tmp_path):
+    obs=tmp_path/"obs.csv";model=tmp_path/"model.csv"
+    pd.DataFrame([
+        {"reported_ba":"BPAT","prime_mover":"HY","period":"2024-02",
+         "net_generation_mwh":5,"coverage_status":"observed_source_rows"},
+        {"reported_ba":"AZPS","prime_mover":"HY","period":"2024-02",
+         "net_generation_mwh":0,"coverage_status":"missing_source_rows"},
+    ]).to_csv(obs,index=False)
+    pd.DataFrame([{"reported_ba":"BPAT","prime_mover":"HY","period":"2024-02",
+                   "modeled_net_generation_mwh":4}]).to_csv(model,index=False)
+    with pytest.raises(ValueError,match="blank MWh"):
+        compare(obs,model,tmp_path/"out")
+
+def test_observed_source_without_measurement_rejected(tmp_path):
+    obs=tmp_path/"obs.csv";model=tmp_path/"model.csv"
+    pd.DataFrame([{"reported_ba":"BPAT","prime_mover":"HY","period":"2024-02",
+                   "net_generation_mwh":"","coverage_status":"observed_source_rows"}]).to_csv(obs,index=False)
+    pd.DataFrame([{"reported_ba":"BPAT","prime_mover":"HY","period":"2024-02",
+                   "modeled_net_generation_mwh":4}]).to_csv(model,index=False)
+    with pytest.raises(ValueError,match="explicit numeric"):
+        compare(obs,model,tmp_path/"out")
