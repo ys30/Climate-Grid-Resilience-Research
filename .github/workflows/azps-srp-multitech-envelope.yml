@@ -1,0 +1,113 @@
+name: AZPS SRP official multi-technology capacity envelope
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/azps-srp-multitech-envelope.yml'
+jobs:
+  envelope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - uses: actions/download-artifact@v4
+        with:
+          name: July2024-observed-input-official-storage-screening
+          run-id: 41285853425
+          github-token: ${{ github.token }}
+          path: inputs/screening
+      - uses: actions/download-artifact@v4
+        with:
+          name: official-eia860-2024-schema
+          run-id: 41341668303
+          github-token: ${{ github.token }}
+          path: inputs/eia860
+      - name: Run independently labeled optimistic and conservative multi-fuel availability envelope
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from grid_resilience.multi_technology_dispatch import solve
+          source=Path('inputs/screening')
+          out=Path('outputs/multitech_envelope');out.mkdir(parents=True,exist_ok=True)
+          files=list(Path('inputs/eia860').rglob('eia860_plant_ba_capacity_candidates.csv'))
+          assert len(files)==1,files
+          fleet=pd.read_csv(files[0])
+          fleet=fleet.loc[fleet.ba.isin(['AZPS','SRP'])].copy()
+          assert not fleet.duplicated(['ba','technology']).any()
+          assert {'AZPS','SRP'}==set(fleet.ba)
+          assert {'gas','wind'}.issubset(set(fleet.technology))
+          assert fleet.nameplate_capacity_mw.gt(0).all()
+          # Only single-fuel included rows; all rejected multi-fuel/storage remain excluded.
+          costs={'gas':70.,'wind':0.,'solar':0.,'nuclear':10.,'coal':45.,'hydro':15.,'oil':110.}
+          if not set(fleet.technology).issubset(costs):raise ValueError('Unknown fuel requires explicit modeling')
+          cap=fleet[['ba','technology','nameplate_capacity_mw']].rename(columns={'nameplate_capacity_mw':'capacity_mw'})
+          cap['marginal_cost']=cap.technology.map(costs)
+          cap.to_csv(out/'official_multitech_capacity.csv',index=False)
+          rows=[]
+          for scenario in ('baseline','heat_wind'):
+              src=source/'no_storage'/'scenario_inputs'/scenario
+              demand=pd.read_csv(src/'demand.csv')
+              demand=demand[demand.ba.isin(['AZPS','SRP'])].copy()
+              demand.to_csv(out/f'{scenario}_demand.csv',index=False)
+              original=pd.read_csv(src/'availability.csv')
+              original=original[original.ba.isin(['AZPS','SRP'])].copy()
+              original.timestamp=pd.to_datetime(original.timestamp,utc=True)
+              originals=original.set_index(['timestamp','ba','technology']).availability_pu
+              times=sorted(pd.to_datetime(demand.timestamp,utc=True).unique())
+              assert len(times)==168
+              for bound in ('conservative_nonwind_zero','optimistic_other_fuels_full'):
+                  profiles=[]
+                  for record in cap.itertuples(index=False):
+                      for t in times:
+                          if record.technology=='wind':
+                              pu=float(originals.loc[(t,record.ba,'wind')])
+                          elif record.technology=='gas':
+                              pu=1.0  # original gas assumption preserved
+                          else:
+                              pu=0.0 if bound=='conservative_nonwind_zero' else 1.0
+                          profiles.append({'timestamp':t.isoformat(),'ba':record.ba,
+                                           'technology':record.technology,'availability_pu':pu})
+                  av=out/f'{scenario}_{bound}_availability.csv'
+                  pd.DataFrame(profiles).to_csv(av,index=False)
+                  dest=out/bound/scenario
+                  solve(out/f'{scenario}_demand.csv',out/'official_multitech_capacity.csv',av,dest)
+                  gen=pd.read_csv(dest/'generation_hourly.csv')
+                  short=pd.read_csv(dest/'shortfall_by_ba.csv')
+                  for ba in ('AZPS','SRP'):
+                      rows.append({'availability_case':bound,'scenario':scenario,'ba':ba,
+                                   'generation_mwh':float(gen.loc[gen.ba.eq(ba),'generation_mwh'].sum()),
+                                   'shortfall_mwh':float(short.loc[short.ba.eq(ba),'unserved_energy_mwh'].iloc[0])})
+          result=pd.DataFrame(rows)
+          assert len(result)==8
+          result.to_csv(out/'official_multitech_availability_envelope.csv',index=False)
+          pivot=result.pivot(index=['scenario','ba'],columns='availability_case',values='shortfall_mwh')
+          assert (pivot['optimistic_other_fuels_full']<=pivot['conservative_nonwind_zero']+1e-4).all()
+          (out/'manifest.json').write_text(json.dumps({
+             'study_type':'extreme_assumption_envelope_not_historical_replay',
+             'fleet':'EIA-860 Plant BA 2024 Operable single-fuel technology candidates',
+             'conservative_other_technologies':'all omitted non-gas/non-wind unavailable (0%)',
+             'optimistic_other_technologies':'all omitted non-gas/non-wind fully available (100%)',
+             'gas':'100% assumed hourly available in BOTH envelopes',
+             'wind':'existing matched scenario profile, fixed in BOTH envelopes',
+             'costs':'assumed marginal_cost by technology',
+             'transmission':'none','storage':'none',
+             'excluded_generator_capacity':'never added',
+             'historical_calibration_certified':False},indent=2)+'\\n')
+          print('OFFICIAL MULTI-TECHNOLOGY EXTREME AVAILABILITY ENVELOPE')
+          print(result.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AZPS-SRP-2024-OFFICIAL-MULTITECH-ENVELOPE
+          path: outputs/multitech_envelope
+          if-no-files-found: warn
