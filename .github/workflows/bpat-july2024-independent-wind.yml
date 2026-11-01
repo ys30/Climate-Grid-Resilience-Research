@@ -12,6 +12,7 @@ on:
       - 'src/grid_resilience/bpat_july_boundary_coverage_audit.py'
       - 'src/grid_resilience/bpat_observation_coverage_guard.py'
       - 'src/grid_resilience/bpat_cross_month_evidence_gate.py'
+      - 'src/grid_resilience/eia860_plant_ba_capacity.py'
 jobs:
   march-validation:
     runs-on: ubuntu-latest
@@ -43,6 +44,7 @@ jobs:
           python -m grid_resilience.eia860_wind_plant_locations --archive outputs/bpat_july2024/eia8602024.zip --generators outputs/bpat_july2024/eia860_2024_operable_generators.csv --output outputs/bpat_july2024
           python -m grid_resilience.bpat_wind_plant_weather_sampling_plan --locations outputs/bpat_july2024/eia860_2024_wind_plant_locations.csv --output outputs/bpat_july2024 --max-points 30
           python -m grid_resilience.eia860_plant_ba_capacity --archive outputs/bpat_july2024/eia8602024.zip --generators outputs/bpat_july2024/eia860_2024_operable_generators.csv --output outputs/bpat_july2024
+          cat outputs/bpat_july2024/eia860_plant_ba_capacity_manifest.json
       - name: Collect completely untouched July ERA5 weather and observations
         run: |
           python -m grid_resilience.bpat_era5_plant_weighted --plants outputs/bpat_july2024/bpat_era5_sampling_plan.csv --output outputs/bpat_july2024 --year 2024 --month 7
@@ -79,6 +81,8 @@ jobs:
           name: bpat-july2024-independent-era5-wind
           if-no-files-found: warn
           path: |
+            outputs/bpat_july2024/eia860_plant_ba_capacity_manifest.json
+            outputs/bpat_july2024/eia860_plant_ba_capacity_candidates.csv
             outputs/bpat_july2024/bpat_era5_sampling_plan.csv
             outputs/bpat_july2024/bpat_era5_plant_hourly.csv
             outputs/bpat_july2024/bpat_era5_capacity_weighted_hourly.csv
