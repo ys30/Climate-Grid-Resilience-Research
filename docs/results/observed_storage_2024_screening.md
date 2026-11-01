@@ -96,3 +96,16 @@ The endpoint constraints were confirmed against the solved SOC trajectories. Req
 | Heat+wind | SRP | 1,354,967 | 1,051,583 | −303,384 | 1,806 | 22.4% |
 
 **Modeling gate:** The baseline AZPS simulation exceeds all-fuel observed net generation despite only representing a subset of technology types; review inventory scope, BA plant attribution, must-run assumptions, and dispatch economics before treating generation magnitudes as representative. The SRP deficit may reflect missing technologies/production, fleet scope or dispatch assumptions. None of these descriptive differences constitutes a calibrated complete-fleet validation. Historical reliability benefit and avoided outage claims remain unsupported.
+
+## AZPS and SRP partial-fleet modeled generation mix (verified)
+
+[CI run 41338136865](../../actions/runs/41338136865) decomposed the **modeled** partial-fleet dispatch into gas and wind (168 hourly intervals). Values below are rounded MWh, not historical fuel-specific generation estimates.
+
+| BA | Scenario | Modeled gas MWh | Modeled wind MWh | EIA-930 observed total BA NG MWh |
+|---|---|---:|---:|---:|
+| AZPS | Baseline | 789,984 | 57,894 | 521,162 |
+| AZPS | Heat+wind | 802,961 | 40,526 | 521,162 |
+| SRP | Baseline | 979,629 | 23,826 | 1,354,967 |
+| SRP | Heat+wind | 1,034,905 | 16,678 | 1,354,967 |
+
+The inventory and dispatch are gas-dominated, but EIA-930 NG is an **all-technology, actual BA observation**. AZPS gas dispatch alone exceeds observed total NG, suggesting a material representativeness/accounting mismatch; check BA generator mapping, capacity sources (including generic thermal proxy), temporal availability, and dispatch scope. SRP partial gas+wind totals understate observed total NG, potentially because other technologies are absent. No technology-specific calibration or empirically measured storage benefit is claimed.
