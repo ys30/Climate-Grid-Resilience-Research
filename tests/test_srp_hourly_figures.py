@@ -40,3 +40,33 @@ def test_reject_solar_proxy_outside_bounds():
     frame.loc[0, "assumed_solar_availability_pu"] = 1.2
     with pytest.raises(ValueError, match="Solar proxy"):
         prepare(frame)
+
+
+
+def test_zero_shortfall_case_is_retained():
+    frame = fixture()
+    frame["shortfall_mw"] = 0.0
+    hourly, diurnal = prepare(frame)
+    assert len(hourly) == 168
+    assert len(diurnal) == 24
+    assert diurnal.shortfall_mwh.sum() == 0.0
+    assert diurnal.shortfall_hours.sum() == 0
+
+
+def test_reject_nonconsecutive_hours_even_at_correct_length():
+    frame = fixture()
+    frame.loc[167, "timestamp"] = "2024-07-09 00:00:00+00:00"
+    with pytest.raises(ValueError, match="nonconsecutive"):
+        prepare(frame)
+
+
+def test_multiple_scenarios_remain_independent():
+    first = fixture()
+    second = fixture()
+    second["case"] = "scenario_c50_n75_g60"
+    second["shortfall_mw"] = 0.0
+    hourly, diurnal = prepare(pd.concat([first, second], ignore_index=True))
+    assert len(hourly) == 336
+    assert len(diurnal) == 48
+    assert hourly.groupby("case").size().eq(168).all()
+    assert diurnal.groupby("case").shortfall_mwh.sum().sort_values().tolist() == [0.0, 35.0]
