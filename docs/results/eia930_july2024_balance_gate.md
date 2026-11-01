@@ -41,3 +41,18 @@ No observed outage or battery charging benefit is established by this screening 
 **CISO:** the weekly signed residual nearly cancels, while the large hourly positive/negative changes remain. A fixed offset does not explain this behavior. Review time-specific adjusted vs raw observations and balancing adjustments rather than simply rescaling generation or demand.
 
 **Fail-closed interpretation:** Neither BPAT nor CISO passes the hourly historical balance gate. Modelled battery benefit remains a screening counterfactual, not actual avoided unserved load.
+
+## Official July 2024 full-month H1/H2 CSV reconciliation
+
+[Verified CI run 41321070691](../../actions/runs/41321070691) assembled 744 unique UTC hourly source rows per BA from official H1/H2 CSVs without imputing values. The first seven July UTC hours were in the H1 CSV.
+
+| BA | Source rows | Valid raw D/NG/TI hours | Missing TI hours | Absolute residual MWh (valid hours only) |
+|---|---:|---:|---:|---:|
+| AZPS | 744 | 744 | 0 | 0 |
+| BPAT | 744 | 744 | 0 | 3,470,215 |
+| CISO | 744 | 233 | 511 | 236,522 |
+| SRP | 744 | 744 | 0 | 10 |
+
+Raw and adjusted totals were identical in this audit. Source-row coverage is **not** field completeness. CISO has 511 empty interchange observations; its 236,522 MWh absolute residual only covers 233 evaluable hours, not the entire month. BPAT still has severe nonclosure with all 744 hours present. These are arithmetic diagnostics, not historical calibration.
+
+**Gate:** Calendar rows complete for all four BAs. Full D/NG/TI field coverage for AZPS, BPAT, SRP only. Balance closure near reporting precision for AZPS/SRP only. BPAT does not close; CISO cannot be certified for the whole month, and the partial month is materially nonclosing. Historical calibration is **not certified** for any BA. Investigate CISO reporting gaps and BPAT BA accounting scope before making historical reliability claims.
