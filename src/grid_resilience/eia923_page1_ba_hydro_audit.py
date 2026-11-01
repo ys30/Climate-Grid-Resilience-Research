@@ -17,13 +17,13 @@ def inspect(archive, output):
             headers=list(ws.iter_rows(min_row=6,max_row=6,values_only=True))[0]
             # Column positions are verified against the original 2024 Page 1 probe.
             # Refuse unexpected layout instead of producing misleading coverage.
-            if "Plant" not in str(headers[0]) or "Prime Mover" not in str(headers[13]) or "Balancing" not in str(headers[15]):
+            if "Plant" not in str(headers[0]) or "Prime Mover" not in " ".join(str(headers[13]).split()) or "Balancing" not in " ".join(str(headers[16]).split()):
                 raise ValueError("Page 1 source layout differs; inspect headers before classifying BA/hydro")
             counts=Counter(); examples=[]
             for i,row in enumerate(ws.iter_rows(min_row=7,values_only=True),start=7):
-                if len(row)<16: continue
+                if len(row)<17: continue
                 code=str(row[13]).strip() if row[13] is not None else ""
-                ba=str(row[15]).strip() if row[15] is not None else ""
+                ba=str(row[16]).strip() if row[16] is not None else ""
                 if code in CODES and ba in BAS:
                     counts[(ba,code)]+=1
                     if len(examples)<12:
