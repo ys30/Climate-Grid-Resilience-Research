@@ -98,6 +98,11 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None
                 raise ValueError(f"Storage {col} must be in (0, 1]")
         if not storage.initial_soc_fraction.between(0, 1).all():
             raise ValueError("Storage initial SOC fraction must be in [0, 1]")
+        if "terminal_soc_fraction" in storage.columns:
+            terminal = pd.to_numeric(storage.terminal_soc_fraction, errors="coerce")
+            if terminal.notna().any() and not terminal.dropna().between(0,1).all():
+                raise ValueError("Storage terminal SOC fraction must be within [0, 1]")
+            storage["terminal_soc_fraction"] = terminal
     n = pypsa.Network()
     n.set_snapshots(times.tz_localize(None))
     for ba in bas:
@@ -127,6 +132,16 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None
                   efficiency_dispatch=float(row.efficiency_dispatch),
                   state_of_charge_initial=float(row.energy_mwh * row.initial_soc_fraction),
                   cyclic_state_of_charge=False, marginal_cost=0)
+    if storage is not None and "terminal_soc_fraction" in storage.columns:
+        # NaN means unconstrained terminal state. A finite value is an exact
+        # terminal SOC target (not a minimum). The existing unconstrained
+        # solver behaviour is unchanged when this column is absent.
+        targets = pd.DataFrame(index=n.snapshots, columns=n.storage_units.index, dtype=float)
+        for row in storage.itertuples(index=False):
+            target = getattr(row, "terminal_soc_fraction")
+            if pd.notna(target):
+                targets.loc[n.snapshots[-1], f"{row.ba}_battery"] = float(row.energy_mwh * target)
+        n.storage_units_t.state_of_charge_set = targets
     if links is not None:
         for i, link in links.iterrows():
             # A transport Link represents a hypothetical bidirectional transfer
@@ -157,6 +172,14 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None
         soc = n.storage_units_t.state_of_charge.copy()
         soc.index.name = "timestamp"
         soc.to_csv(out / "storage_soc_mwh.csv")
+        if "terminal_soc_fraction" in storage.columns:
+            for row in storage.itertuples(index=False):
+                target = getattr(row, "terminal_soc_fraction")
+                if pd.notna(target):
+                    actual = float(soc[f"{row.ba}_battery"].iloc[-1])
+                    expected = float(row.energy_mwh * target)
+                    if abs(actual - expected) > 1e-3:
+                        raise AssertionError(f"Terminal SOC target not enforced for {row.ba}: {actual} vs {expected}")
         charge = n.storage_units_t.p_store.copy()
         discharge = n.storage_units_t.p_dispatch.copy()
         charge.index.name = "timestamp"
