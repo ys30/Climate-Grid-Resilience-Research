@@ -55,20 +55,20 @@ jobs:
           PY
       - name: Solve matched four-scenario PyPSA with and without official-capacity storage
         run: |
-          python -m grid_resilience.multi_technology_factorial \\
-            --demand outputs/soc_integration/demand.csv \\
-            --weather outputs/soc_integration/weather.csv \\
-            --availability outputs/soc_integration/availability.csv \\
-            --capacity outputs/soc_integration/capacity.csv \\
-            --event-id synthetic_24h_no_storage \\
+          python -m grid_resilience.multi_technology_factorial \
+            --demand outputs/soc_integration/demand.csv \
+            --weather outputs/soc_integration/weather.csv \
+            --availability outputs/soc_integration/availability.csv \
+            --capacity outputs/soc_integration/capacity.csv \
+            --event-id synthetic_24h_no_storage \
             --output outputs/soc_integration/no_storage
-          python -m grid_resilience.multi_technology_factorial \\
-            --demand outputs/soc_integration/demand.csv \\
-            --weather outputs/soc_integration/weather.csv \\
-            --availability outputs/soc_integration/availability.csv \\
-            --capacity outputs/soc_integration/capacity.csv \\
-            --storage outputs/soc_integration/storage_matrix/eff90_soc50/four_ba_storageunit_scenario.csv \\
-            --event-id synthetic_24h_official_capacity_assumed_soc \\
+          python -m grid_resilience.multi_technology_factorial \
+            --demand outputs/soc_integration/demand.csv \
+            --weather outputs/soc_integration/weather.csv \
+            --availability outputs/soc_integration/availability.csv \
+            --capacity outputs/soc_integration/capacity.csv \
+            --storage outputs/soc_integration/storage_matrix/eff90_soc50/four_ba_storageunit_scenario.csv \
+            --event-id synthetic_24h_official_capacity_assumed_soc \
             --output outputs/soc_integration/with_storage
       - name: Assert storage solve and summarize without historical adequacy claims
         run: |
