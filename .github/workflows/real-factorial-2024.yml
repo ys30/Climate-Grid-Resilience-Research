@@ -136,6 +136,56 @@ jobs:
           out.reset_index().to_csv(target,index=False)
           print(out.to_string())
           PY
+      - name: Test hypothetical link rating uncertainty at 5 and 20 percent
+        run: |
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          import pandas as pd
+          base=pd.read_csv('inputs/hypothetical/links.csv')
+          output=Path('outputs/network_rating_sensitivity')
+          output.mkdir(parents=True,exist_ok=True)
+          records=[]
+          for scale in (0.5,2.0):
+              label=f'links_{int(scale*10)}pct'
+              linkpath=output/f'{label}.csv'
+              variant=base.copy()
+              variant['capacity_mw']=base['capacity_mw']*scale
+              variant['rating_source']=f'HYPOTHETICAL_{int(scale*10)}pct_peak_NOT_VERIFIED'
+              variant.to_csv(linkpath,index=False)
+              path=output/label
+              subprocess.run([
+                  'python','-m','grid_resilience.research_run',
+                  '--demand','inputs/observed/demand.csv',
+                  '--weather','inputs/observed/weather.csv',
+                  '--capacity','inputs/inventory/outputs/eia860_v2/capacity.csv',
+                  '--links',str(linkpath),
+                  '--event-id','2024-07-01_07_NETWORK_RATING_SENSITIVITY',
+                  '--network-variant',label,
+                  '--link-evidence','hypothetical',
+                  '--output',str(path)
+              ],check=True)
+              d=pd.read_csv(path/'solved/factorial_dispatch.csv')
+              p=d.pivot(index='ba',columns='scenario',values='unserved_energy_mwh')
+              assert p.shape==(4,4) and not p.isna().any().any()
+              contrast=p['heat_wind']-p['heat_only']-p['wind_only']+p['baseline']
+              records.extend({'ba':ba,'network_variant':label,'interaction_mwh':float(v)}
+                             for ba,v in contrast.items())
+          existing=pd.read_csv('outputs/real_input_screening/paired_network_interaction_by_ba.csv')
+          for ba in ('AZPS','BPAT','CISO','SRP'):
+              row=existing.loc[existing.ba==ba].iloc[0]
+              records.extend([
+                  {'ba':ba,'network_variant':'isolated','interaction_mwh':float(row.isolated)},
+                  {'ba':ba,'network_variant':'links_10pct','interaction_mwh':float(row.hypothetical_links)}
+              ])
+          df=pd.DataFrame(records)
+          assert not df.duplicated(['ba','network_variant']).any()
+          summary=df.groupby('network_variant',as_index=False).interaction_mwh.sum()
+          df.to_csv(output/'rating_sensitivity_by_ba.csv',index=False)
+          summary.to_csv(output/'rating_sensitivity_system.csv',index=False)
+          print(df.pivot(index='ba',columns='network_variant',values='interaction_mwh').to_string())
+          print(summary.to_string(index=False))
+          PY
       - name: Verify matching, numerical completeness, and nonadditivity
         run: |
           python - <<'PY'
@@ -227,4 +277,5 @@ jobs:
           path: |
             outputs/real_input_screening/
             outputs/real_input_isolated/
+            outputs/network_rating_sensitivity/
             inputs/hypothetical/links.csv
