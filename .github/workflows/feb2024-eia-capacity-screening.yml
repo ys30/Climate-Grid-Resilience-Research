@@ -103,4 +103,5 @@ jobs:
             outputs/feb2024_screening/availability_stress/screening_ba_capacity_margin_manifest.json
             outputs/feb2024_screening/transfer_pairs/hypothetical_transfer_paired_shortfall.csv
             outputs/feb2024_screening/transfer_pairs/hypothetical_transfer_manifest.json
+            outputs/feb2024_screening/transfer_pairs/hypothetical_transfer_system_shortfall.csv
           if-no-files-found: warn
