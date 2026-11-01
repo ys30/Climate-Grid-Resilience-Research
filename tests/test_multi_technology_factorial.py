@@ -19,6 +19,14 @@ def test_four_matched_multi_tech_scenarios(tmp_path):
     out=pd.read_csv(tmp_path/"out"/"multi_technology_factorial_dispatch.csv")
     assert set(out.scenario)=={"baseline","heat_only","wind_only","heat_wind"}
     assert len(out)==4
+    audit=pd.read_csv(tmp_path/"out"/"factorial_interaction_audit.csv")
+    assert len(audit)==1
+    assert set(["baseline","heat_only","wind_only","heat_wind","interaction_mwh"]).issubset(audit.columns)
+    row=audit.iloc[0]
+    assert row.interaction_mwh==pytest.approx(row.heat_wind-row.heat_only-row.wind_only+row.baseline)
+    assert result["factorial_accounting_verified"] is True
+    assert result["interaction_is_causal_attribution"] is False
+    assert result["system_nonadditive_interaction_mwh"]==pytest.approx(result["total_nonadditive_interaction_mwh"])
 
 def test_missing_weather_rejected(tmp_path):
     pytest.importorskip("pypsa")
