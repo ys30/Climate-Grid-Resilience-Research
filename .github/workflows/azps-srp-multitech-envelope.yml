@@ -301,6 +301,12 @@ jobs:
               assert entry['shortfall_mwh_high_load_hours']<=entry['shortfall_mwh']+1e-5
               assert entry['shortfall_mwh_solar_zero_hours']<=entry['shortfall_mwh']+1e-5
           pd.DataFrame(report).to_csv(out/'fine_gas_hourly_vulnerability_summary.csv',index=False)
+          # Publish deterministic, checked inputs for time-of-day figures.
+          from grid_resilience.srp_hourly_figures import prepare
+          figure_hourly, figure_diurnal = prepare(context)
+          figure_hourly.to_csv(out/'srp_hourly_figure_data.csv',index=False)
+          figure_diurnal.to_csv(out/'srp_diurnal_figure_data.csv',index=False)
+          print('SRP FIGURE DATA',len(figure_hourly),len(figure_diurnal))
           print('SRP HOURLY SHORTFALL / DEMAND / ASSUMED SOLAR CONTEXT')
           print(pd.DataFrame(report).to_string(index=False))
           result=pd.DataFrame(rows)
