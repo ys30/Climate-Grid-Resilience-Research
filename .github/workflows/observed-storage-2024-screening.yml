@@ -300,6 +300,39 @@ jobs:
           print(out.to_string(index=False))
           print('Verified SOC substitution identity, not an observed grid charging capability.')
           PY
+      - name: Compound-event horizon and terminal storage depletion sensitivity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from grid_resilience.multi_technology_dispatch import solve
+          root=Path('outputs/observed_storage_2024')
+          source=root/'with_storage'/'scenario_inputs'/'heat_wind'
+          out=root/'horizon_sensitivity';out.mkdir(exist_ok=True)
+          d=pd.read_csv(source/'demand.csv')
+          a=pd.read_csv(source/'availability.csv')
+          assert d.timestamp.nunique()==a.timestamp.nunique()==168
+          rows=[]
+          for hours in (72,120,168):
+              ts=set(sorted(d.timestamp.unique())[:hours])
+              working=out/f'h{hours}';working.mkdir(exist_ok=True)
+              d[d.timestamp.isin(ts)].to_csv(working/'demand.csv',index=False)
+              a[a.timestamp.isin(ts)].to_csv(working/'availability.csv',index=False)
+              for variant,config in [('without_storage',None),('with_storage',root/'storage.csv')]:
+                  res=solve(working/'demand.csv',root/'capacity.csv',
+                            working/'availability.csv',working/variant,storage_csv=config)
+                  for item in res.itertuples(index=False):
+                      rows.append({'hours':hours,'ba':item.ba,'variant':variant,
+                                   'shortfall_mwh':item.unserved_energy_mwh})
+          df=pd.DataFrame(rows)
+          piv=df.pivot(index=['hours','ba'],columns='variant',values='shortfall_mwh')
+          piv['relief_mwh']=piv.without_storage-piv.with_storage
+          piv['relief_per_day_mwh']=piv.relief_mwh/(piv.index.get_level_values('hours')/24)
+          assert (piv.relief_mwh>=-1e-3).all()
+          piv.reset_index().to_csv(out/'compound_horizon_72_120_168h_comparison.csv',index=False)
+          print(piv.to_string())
+          print('Horizon sensitivity is a nested-prefix scenario test, not an observed outage validation.')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
