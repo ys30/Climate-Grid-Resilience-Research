@@ -181,6 +181,14 @@ jobs:
           df=pd.DataFrame(records)
           assert not df.duplicated(['ba','network_variant']).any()
           summary=df.groupby('network_variant',as_index=False).interaction_mwh.sum()
+          assert set(summary.network_variant)=={'isolated','links_5pct','links_10pct','links_20pct'}
+          assert df.groupby('network_variant').ba.nunique().eq(4).all()
+          assert abs(float(summary.loc[summary.network_variant=='links_10pct',
+                                       'interaction_mwh'].iloc[0])-
+                     float(existing.loc[existing.ba=='SYSTEM',
+                                        'hypothetical_links'].iloc[0]))<1e-4
+          # A second difference need NOT be monotonic with transmission rating:
+          # do not mistake nonmonotonic interactions for optimizer failure.
           df.to_csv(output/'rating_sensitivity_by_ba.csv',index=False)
           summary.to_csv(output/'rating_sensitivity_system.csv',index=False)
           print(df.pivot(index='ba',columns='network_variant',values='interaction_mwh').to_string())
