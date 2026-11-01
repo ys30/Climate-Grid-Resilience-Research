@@ -120,6 +120,33 @@ jobs:
           hydro.to_csv(out/'hydro_budget_dispatch_diagnostic.csv',index=False)
           print('HYDRO ENERGY BUDGET UTILIZATION (MODEL OUTPUT, NOT OBSERVED)')
           print(hydro.to_string(index=False))
+          # Explain which technologies replace the constrained hydro generation.
+          substitutions=[]
+          for scenario in ('baseline','heat_wind'):
+              cases={}
+              for label in ('solar_daylight_proxy_other_fuels_full','solar_daylight_hydro_budget_48h'):
+                  gen=pd.read_csv(out/label/scenario/'generation_hourly.csv')
+                  cases[label]=gen.groupby(['ba','technology']).generation_mwh.sum()
+              before=cases['solar_daylight_proxy_other_fuels_full']
+              after=cases['solar_daylight_hydro_budget_48h']
+              for ba,tech in sorted(set(before.index)|set(after.index)):
+                  base=float(before.get((ba,tech),0))
+                  constrained=float(after.get((ba,tech),0))
+                  substitutions.append({'scenario':scenario,'ba':ba,'technology':tech,
+                     'unconstrained_hydro_case_mwh':base,
+                     'constrained_hydro_case_mwh':constrained,
+                     'generation_change_mwh':constrained-base})
+          replacements=pd.DataFrame(substitutions)
+          replacements.to_csv(out/'hydro_budget_technology_redispatch.csv',index=False)
+          for scenario in ('baseline','heat_wind'):
+              x=replacements[(replacements.scenario==scenario)&(replacements.ba=='SRP')]
+              # No storage or links; same demand; both cases have zero shortage.
+              assert abs(x.generation_change_mwh.sum())<1e-3, x.to_string(index=False)
+              hydro_delta=float(x.loc[x.technology.eq('hydro'),'generation_change_mwh'].iloc[0])
+              assert hydro_delta < -1e-3
+              assert abs(x.loc[~x.technology.eq('hydro'),'generation_change_mwh'].sum()+hydro_delta)<1e-3
+          print('HYDRO BUDGET TECHNOLOGY REDISPATCH (MWh; MODEL ONLY)')
+          print(replacements.to_string(index=False))
           result=pd.DataFrame(rows)
           assert len(result)==16
           result.to_csv(out/'official_multitech_availability_envelope.csv',index=False)
