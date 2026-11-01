@@ -339,6 +339,50 @@ jobs:
           print('OFFICIAL MULTI-TECHNOLOGY EXTREME AVAILABILITY ENVELOPE')
           print(result.to_string(index=False))
           PY
+      - name: Verify and summarize SRP numerical outputs
+        if: success()
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import pandas as pd
+          root=Path('outputs/multitech_envelope')
+          hourly=pd.read_csv(root/'srp_hourly_figure_data.csv')
+          daily=pd.read_csv(root/'srp_diurnal_figure_data.csv')
+          threshold=pd.read_csv(root/'fine_gas_derating_threshold.csv')
+          summary=pd.read_csv(root/'fine_gas_hourly_vulnerability_summary.csv')
+          cases=int(hourly['case'].nunique())
+          pngs=list((root/'figures').glob('*.png'))
+          assert cases==16, f'Unexpected cases: {cases}'
+          assert len(hourly)==cases*168
+          assert len(daily)==cases*24
+          assert len(summary)==cases
+          assert len(threshold)==cases
+          assert len(pngs)==2*cases, f'Expected {2*cases} PNG files, got {len(pngs)}'
+          assert all(p.stat().st_size>1000 for p in pngs)
+          energy_hourly=hourly.groupby('case').shortfall_mw.sum().sort_index()
+          energy_diurnal=daily.groupby('case').shortfall_mwh.sum().sort_index()
+          assert ((energy_hourly-energy_diurnal).abs()<1e-4).all()
+          report=[
+            '## SRP numerical validation',
+            '',
+            f'- Cases: **{cases}**',
+            f'- Hourly rows: **{len(hourly)}**',
+            f'- Diurnal rows: **{len(daily)}**',
+            f'- PNG files: **{len(pngs)}**',
+            f'- Scenarios with shortfall: **{int((energy_hourly>1e-5).sum())}**',
+            '- Scope: assumed generation availability; not calibrated historical outages',
+            '',
+            '| Case | Modeled shortfall (MWh) |',
+            '|---|---:|',
+          ]
+          report += [f'| {case} | {val:.3f} |' for case,val in energy_hourly.items()]
+          message='\\n'.join(report)+'\\n'
+          print(message)
+          if os.environ.get('GITHUB_STEP_SUMMARY'):
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as stream:
+                  stream.write(message)
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
