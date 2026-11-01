@@ -13,7 +13,7 @@ import pandas as pd
 
 ENDPOINT="https://api.eia.gov/v2/electricity/rto/region-data/data/"
 
-def normalize(rows,bas,start,end):
+def normalize(rows,bas,start,end,data_type='D'):
     frame=pd.DataFrame(rows)
     required={"period","respondent","value"}
     if not required.issubset(frame.columns):raise ValueError("EIA-930 fields missing")
@@ -28,8 +28,10 @@ def normalize(rows,bas,start,end):
     observed=pd.MultiIndex.from_frame(frame[["timestamp","ba"]])
     if len(frame)!=len(expected) or set(observed)!=set(expected):
         raise ValueError(f"Incomplete BA-hour demand: expected {len(expected)}, got {len(frame)}")
-    if frame.demand_mw.isna().any() or frame.demand_mw.le(0).any():
-        raise ValueError("Null/nonpositive reported demand: no imputation")
+    if frame.demand_mw.isna().any() or not frame.demand_mw.map(lambda x: float("-inf")<x<float("inf")).all():
+        raise ValueError("Null/nonfinite reported EIA-930 observation: no imputation")
+    if data_type=="D" and frame.demand_mw.le(0).any():
+        raise ValueError("Nonpositive reported demand: no imputation")
     return frame.sort_values(["timestamp","ba"]).reset_index(drop=True)
 
 def fetch(bas,start,end,api_key,length=5000,data_type='D'):
@@ -60,7 +62,7 @@ def fetch(bas,start,end,api_key,length=5000,data_type='D'):
         total=int(payload["response"].get("total",0))
         if not data:break
         rows.extend(data);offset+=len(data)
-    return normalize(rows,bas,st,en),{"response_rows":len(rows),"reported_total":total}
+    return normalize(rows,bas,st,en,data_type=data_type),{"response_rows":len(rows),"reported_total":total}
 
 def main():
     p=argparse.ArgumentParser()
