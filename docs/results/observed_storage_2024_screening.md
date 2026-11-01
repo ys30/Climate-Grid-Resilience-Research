@@ -246,3 +246,16 @@ Thus the constrained hydro energy is fully offset by coal and gas in this specif
 | Heat+wind | 50% | 75% | 69,031.200 | 334,388.719 | 0 |
 
 All eight scenarios retain zero simulated shortage because other model resources can redispatch. This **does not establish reliability** under actual coal/nuclear outages; gas availability remains unconstrained and the single-fuel BA inventory, solar profile and import boundary have not been historically validated. Follow-up priorities are gas derating/marginal dispatch headroom and documented nuclear operating schedules, not further broad claims of supply adequacy.
+
+## CI-verified SRP gas-availability degradation threshold sweep
+
+[CI 41350895514](../../actions/runs/41350895514) swept assumed SRP gas availability across 0%, 25%, 50%, 75%, 100% for baseline and heat+wind conditions with either 100% coal/nuclear or jointly reduced coal 50% / nuclear 75%. Results are 168-hour **modeled shortfall**, not measured outages.
+
+| Scenario | Coal / nuclear availability | Gas 100% | Gas 75% | Gas 50% | Gas 25% | Gas 0% |
+|---|---|---:|---:|---:|---:|---:|
+| Baseline | 100% / 100% | 0 | 0 | 0 | 3,874.367 | 96,353.636 |
+| Baseline | 50% / 75% | 0 | 0 | 227.750 | 62,941.902 | 279,165.770 |
+| Heat+wind | 100% / 100% | 0 | 0 | 0 | 12,600.234 | 130,512.078 |
+| Heat+wind | 50% / 75% | 0 | 0 | 3,326.866 | 91,200.488 | 334,388.719 |
+
+**Interpretation:** The first nonzero point *among tested grid values* occurs at gas 25% in the full coal/nuclear cases, but at gas 50% with joint coal/nuclear derating. Neither is a precise numerical threshold. This test retains assumed solar daylight availability, fixed wind profiles, hypothetical hydro 48h energy limit, reported 2024 single-fuel candidate nameplates, no storage/imports, and no observed outages; true hour-specific availability and BA transfers are unverified. Confirm unit outages and firm imports before historical reliability interpretation.
