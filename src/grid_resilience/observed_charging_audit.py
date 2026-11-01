@@ -96,6 +96,30 @@ def run(artifact, output, api_key):
     lag.to_csv(out/"eia930_interchange_timestamp_shift_diagnostic.csv",index=False)
     print("UTC INTERCHANGE ALIGNMENT DIAGNOSTIC (do not shift source data for calibration):")
     print(lag.to_string(index=False))
+    # Decompose persistent BA accounting mismatch into a fixed offset and
+    # remaining hourly variation, using only the original unshifted timestamps.
+    # Offset subtraction is diagnostic, never an observational correction.
+    offset_rows=[]
+    for ba,part in merged[merged.scenario=="baseline"].groupby("ba"):
+        r=part.reported_balance_residual_if_ti_outflow_mw
+        offset=float(r.median())
+        residual_after_offset=r-offset
+        threshold=part.demand_mw.mul(0.01).clip(lower=1)
+        offset_rows.append({"ba":ba,"hours":len(part),
+          "median_residual_mw":offset,
+          "mean_residual_mw":float(r.mean()),
+          "std_residual_mw":float(r.std()),
+          "min_residual_mw":float(r.min()),
+          "max_residual_mw":float(r.max()),
+          "raw_absolute_residual_sum_mwh":float(r.abs().sum()),
+          "offset_removed_absolute_residual_sum_mwh":float(residual_after_offset.abs().sum()),
+          "offset_removed_nonclosing_hours":int((residual_after_offset.abs()>threshold).sum()),
+          "offset_is_not_a_data_correction":True})
+    offsets=pd.DataFrame(offset_rows)
+    assert len(offsets)==4 and offsets.hours.eq(168).all()
+    offsets.to_csv(out/"eia930_residual_fixed_offset_diagnostic.csv",index=False)
+    print("FIXED OFFSET vs VARIABLE RESIDUAL DIAGNOSTIC (never correct input data automatically):")
+    print(offsets.to_string(index=False))
     summary.to_csv(out/"charging_vs_observed_eia930_summary.csv",index=False)
     assert len(summary)==16 and summary.hours.eq(168).all()
     print("Caution: TI sign convention and BA accounting closure must be independently verified.")
