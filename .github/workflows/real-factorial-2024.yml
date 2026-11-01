@@ -95,13 +95,16 @@ jobs:
             --output outputs/real_input_screening
       - name: Matched isolated-BA factorial counterfactual (no links)
         run: |
+          mkdir -p inputs/hypothetical
+          printf 'from_ba,to_ba,capacity_mw\\n' > inputs/hypothetical/isolated_no_links.csv
           python -m grid_resilience.research_run \
             --demand inputs/observed/demand.csv \
             --weather inputs/observed/weather.csv \
             --capacity inputs/inventory/outputs/eia860_v2/capacity.csv \
+            --links inputs/hypothetical/isolated_no_links.csv \
             --event-id 2024-07-01_07_REAL_INPUTS_ISOLATED \
             --network-variant partial_fleet_no_links \
-            --link-evidence none \
+            --link-evidence hypothetical \
             --output outputs/real_input_isolated
       - name: Compare BA interactions across isolated and hypothetical network
         run: |
