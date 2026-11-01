@@ -68,12 +68,44 @@ jobs:
           (root/'h1_h2_july_boundary_audit.json').write_text(json.dumps(result,indent=2)+'\\n')
           print('OFFICIAL H1/H2 UTC BOUNDARY AUDIT')
           print(json.dumps(result,indent=2))
+          # Preserve source row values. Only join across official file boundary;
+          # never infer missing hourly interchange values.
+          merged=root/'official_2024_july_combined.csv'
+          start=datetime(2024,7,1,tzinfo=timezone.utc)
+          end=datetime(2024,8,1,tzinfo=timezone.utc)
+          counts={ba:0 for ba in bas}
+          seen=set()
+          with merged.open('w',newline='',encoding='utf-8') as dest:
+              writer=None
+              for source in (h1path,root/'official_2024_h2_balance.csv'):
+                  with source.open(newline='',encoding='utf-8-sig') as stream:
+                      reader=csv.DictReader(stream)
+                      if writer is None:
+                          writer=csv.DictWriter(dest,fieldnames=reader.fieldnames)
+                          writer.writeheader()
+                      elif set(reader.fieldnames)!=set(writer.fieldnames):
+                          raise ValueError('Official H1/H2 schemas differ')
+                      for row in reader:
+                          ba=row['Balancing Authority'].strip()
+                          if ba not in bas:continue
+                          t=datetime.strptime(row['UTC Time at End of Hour'],'%m/%d/%Y %I:%M:%S %p').replace(tzinfo=timezone.utc)-timedelta(hours=1)
+                          if not start<=t<end:continue
+                          key=(ba,t)
+                          if key in seen:raise ValueError(f'Duplicate cross-file BA hour: {key}')
+                          seen.add(key);counts[ba]+=1;writer.writerow(row)
+          if any(count!=744 for count in counts.values()):
+              raise ValueError(f'Incomplete merged July source rows: {counts}')
+          print('MERGED JULY UTC SOURCE ROW COUNTS:',counts)
+          (root/'july_combined_source_manifest.json').write_text(json.dumps({
+              'month':'2024-07','source_order':['official H1','official H2'],
+              'hour_start_utc':True,'rows_per_ba':counts,
+              'values_imputed':False,'historical_calibration_certified':False},indent=2)+'\\n')
           h1path.unlink()
           PY
       - name: Compare raw and adjusted hourly accounting for July 2024
         run: |
           python -m grid_resilience.eia930_adjusted_balance_comparison \
-            --csv outputs/eia930_july_adjusted/official_2024_h2_balance.csv \
+            --csv outputs/eia930_july_adjusted/official_2024_july_combined.csv \
             --month 2024-07 --allow-incomplete --output outputs/eia930_july_adjusted
           cat outputs/eia930_july_adjusted/eia930_hour_coverage.json
           echo "FIRST MISSING ROW/FIELD TIMESTAMPS"
