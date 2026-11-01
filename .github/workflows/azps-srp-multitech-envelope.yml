@@ -240,6 +240,42 @@ jobs:
               assert (g.sort_values('gas_availability_pu').shortfall_mwh.diff().dropna()<=1e-3).all()
           print('SRP REFINED GAS DERATING AND SHORTFALL HOURS')
           print(fine.to_string(index=False))
+          # Pair every shortage hour with observed-input demand and the assumed
+          # solar profile; retain zero-shortage hours for unbiased comparison.
+          contextual=[]
+          for record in fine_rows:
+              scenario=record['scenario']
+              coal=record['coal_availability_pu']
+              nuclear=record['nuclear_availability_pu']
+              gas=record['gas_availability_pu']
+              tag=f'{scenario}_c{int(coal*100)}_n{int(nuclear*100)}_g{int(gas*100)}'
+              sh=pd.read_csv(out/'fine_gas_threshold'/tag/'shortfall_hourly_mw.csv')
+              demand=pd.read_csv(out/f'{scenario}_demand.csv')
+              demand=demand[demand.ba.eq('SRP')][['timestamp','demand_mw']]
+              profile=pd.read_csv(out/f'{tag}_availability.csv')
+              solar=profile[(profile.ba.eq('SRP'))&(profile.technology.eq('solar'))][['timestamp','availability_pu']]
+              solar=solar.rename(columns={'availability_pu':'assumed_solar_availability_pu'})
+              sh['timestamp']=pd.to_datetime(sh.timestamp,utc=True)
+              demand['timestamp']=pd.to_datetime(demand.timestamp,utc=True)
+              solar['timestamp']=pd.to_datetime(solar.timestamp,utc=True)
+              joined=sh[['timestamp','SRP_shortfall_mw']].merge(demand,on='timestamp',validate='one_to_one').merge(solar,on='timestamp',validate='one_to_one')
+              assert len(joined)==168
+              joined['case']=tag
+              joined['shortfall_mw']=joined.SRP_shortfall_mw.clip(lower=0)
+              contextual.append(joined[['case','timestamp','demand_mw','assumed_solar_availability_pu','shortfall_mw']])
+          context=pd.concat(contextual,ignore_index=True)
+          context.to_csv(out/'fine_gas_hourly_demand_solar_context.csv',index=False)
+          report=[]
+          for case,group in context.groupby('case'):
+              affected=group[group.shortfall_mw>1e-5]
+              report.append({'case':case,'affected_hours':len(affected),
+                  'shortfall_mwh':float(affected.shortfall_mw.sum()),
+                  'mean_demand_affected_mw':float(affected.demand_mw.mean()) if len(affected) else None,
+                  'mean_demand_all_hours_mw':float(group.demand_mw.mean()),
+                  'affected_hours_with_solar_proxy_zero':int((affected.assumed_solar_availability_pu<1e-8).sum())})
+          pd.DataFrame(report).to_csv(out/'fine_gas_hourly_vulnerability_summary.csv',index=False)
+          print('SRP HOURLY SHORTFALL / DEMAND / ASSUMED SOLAR CONTEXT')
+          print(pd.DataFrame(report).to_string(index=False))
           result=pd.DataFrame(rows)
           assert len(result)==16
           result.to_csv(out/'official_multitech_availability_envelope.csv',index=False)
