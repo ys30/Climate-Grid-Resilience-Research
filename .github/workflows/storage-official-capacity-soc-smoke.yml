@@ -88,6 +88,32 @@ jobs:
           print(summary.to_string())
           print('THIS IS A SYNTHETIC OPERATING TEST, NOT HISTORICAL SHORTFALL VALIDATION')
           PY
+      - name: Verify SOC bounds and chronological continuity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path('outputs/soc_integration')
+          conf=pd.read_csv(p/'storage_matrix/eff90_soc50/four_ba_storageunit_scenario.csv').set_index('ba')
+          audits=[]
+          for scenario in ['baseline','heat_only','wind_only','heat_wind']:
+              soc=pd.read_csv(p/'with_storage/solved'/scenario/'storage_soc_mwh.csv')
+              assert len(soc)==24, ('Expected 24 consecutive SOC hours',scenario,len(soc))
+              times=pd.to_datetime(soc['timestamp'],utc=True)
+              assert times.is_unique and times.is_monotonic_increasing
+              assert (times.diff().dropna()==pd.Timedelta(hours=1)).all()
+              for ba in conf.index:
+                  col=f'{ba}_battery'
+                  assert col in soc.columns,(scenario,col)
+                  energy=float(conf.loc[ba,'energy_mwh'])
+                  values=pd.to_numeric(soc[col],errors='raise')
+                  assert values.notna().all() and values.between(-1e-4,energy+1e-4).all(),(scenario,ba,values.min(),values.max(),energy)
+                  audits.append({'scenario':scenario,'ba':ba,'energy_mwh':energy,
+                      'initial_soc_assumed_mwh':0.5*energy,'soc_min_mwh':float(values.min()),
+                      'soc_max_mwh':float(values.max()),'soc_final_mwh':float(values.iloc[-1])})
+          pd.DataFrame(audits).to_csv(p/'storage_soc_bounds_audit.csv',index=False)
+          print('Validated 16 SOC trajectories (24 consecutive hourly snapshots each).')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
