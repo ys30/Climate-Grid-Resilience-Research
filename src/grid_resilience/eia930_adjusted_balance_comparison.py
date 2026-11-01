@@ -37,7 +37,7 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
     expected=int((end-start).total_seconds()/3600)
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
     coverage={ba:{"present_hours":len(times[ba]),"expected_hours":expected,"missing_hours":expected-len(times[ba])} for ba in BAS}
-    (out/"eia930_hour_coverage.json").write_text(json.dumps(coverage,indent=2)+"\\n")
+    (out/"eia930_hour_coverage.json").write_text(json.dumps(coverage,indent=2)+"\n")
     if any(len(times[ba])!=expected for ba in BAS) and not allow_incomplete:
         raise ValueError(f"Missing BA hour: {coverage}")
     with (out/"eia930_raw_vs_adjusted_balance.csv").open("w",newline="") as f:
@@ -56,5 +56,6 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
 def main():
     p=argparse.ArgumentParser();p.add_argument("--csv",required=True)
     p.add_argument("--output",required=True);p.add_argument("--month",default="2024-02")
-    a=p.parse_args();print(json.dumps(audit(a.csv,a.output,a.month),indent=2))
+    p.add_argument("--allow-incomplete",action="store_true",help="Output incomplete coverage diagnostics without claiming calibration")
+    a=p.parse_args();print(json.dumps(audit(a.csv,a.output,a.month,allow_incomplete=a.allow_incomplete),indent=2))
 if __name__=="__main__":main()
