@@ -38,6 +38,8 @@ jobs:
             --csv outputs/eia930_july_adjusted/official_2024_h2_balance.csv \
             --month 2024-07 --allow-incomplete --output outputs/eia930_july_adjusted
           cat outputs/eia930_july_adjusted/eia930_hour_coverage.json
+          echo "FIRST MISSING ROW/FIELD TIMESTAMPS"
+          head -n 32 outputs/eia930_july_adjusted/eia930_missing_hours.csv
           cat outputs/eia930_july_adjusted/eia930_raw_vs_adjusted_balance.csv
       - uses: actions/upload-artifact@v4
         if: always()
