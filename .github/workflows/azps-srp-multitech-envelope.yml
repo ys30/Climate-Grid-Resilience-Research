@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -e '.[model,dev]'
+      - run: python -m pip install -e '.[model,dev]' matplotlib
       - name: Verify SRP hourly figure data contracts before dispatch
         run: python -m pytest -q tests/test_srp_hourly_figures.py
       - uses: actions/download-artifact@v4
@@ -308,6 +308,8 @@ jobs:
           figure_hourly, figure_diurnal = prepare(context)
           figure_hourly.to_csv(out/'srp_hourly_figure_data.csv',index=False)
           figure_diurnal.to_csv(out/'srp_diurnal_figure_data.csv',index=False)
+          from grid_resilience.plot_srp_adequacy import render
+          render(out/'srp_hourly_figure_data.csv',out/'srp_diurnal_figure_data.csv',out/'figures')
           print('SRP FIGURE DATA',len(figure_hourly),len(figure_diurnal))
           print('SRP HOURLY SHORTFALL / DEMAND / ASSUMED SOLAR CONTEXT')
           print(pd.DataFrame(report).to_string(index=False))
