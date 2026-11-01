@@ -46,6 +46,20 @@ jobs:
           python -m grid_resilience.eia860_plant_ba_capacity --archive outputs/bpat_july2024/eia8602024.zip --generators outputs/bpat_july2024/eia860_2024_operable_generators.csv --output outputs/bpat_july2024
           cat outputs/bpat_july2024/eia860_plant_ba_capacity_manifest.json
           cat outputs/bpat_july2024/eia860_plant_ba_roster_attrition_by_fuel.csv
+          python - <<'PY'
+          import pandas as pd
+          d=pd.read_csv('outputs/bpat_july2024/eia860_plant_ba_roster_attrition_by_fuel.csv')
+          assert d.generator_rows.ge(0).all()
+          assert d.groupby('exclusion_reason').generator_rows.sum().to_dict()=={
+            'included':2625,'multifuel_or_secondary_fuel':153,
+            'storage_excluded':38,'unmapped_primary_energy_source':452}
+          u=d.loc[d.exclusion_reason.eq('unmapped_primary_energy_source')]
+          print('TOP UNMAPPED PRIMARY FUEL CODES (GENERATOR ROWS, NOT VERIFIED MW):')
+          print(u.groupby('primary_fuel_code')[['generator_rows','positive_nameplate_mw']]
+                  .sum().sort_values('generator_rows',ascending=False).head(10).to_string())
+          print('UNMAPPED BY BA:')
+          print(u.groupby('ba')[['generator_rows','positive_nameplate_mw']].sum().to_string())
+          PY
       - name: Collect completely untouched July ERA5 weather and observations
         run: |
           python -m grid_resilience.bpat_era5_plant_weighted --plants outputs/bpat_july2024/bpat_era5_sampling_plan.csv --output outputs/bpat_july2024 --year 2024 --month 7
