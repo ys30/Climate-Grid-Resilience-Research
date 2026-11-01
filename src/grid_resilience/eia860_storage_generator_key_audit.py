@@ -6,9 +6,11 @@ def audit(storage,operable,output):
     s=pd.read_csv(storage,dtype={'plant_id':str,'generator_id':str})
     g=pd.read_csv(operable,dtype={'plant_id':str,'generator_id':str},keep_default_na=False)
     keys=['plant_id','generator_id']
-    if s.duplicated(keys).any() or g.duplicated(keys).any():raise ValueError('Duplicate plant+generator key')
+    # The upstream BA join may carry a pandas merge indicator; it is not a source field.
+    s=s.drop(columns=['_merge','_left_indicator','_right_indicator'],errors='ignore')
     for x in (s,g):
         for k in keys:x[k]=x[k].str.strip().str.replace(r'\.0$','',regex=True)
+    if s.duplicated(keys).any() or g.duplicated(keys).any():raise ValueError('Duplicate normalized plant+generator key')
     m=s.merge(g[keys+['energy_source_1','reported_technology','nameplate_capacity_mw']],on=keys,how='left',validate='one_to_one',indicator=True)
     m['key_status']=m['_merge'].map({'both':'operable_roster_matched','left_only':'storage_only'}).astype(str)
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
