@@ -75,16 +75,21 @@ jobs:
           end=datetime(2024,8,1,tzinfo=timezone.utc)
           counts={ba:0 for ba in bas}
           seen=set()
+          required=['UTC Time at End of Hour','Balancing Authority','Demand (MW)',
+                    'Net Generation (MW)','Total Interchange (MW)',
+                    'Demand (MW) (Adjusted)','Net Generation (MW) (Adjusted)',
+                    'Total Interchange (MW) (Adjusted)']
+          schema_evidence={}
           with merged.open('w',newline='',encoding='utf-8') as dest:
-              writer=None
-              for source in (h1path,root/'official_2024_h2_balance.csv'):
+              writer=csv.DictWriter(dest,fieldnames=required)
+              writer.writeheader()
+              for label,source in (('h1',h1path),('h2',root/'official_2024_h2_balance.csv')):
                   with source.open(newline='',encoding='utf-8-sig') as stream:
                       reader=csv.DictReader(stream)
-                      if writer is None:
-                          writer=csv.DictWriter(dest,fieldnames=reader.fieldnames)
-                          writer.writeheader()
-                      elif set(reader.fieldnames)!=set(writer.fieldnames):
-                          raise ValueError('Official H1/H2 schemas differ')
+                      schema_evidence[label]={'original_columns':reader.fieldnames,
+                          'excluded_columns':[c for c in reader.fieldnames if c not in required]}
+                      absent=set(required)-set(reader.fieldnames)
+                      if absent:raise ValueError(f'Missing required {label} balance columns: {sorted(absent)}')
                       for row in reader:
                           ba=row['Balancing Authority'].strip()
                           if ba not in bas:continue
@@ -92,10 +97,11 @@ jobs:
                           if not start<=t<end:continue
                           key=(ba,t)
                           if key in seen:raise ValueError(f'Duplicate cross-file BA hour: {key}')
-                          seen.add(key);counts[ba]+=1;writer.writerow(row)
+                          seen.add(key);counts[ba]+=1;writer.writerow({col:row[col] for col in required})
           if any(count!=744 for count in counts.values()):
               raise ValueError(f'Incomplete merged July source rows: {counts}')
           print('MERGED JULY UTC SOURCE ROW COUNTS:',counts)
+          (root/'h1_h2_schema_crosswalk.json').write_text(json.dumps(schema_evidence,indent=2)+'\\n')
           (root/'july_combined_source_manifest.json').write_text(json.dumps({
               'month':'2024-07','source_order':['official H1','official H2'],
               'hour_start_utc':True,'rows_per_ba':counts,
