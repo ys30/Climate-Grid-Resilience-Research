@@ -27,3 +27,26 @@ def test_unmatched_generator_fails_closed(tmp_path):
     d=pd.read_csv(b,dtype=str);d.loc[0,"generator_id"]="G2";d.to_csv(b,index=False)
     with pytest.raises(ValueError,match="Unresolved"):
         join(a,b,tmp_path/"out")
+
+def test_blank_ba_fails_closed(tmp_path):
+    a,b=files(tmp_path)
+    d=pd.read_csv(a,dtype=str,keep_default_na=False)
+    d.loc[0,"reported_ba"]=""
+    d.to_csv(a,index=False)
+    with pytest.raises(ValueError,match="Blank EIA-923 reported_ba"):
+        join(a,b,tmp_path/"out")
+
+def test_invalid_month_fails_closed(tmp_path):
+    a,b=files(tmp_path)
+    d=pd.read_csv(a,dtype=str)
+    d.loc[0,"period"]="2024-13"
+    d.to_csv(a,index=False)
+    with pytest.raises(ValueError,match="Invalid EIA-923"):
+        join(a,b,tmp_path/"out")
+
+def test_pumped_storage_not_classified_as_hydro(tmp_path):
+    a,b=files(tmp_path,"WAT")
+    d=pd.read_csv(a,dtype=str);d.loc[0,"prime_mover"]="PS";d.to_csv(a,index=False)
+    d=pd.read_csv(b,dtype=str);d.loc[0,"prime_mover"]="PS";d.to_csv(b,index=False)
+    with pytest.raises(ValueError,match="Unresolved"):
+        join(a,b,tmp_path/"out")
