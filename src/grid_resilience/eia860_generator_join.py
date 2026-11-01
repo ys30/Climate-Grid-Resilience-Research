@@ -32,7 +32,7 @@ def join(eia923_csv, eia860_csv, output):
         a[col] = a[col].fillna("").astype(str).str.strip()
         if a[col].eq("").any():
             raise ValueError(f"Blank EIA-923 {col}; refusing unassigned generation")
-    if not a.period.str.fullmatch(r"\\d{4}-(0[1-9]|1[0-2])").all():
+    if not a.period.str.fullmatch(r"\d{4}-(0[1-9]|1[0-2])").all():
         raise ValueError("Invalid EIA-923 YYYY-MM period")
     for col in ("energy_source_1", "prime_mover"):
         b[col] = b[col].fillna("").astype(str).str.strip().str.upper()
