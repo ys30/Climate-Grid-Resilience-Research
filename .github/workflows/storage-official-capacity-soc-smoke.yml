@@ -114,6 +114,40 @@ jobs:
           pd.DataFrame(audits).to_csv(p/'storage_soc_bounds_audit.csv',index=False)
           print('Validated 16 SOC trajectories (24 consecutive hourly snapshots each).')
           PY
+      - name: Solve all nine SOC-efficiency sensitivities with fixed synthetic weather and generation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from grid_resilience.multi_technology_factorial import run
+          p=Path('outputs/soc_integration')
+          matrix=pd.read_csv(p/'storage_matrix/storage_assumption_matrix.csv')
+          assert len(matrix)==9
+          baseline=pd.read_csv(p/'no_storage/multi_technology_factorial_dispatch.csv')
+          base=baseline.groupby('scenario').unserved_energy_mwh.sum()
+          rows=[]
+          for case in matrix.itertuples(index=False):
+              folder=p/'sensitivity_solves'/case.scenario
+              storage=p/'storage_matrix'/case.scenario/'four_ba_storageunit_scenario.csv'
+              assert storage.is_file(),storage
+              run(p/'demand.csv',p/'weather.csv',p/'capacity.csv',p/'availability.csv',
+                  folder,event_id='synthetic_storage_sensitivity',storage=storage)
+              d=pd.read_csv(folder/'multi_technology_factorial_dispatch.csv')
+              assert len(d)==16 and set(d.scenario)==set(base.index)
+              for scenario,shortfall in d.groupby('scenario').unserved_energy_mwh.sum().items():
+                  rows.append({'storage_scenario':case.scenario,'weather_scenario':scenario,
+                    'assumed_efficiency_store':case.assumed_efficiency_store,
+                    'assumed_initial_soc_fraction':case.assumed_initial_soc_fraction,
+                    'shortfall_with_storage_mwh':float(shortfall),
+                    'shortfall_no_storage_mwh':float(base[scenario]),
+                    'synthetic_shortfall_difference_mwh':float(base[scenario]-shortfall)})
+          summary=pd.DataFrame(rows)
+          assert len(summary)==36 and summary[['storage_scenario','weather_scenario']].duplicated().sum()==0
+          assert summary[['shortfall_with_storage_mwh','shortfall_no_storage_mwh']].ge(-1e-5).all().all()
+          summary.to_csv(p/'storage_sensitivity_nine_by_four.csv',index=False)
+          print(summary.to_string(index=False))
+          print('SYNTHETIC SOLVE ONLY: official reported storage capacities, assumed initial SOC and efficiencies.')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
