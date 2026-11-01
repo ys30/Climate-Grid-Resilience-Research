@@ -14,6 +14,7 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
     times={ba:set() for ba in BAS}
     missing_fields={(ba,mode,col):0 for ba in BAS for mode,cols in sets.items() for col in cols}
     missing_field_rows=[]
+    gate_rows=[]
     missing_field_times={(ba,mode,col):set() for ba in BAS for mode,cols in sets.items() for col in cols}
     with Path(source).open(newline="",encoding="utf-8-sig") as f:
         reader=csv.DictReader(f)
@@ -40,6 +41,8 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
                 d,g,i=map(float,values)
                 if not all(-float("inf")<v<float("inf") for v in (d,g,i)):raise ValueError("Nonfinite")
                 residual=g-d-i
+                threshold=max(1.0,0.01*abs(d))
+                gate_rows.append((ba,t.isoformat(),mode,d,g,i,residual,threshold,abs(residual)<=threshold))
                 record["valid"]+=1;record["residual_mwh"]+=residual
                 record["absolute_residual_mwh"]+=abs(residual)
     expected=int((end-start).total_seconds()/3600)
@@ -78,6 +81,24 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
     (out/"eia930_hour_coverage.json").write_text(json.dumps(coverage,indent=2)+"\n")
     if any(len(times[ba])!=expected for ba in BAS) and not allow_incomplete:
         raise ValueError(f"Missing BA hour: {coverage}")
+    with (out/"eia930_hourly_calibration_gate.csv").open("w",newline="") as f:
+        w=csv.writer(f)
+        w.writerow(["ba","utc_hour_start","basis","demand_mw","net_generation_mw",
+                    "total_interchange_mw","balance_residual_mw","threshold_mw",
+                    "arithmetic_closure_pass","historical_calibration_certified"])
+        for item in gate_rows:w.writerow([*item,False])
+    byba={}
+    for ba in BAS:
+        matching=[r for r in gate_rows if r[0]==ba and r[2]=="raw"]
+        closed=sum(bool(r[-1]) for r in matching)
+        byba[ba]={"expected_hours":expected,"complete_reported_triplets":len(matching),
+                  "arithmetic_closing_hours":closed,
+                  "all_hours_reported":len(matching)==expected,
+                  "all_hours_arithmetic_close":len(matching)==expected and closed==expected,
+                  "calibration_certified":False}
+    (out/"eia930_ba_calibration_gate.json").write_text(json.dumps(byba,indent=2)+"\\n")
+    print("FULL-MONTH BA CALIBRATION GATE (never equate arithmetic closure with calibration):")
+    print(json.dumps(byba,indent=2))
     with (out/"eia930_raw_vs_adjusted_balance.csv").open("w",newline="") as f:
         w=csv.writer(f);w.writerow(["ba","basis","valid_hours","missing_hours","signed_residual_mwh","absolute_residual_mwh"])
         for ba in BAS:
