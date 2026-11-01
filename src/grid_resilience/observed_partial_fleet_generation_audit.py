@@ -66,11 +66,15 @@ def run(artifact, output, api_key):
     summary.to_csv(out/"partial_fleet_vs_observed_ng_summary.csv",index=False)
     (out/"manifest.json").write_text(json.dumps({
         "status":"diagnostic_only","eligible_arithmetic_gate_bas":["AZPS","SRP"],
-        "scope":"isolated BA, partial gas+wind generation, no storage",
+        "scope":"isolated BA, generic-thermal-proxy-labeled-gas plus wind generation, no storage",
+        "gas_label_is_verified_fuel":False,
+        "thermal_capacity_source":"GENERIC_THERMAL_PROXY from upstream observed-storage workflow",
+        "thermal_availability_assumption":"100 percent hourly availability",
         "reported_generation_is_entire_BA_not_same_fleet":True,
         "weather_scenarios_are_counterfactual":True,
         "not_a_full_fleet_error_metric":True,
         "historical_calibration_certified":False,"api_metadata":meta},indent=2)+"\\n")
+    print("CAUTION: gas label is a generic thermal proxy, NOT verified BA gas generation")
     print("PARTIAL FLEET MODELLED TECHNOLOGY MIX (not whole-BA composition):")
     print(by_technology.to_string(index=False))
     print(summary.to_string(index=False))
