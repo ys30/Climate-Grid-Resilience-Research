@@ -214,6 +214,42 @@ jobs:
           print(pd.DataFrame(rows).to_string(index=False))
           print('Capacity mismatch diagnostic only. Original SOC insensitivity remains scenario-specific.')
           PY
+      - name: Four-BA binding-energy counterfactual with actual reported storage capacities
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from grid_resilience.multi_technology_dispatch import solve
+          p=Path('outputs/soc_integration');out=p/'four_ba_binding_energy'
+          out.mkdir(parents=True,exist_ok=True)
+          conf=pd.read_csv(p/'storage_matrix/eff90_soc50/four_ba_storageunit_scenario.csv')
+          times=pd.date_range('2024-07-01',periods=4,freq='h',tz='UTC')
+          demand=[];avail=[];capacity=[]
+          for row in conf.itertuples(index=False):
+              capacity.append({'ba':row.ba,'technology':'gas','capacity_mw':0.,'marginal_cost':70.})
+              for t in times:
+                  demand.append({'timestamp':t,'ba':row.ba,'demand_mw':0.5*row.power_mw})
+                  avail.append({'timestamp':t,'ba':row.ba,'technology':'gas','availability_pu':1.})
+          pd.DataFrame(demand).to_csv(out/'demand.csv',index=False)
+          pd.DataFrame(avail).to_csv(out/'availability.csv',index=False)
+          pd.DataFrame(capacity).to_csv(out/'capacity.csv',index=False)
+          results=[]
+          for soc in (0.25,0.50,0.75):
+              storage=p/'storage_matrix'/f'eff90_soc{int(soc*100)}'/'four_ba_storageunit_scenario.csv'
+              result=solve(out/'demand.csv',out/'capacity.csv',out/'availability.csv',
+                           out/f'soc{int(soc*100)}',storage_csv=storage)
+              for row in result.itertuples(index=False):
+                  results.append({'initial_soc_fraction':soc,'ba':row.ba,
+                                  'shortfall_mwh':row.unserved_energy_mwh})
+          d=pd.DataFrame(results);d.to_csv(out/'binding_energy_soc_comparison.csv',index=False)
+          piv=d.pivot(index='ba',columns='initial_soc_fraction',values='shortfall_mwh')
+          if not ((piv[0.25] >= piv[0.50]-1e-4)&(piv[0.50]>=piv[0.75]-1e-4)).all():
+              raise AssertionError('Increasing available initial SOC worsened shortfall')
+          if not (piv[0.25]-piv[0.75]>1).all():
+              raise AssertionError('SOC effect was not identified in binding energy case')
+          print(piv.to_string())
+          print('Four BA reported energy/power; synthetic no-recharge stress, not empirical reliability.')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
