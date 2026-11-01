@@ -96,7 +96,14 @@ jobs:
       - name: Matched isolated-BA factorial counterfactual (no links)
         run: |
           mkdir -p inputs/hypothetical
-          printf 'from_ba,to_ba,capacity_mw\\n' > inputs/hypothetical/isolated_no_links.csv
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          path=Path('inputs/hypothetical/isolated_no_links.csv')
+          pd.DataFrame(columns=['from_ba','to_ba','capacity_mw']).to_csv(path,index=False)
+          assert set(pd.read_csv(path).columns)=={'from_ba','to_ba','capacity_mw'}
+          assert pd.read_csv(path).empty
+          PY
           python -m grid_resilience.research_run \
             --demand inputs/observed/demand.csv \
             --weather inputs/observed/weather.csv \
