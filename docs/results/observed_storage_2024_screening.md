@@ -213,3 +213,19 @@ For AZPS heat+wind, the daylight-only solar restriction increases modeled shorta
 | Heat+wind | 13,588.299 | 4,516.800 | 9,071.499 | 100% |
 
 SRP official included hydro nameplate is 94.1 MW; the hypothetical total energy budget is therefore 94.1 MW × 48 h = **4,516.8 MWh**. This is a modeled binding energy limit, not a reservoir measurement. Because shortages remain 0 MWh under the fully available other-fuels case, redispatch is apparently sufficient to cover the reduced hydro output; the precise compensating generator contributions must be checked separately before attributing them to any specific technology. AZPS has no eligible hydro in this filtered fleet. Do not interpret zero shortage sensitivity as absence of hydro operational effects.
+
+## CI-verified SRP hydro-budget redispatch by fuel
+
+[Workflow 41349280283](../../actions/runs/41349280283) directly compared individual generator-technology totals for the daylight-solar experiment before versus after imposing the illustrative 48-full-load-hour SRP hydro budget. The energy accounting check passed and modeled shortfall remained zero in both cases.
+
+| Technology | Baseline dispatch change MWh | Heat+wind dispatch change MWh |
+|---|---:|---:|
+| Hydro | −7,556.714 | −9,071.499 |
+| Coal | +4,445.462 | +4,592.844 |
+| Gas | +3,111.252 | +4,478.655 |
+| Nuclear | 0 | 0 |
+| Wind | 0 | 0 |
+| Solar | 0 | 0 |
+| **Sum across technologies** | **0** | **0** |
+
+Thus the constrained hydro energy is fully offset by coal and gas in this specific **model solution**. The exact substitutions reflect assumed marginal costs, fixed availability, official EIA-860 single-fuel candidate nameplates, and isolated-BA topology. They do not demonstrate measured dispatch, environmental emissions changes, or realistic availability under stress. Nuclear/solar/wind outputs staying constant is a model result, not evidence of their real operational inflexibility. Future historical comparisons require verified hourly output and unit status by technology.
