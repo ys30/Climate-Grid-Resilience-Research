@@ -12,6 +12,7 @@ on:
       - 'src/grid_resilience/eia923_page1_ba_hydro_audit.py'
       - 'src/grid_resilience/eia923_page1_ps_netgen.py'
       - 'src/grid_resilience/eia923_page1_hy_inventory.py'
+      - 'src/grid_resilience/eia923_page1_netgen_schema.py'
       - 'tests/test_eia923_page1_hy_inventory.py'
       - 'src/grid_resilience/eia923_page1_ps_reconciliation.py'
       - 'tests/test_eia923_page1_ps_reconciliation.py'
@@ -123,6 +124,10 @@ jobs:
       - name: Count original Page 1 hydro/pumped source rows by target BA
         run: |
           python -m grid_resilience.eia923_page1_ba_hydro_audit --archive outputs/eia923_intake/f923_2024.zip --output outputs/eia923_intake/page1_ba_hydro_audit.json
+      - name: Probe full Page 1 monthly net-generation columns
+        run: |
+          python -m grid_resilience.eia923_page1_netgen_schema --archive outputs/eia923_intake/f923_2024.zip --output outputs/eia923_intake/page1_netgen_schema.json
+          cat outputs/eia923_intake/page1_netgen_schema.json
       - name: Inventory Page 1 conventional hydro sources without assuming MWh
         run: |
           python -m grid_resilience.eia923_page1_hy_inventory --archive outputs/eia923_intake/f923_2024.zip --output outputs/eia923_intake
@@ -159,6 +164,7 @@ jobs:
             outputs/eia923_intake/hydro_pumped_month_evidence_manifest.json
             outputs/eia923_intake/page1_hydro_probe.json
             outputs/eia923_intake/page1_ba_hydro_audit.json
+            outputs/eia923_intake/page1_netgen_schema.json
             outputs/eia923_intake/page1_hy_source_rows_2024.csv
             outputs/eia923_intake/page1_hy_source_inventory_manifest.json
             outputs/eia923_intake/eia923_page1_ps_plant_month_net_mwh.csv
