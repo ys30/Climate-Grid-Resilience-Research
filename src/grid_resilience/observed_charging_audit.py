@@ -18,7 +18,7 @@ def run(artifact, output, api_key):
     assert len(times.unique())==168 and set(demand.ba)==set(BAS)
     observed=[]
     for kind in ("NG","TI"):
-        f,meta=fetch(BAS,start.isoformat(),end.isoformat(),api_key)
+        f,meta=fetch(BAS,start.isoformat(),end.isoformat(),api_key,data_type=kind)
         observed.append((kind,f,meta))
     records=demand[["timestamp","ba","demand_mw"]].copy()
     records["timestamp"]=pd.to_datetime(records.timestamp,utc=True)
