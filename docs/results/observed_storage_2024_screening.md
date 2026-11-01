@@ -202,3 +202,14 @@ For AZPS heat+wind, the daylight-only solar restriction increases modeled shorta
 | SRP | Heat+wind | 0 | 0 | 0 |
 
 **Interpretation:** In this narrowly defined, other-thermal-and-nuclear-always-available experiment, the budget makes no observable difference to aggregate modeled shortage. AZPS has no eligible hydro capacity in the included candidate set; SRP has 94.1 MW eligible hydro nameplate, but unchanged shortfall does **not** prove the hydro generation budget binds, or that hydro cannot influence reliability under different fuel, transmission, and demand assumptions. Verify simulated hydro generation and 48h utilization before asserting the constraint is active. Budget length and source availability are illustrative, not measured historical flows.
+
+## SRP hydro budget binding audit — verified
+
+[CI 41348711208](../../actions/runs/41348711208) verified that the illustrative 48-full-load-hour SRP hydro generation budget **does bind**, even though total modeled unserved energy remains zero in both scenarios.
+
+| Scenario | SRP hydro MWh without budget | SRP hydro MWh with budget | Suppressed hydro MWh | Budget fraction |
+|---|---:|---:|---:|---:|
+| Baseline | 12,073.514 | 4,516.800 | 7,556.714 | 100% |
+| Heat+wind | 13,588.299 | 4,516.800 | 9,071.499 | 100% |
+
+SRP official included hydro nameplate is 94.1 MW; the hypothetical total energy budget is therefore 94.1 MW × 48 h = **4,516.8 MWh**. This is a modeled binding energy limit, not a reservoir measurement. Because shortages remain 0 MWh under the fully available other-fuels case, redispatch is apparently sufficient to cover the reduced hydro output; the precise compensating generator contributions must be checked separately before attributing them to any specific technology. AZPS has no eligible hydro in this filtered fleet. Do not interpret zero shortage sensitivity as absence of hydro operational effects.
