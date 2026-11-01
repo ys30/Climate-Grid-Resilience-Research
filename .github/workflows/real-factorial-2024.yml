@@ -132,6 +132,18 @@ jobs:
               ba_shortage_hours_sum=('shortage_hours','sum'),
               max_ba_shortfall_mw=('peak_shortfall_mw','max'))
           metric.to_csv(out/'scenario_summary.csv',index=False)
+          expected={'baseline','heat_only','wind_only','heat_wind'}
+          assert set(metric.scenario)==expected and len(metric)==4
+          m=metric.set_index('scenario').modeled_unserved_energy_mwh
+          interaction=float(m['heat_wind']-m['heat_only']-m['wind_only']+m['baseline'])
+          import json
+          (out/'factorial_interaction_summary.json').write_text(json.dumps({
+              'interaction_mwh':interaction,
+              'scenario_shortfall_mwh':{k:float(v) for k,v in m.items()},
+              'interpretation':'nonadditive modeled shortage contrast; not calibrated causal effect',
+              'historical_calibration_certified':False
+          },indent=2)+'\\n')
+          print('Four-scenario total modeled interaction MWh:',round(interaction,3))
           lines=[
               '# Historical-input partial-fleet four-scenario screening results',
               '',
