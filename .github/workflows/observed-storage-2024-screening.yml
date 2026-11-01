@@ -104,6 +104,28 @@ jobs:
           print(m[keys+['unserved_energy_mwh_no_storage','unserved_energy_mwh_with_storage','screening_difference_mwh']].to_string(index=False))
           print('WARNING: This is an observed-INPUT, partially synthetic SYSTEM screening, not historical validated reliability.')
           PY
+      - name: Audit assumed initial SOC energy versus modeled shortfall relief
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import pandas as pd
+          p=Path('outputs/observed_storage_2024')
+          c=pd.read_csv(p/'storage.csv').set_index('ba')
+          d=pd.read_csv(p/'observed_input_storage_screening_comparison.csv')
+          d['assumed_initial_soc_mwh']=d.ba.map((c.energy_mwh*c.initial_soc_fraction).to_dict())
+          d['observed_storage_energy_capacity_mwh']=d.ba.map(c.energy_mwh.to_dict())
+          d['relief_over_initial_soc']=d.screening_difference_mwh/d.assumed_initial_soc_mwh.replace(0,float('nan'))
+          d['relief_exceeds_initial_soc']=d.screening_difference_mwh>d.assumed_initial_soc_mwh+1e-5
+          d.to_csv(p/'storage_initial_energy_diagnostic.csv',index=False)
+          report={'classification':'observed demand/weather, partially calibrated system; not historical shortage',
+                  'initial_soc_energy_is_assumed':True,
+                  'relief_cannot_be_attributed_to_initial_soc_alone_without_charge_discharge_audit':True,
+                  'charge_discharge_hourly_not_yet_verified':True,
+                  'scenario_count':int(len(d))}
+          (p/'storage_initial_energy_diagnostic_manifest.json').write_text(json.dumps(report,indent=2)+'\n')
+          print(d[['scenario','ba','screening_difference_mwh','assumed_initial_soc_mwh','relief_over_initial_soc','relief_exceeds_initial_soc']].to_string(index=False))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
