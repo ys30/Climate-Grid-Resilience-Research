@@ -1,0 +1,100 @@
+name: AZPS SRP EIA-860 official versus proxy capacity screening
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/azps-srp-official-capacity-comparison.yml'
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - uses: actions/download-artifact@v4
+        with:
+          name: July2024-observed-input-official-storage-screening
+          run-id: 41285853425
+          github-token: ${{ github.token }}
+          path: inputs/screening
+      - uses: actions/download-artifact@v4
+        with:
+          name: official-eia860-2024-schema
+          run-id: 41339744603
+          github-token: ${{ github.token }}
+          path: inputs/eia860
+      - name: Isolate official nameplate-only versus original proxy capacity contrast
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import pandas as pd
+          from grid_resilience.multi_technology_dispatch import solve
+          source=Path('inputs/screening')
+          out=Path('outputs/official_capacity_contrast');out.mkdir(parents=True,exist_ok=True)
+          official_files=list(Path('inputs/eia860').rglob('azps_srp_official_ba_capacity_candidates.csv'))
+          assert len(official_files)==1,official_files
+          official=pd.read_csv(official_files[0])
+          old=pd.read_csv(source/'capacity.csv')
+          for frame in (official,old):
+              assert not frame.duplicated(['ba','technology']).any()
+          assert {'AZPS','SRP'}==set(official.ba)
+          assert {'gas','wind'}==set(official.technology)
+          assert {'AZPS','SRP'}.issubset(set(old.ba))
+          base=old[old.ba.isin(['AZPS','SRP'])].copy()
+          assert len(base)==4
+          capacity=base.merge(official[['ba','technology','nameplate_capacity_mw','generator_count']],
+                              on=['ba','technology'],validate='one_to_one',indicator=True)
+          assert capacity._merge.eq('both').all()
+          capacity['proxy_capacity_mw']=capacity.capacity_mw
+          capacity['capacity_ratio_official_to_proxy']=capacity.nameplate_capacity_mw/capacity.proxy_capacity_mw.replace(0,float('nan'))
+          capacity[['ba','technology','proxy_capacity_mw','nameplate_capacity_mw','generator_count',
+                    'capacity_ratio_official_to_proxy']].to_csv(out/'capacity_contrast.csv',index=False)
+          assert capacity.nameplate_capacity_mw.gt(0).all()
+          newcap=capacity[['ba','technology','nameplate_capacity_mw','marginal_cost']].rename(columns={'nameplate_capacity_mw':'capacity_mw'})
+          newcap.to_csv(out/'official_capacity.csv',index=False)
+          base.to_csv(out/'proxy_capacity.csv',index=False)
+          for kind,cap in [('proxy',out/'proxy_capacity.csv'),('official_nameplate',out/'official_capacity.csv')]:
+              for scenario in ['baseline','heat_wind']:
+                  folder=source/'no_storage'/'scenario_inputs'/scenario
+                  d=pd.read_csv(folder/'demand.csv')
+                  a=pd.read_csv(folder/'availability.csv')
+                  d=d[d.ba.isin(['AZPS','SRP'])];a=a[a.ba.isin(['AZPS','SRP'])]
+                  d.to_csv(out/f'{scenario}_demand.csv',index=False)
+                  a.to_csv(out/f'{scenario}_availability.csv',index=False)
+                  dest=out/kind/scenario
+                  solve(out/f'{scenario}_demand.csv',cap,out/f'{scenario}_availability.csv',dest)
+          rows=[]
+          for kind in ['proxy','official_nameplate']:
+              for scenario in ['baseline','heat_wind']:
+                  folder=out/kind/scenario
+                  gen=pd.read_csv(folder/'generation_hourly.csv')
+                  shortage=pd.read_csv(folder/'shortfall_by_ba.csv')
+                  for ba in ['AZPS','SRP']:
+                      rows.append({'capacity_case':kind,'scenario':scenario,'ba':ba,
+                                   'modeled_generation_mwh':float(gen.loc[gen.ba.eq(ba),'generation_mwh'].sum()),
+                                   'modeled_shortfall_mwh':float(shortage.loc[shortage.ba.eq(ba),'unserved_energy_mwh'].iloc[0])})
+          res=pd.DataFrame(rows);assert len(res)==8
+          res.to_csv(out/'paired_capacity_screening_results.csv',index=False)
+          (out/'manifest.json').write_text(json.dumps({
+              'status':'nameplate_only_sensitivity_not_historically_calibrated',
+              'official_source':'EIA-860 2024 Plant BA Code / Operable single-fuel candidates',
+              'held_fixed':['demand','weather scenario','availability profiles','marginal costs','isolated BA topology','no storage'],
+              'gas_availability_still_assumed_100pct':True,
+              'incomplete_fleet_and_outages':True,
+              'historical_calibration_certified':False},indent=2)+'\\n')
+          print('CAPACITY CONTRAST');print(capacity.to_string(index=False))
+          print('PAIRED SCREENING');print(res.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AZPS-SRP-2024-OFFICIAL-VS-PROXY-CAPACITY-SCREENING
+          path: outputs/official_capacity_contrast
+          if-no-files-found: warn
