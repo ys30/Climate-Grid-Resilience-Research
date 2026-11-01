@@ -18,6 +18,7 @@ on:
       - 'src/grid_resilience/eia860_storage_power_energy_extract.py'
       - 'src/grid_resilience/eia860_storage_ba_join.py'
       - 'src/grid_resilience/eia860_storage_generator_key_audit.py'
+      - 'src/grid_resilience/eia860_storage_candidates.py'
 jobs:
   march-validation:
     runs-on: ubuntu-latest
@@ -62,6 +63,8 @@ jobs:
           cat outputs/bpat_july2024/eia860_four_ba_storage_summary.csv
           python -m grid_resilience.eia860_storage_generator_key_audit --storage outputs/bpat_july2024/eia860_four_ba_storage_matched.csv --operable outputs/bpat_july2024/eia860_2024_operable_generators.csv --output outputs/bpat_july2024
           cat outputs/bpat_july2024/eia860_storage_generator_key_audit_manifest.json
+          python -m grid_resilience.eia860_storage_candidates --source outputs/bpat_july2024/eia860_four_ba_storage_matched.csv --output outputs/bpat_july2024
+          cat outputs/bpat_july2024/four_ba_reported_storage_candidates_manifest.json
           python - <<'PY'
           import pandas as pd
           d=pd.read_csv('outputs/bpat_july2024/eia860_plant_ba_roster_attrition_by_fuel.csv')
@@ -120,6 +123,9 @@ jobs:
             outputs/bpat_july2024/eia860_four_ba_storage_match_manifest.json
             outputs/bpat_july2024/eia860_four_ba_storage_generator_key_audit.csv
             outputs/bpat_july2024/eia860_storage_generator_key_audit_manifest.json
+            outputs/bpat_july2024/four_ba_reported_storage_candidates.csv
+            outputs/bpat_july2024/four_ba_storage_incomplete.csv
+            outputs/bpat_july2024/four_ba_reported_storage_candidates_manifest.json
             outputs/bpat_july2024/storage_related_ba_roster.csv
             outputs/bpat_july2024/storage_field_evidence_gate.json
             outputs/bpat_july2024/eia860_plant_ba_roster_attrition_by_fuel.csv
