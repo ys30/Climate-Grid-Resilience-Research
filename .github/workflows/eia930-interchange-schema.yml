@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/eia930-interchange-schema.yml'
+      - 'src/grid_resilience/eia930_interchange_outlier_audit.py'
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -68,6 +69,10 @@ jobs:
           print('Official interchange reconciliation: all four BAs have 696 hourly comparisons')
           print('Absolute discrepancy MWh by BA:', dict(zip(p.ba,p.absolute_difference_mwh)))
           PY
+      - name: Audit BA-hour differences at source
+        run: |
+          python -m grid_resilience.eia930_interchange_outlier_audit --hourly outputs/eia930_interchange/bilateral_vs_balance_hourly.csv --output outputs/eia930_interchange
+          cat outputs/eia930_interchange/interchange_outlier_summary.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -78,4 +83,8 @@ jobs:
             outputs/eia930_interchange/bilateral_manifest.json
             outputs/eia930_interchange/bilateral_vs_balance_summary.csv
             outputs/eia930_interchange/bilateral_vs_balance_manifest.json
+            outputs/eia930_interchange/bilateral_vs_balance_hourly.csv
+            outputs/eia930_interchange/interchange_outlier_summary.csv
+            outputs/eia930_interchange/interchange_outlier_hours.csv
+            outputs/eia930_interchange/interchange_outlier_manifest.json
           if-no-files-found: warn
