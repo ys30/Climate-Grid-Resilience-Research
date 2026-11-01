@@ -18,7 +18,7 @@ def make_inputs(tmp_path,category=None):
         writer=csv.DictWriter(fp,fieldnames=fields);writer.writeheader()
         for i in range(744):
             t=datetime(2024,7,1,tzinfo=timezone.utc)+timedelta(hours=i+1)
-            row={"Balancing Authority":"BPAT","UTC Time at End of Hour":t.strftime("%m/%d/%Y %H:%M:%S"),A:"10",A+" (Adjusted)":"20",B:"",B+" (Adjusted)":""}
+            row={"Balancing Authority":"BPAT","UTC Time at End of Hour":t.strftime("%m/%d/%Y %I:%M:%S %p"),A:"10",A+" (Adjusted)":"20",B:"",B+" (Adjusted)":""}
             if category=="reported":row[B+" (Adjusted)"]="3"
             writer.writerow(row)
     return balance,capacity
