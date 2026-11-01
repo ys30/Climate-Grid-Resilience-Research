@@ -28,19 +28,36 @@ def join(eia923_csv, eia860_csv, output):
             frame[key]=frame[key].str.strip()
             if frame[key].eq("").any():
                 raise ValueError("Empty generator join key")
+    for col in ("reported_ba", "period"):
+        a[col] = a[col].fillna("").astype(str).str.strip()
+        if a[col].eq("").any():
+            raise ValueError(f"Blank EIA-923 {col}; refusing unassigned generation")
+    if not a.period.str.fullmatch(r"\\d{4}-(0[1-9]|1[0-2])").all():
+        raise ValueError("Invalid EIA-923 YYYY-MM period")
+    for col in ("energy_source_1", "prime_mover"):
+        b[col] = b[col].fillna("").astype(str).str.strip().str.upper()
+        if b[col].eq("").any():
+            raise ValueError(f"Blank EIA-860 {col}")
+    if "prime_mover" in a:
+        a["prime_mover"] = a["prime_mover"].fillna("").astype(str).str.strip().str.upper()
+        if a.prime_mover.eq("").any():
+            raise ValueError("Blank EIA-923 prime_mover")
     if b.duplicated(KEYS).any():
         raise ValueError("Ambiguous EIA-860 generator ID inventory")
     if a.duplicated(KEYS+["period"]).any():
         raise ValueError("Duplicate EIA-923 generator-month")
     # Refuse silent fuel guesses: use the externally reviewed EIA-860
     # predominant energy source, and flag all other/unknown combinations.
-    b["energy_source_1"]=b.energy_source_1.fillna("").astype(str).str.strip()
     joined=a.merge(b[KEYS+["energy_source_1","prime_mover"]],on=KEYS,how="left",
                    validate="many_to_one",indicator=True,suffixes=("_923","_860"))
     joined["technology"]=joined.energy_source_1.map(FUEL_TO_TECH)
+    # Pumped-storage units must not be treated as conventional hydro.
+    # A net injection can be negative for either technology, so sign is not a classifier.
+    ps = joined["prime_mover_860"].eq("PS") if "prime_mover_860" in joined else pd.Series(False, index=joined.index)
+    joined.loc[ps, "technology"] = pd.NA
     joined["mapping_status"]="matched"
     joined.loc[joined._merge.ne("both"),"mapping_status"]="unmatched_generator"
-    joined.loc[joined.technology.isna() & joined._merge.eq("both"),"mapping_status"]="unclassified_fuel"
+    joined.loc[joined.technology.isna() & joined._merge.eq("both"),"mapping_status"]="unclassified_fuel_or_pumped_storage"
     if "prime_mover_923" in joined and "prime_mover_860" in joined:
         mismatch=joined.prime_mover_923.fillna("").astype(str).str.strip().ne(
             joined.prime_mover_860.fillna("").astype(str).str.strip())
