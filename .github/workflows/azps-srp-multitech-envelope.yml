@@ -178,6 +178,35 @@ jobs:
           sensitivity.to_csv(out/'coal_nuclear_assumed_availability_sensitivity.csv',index=False)
           print('SRP COAL AND NUCLEAR ASSUMED AVAILABILITY STRESS')
           print(sensitivity[sensitivity.ba.eq('SRP')].to_string(index=False))
+          # Gas derating threshold under independently labeled coal/nuclear stress.
+          gas_rows=[]
+          for scenario in ('baseline','heat_wind'):
+              base=out/f'{scenario}_demand.csv'
+              source_av=pd.read_csv(out/f'{scenario}_solar_daylight_hydro_budget_48h_availability.csv')
+              for coal_pu,nuclear_pu in ((1.0,1.0),(0.5,0.75)):
+                  for gas_pu in (1.0,0.75,0.5,0.25,0.0):
+                      av=source_av.copy()
+                      av.loc[av.technology.eq('coal'),'availability_pu']=coal_pu
+                      av.loc[av.technology.eq('nuclear'),'availability_pu']=nuclear_pu
+                      av.loc[av.technology.eq('gas'),'availability_pu']=gas_pu
+                      label=f'coal_{int(coal_pu*100)}_nuclear_{int(nuclear_pu*100)}_gas_{int(gas_pu*100)}'
+                      path=out/f'{scenario}_{label}_availability.csv'
+                      av.to_csv(path,index=False)
+                      dest=out/'gas_derating_stress'/scenario/label
+                      solve(base,out/'official_multitech_hydro_budget_capacity.csv',path,dest)
+                      shortage=pd.read_csv(dest/'shortfall_by_ba.csv')
+                      for ba in ('AZPS','SRP'):
+                          gas_rows.append({'scenario':scenario,'ba':ba,'coal_availability_pu':coal_pu,
+                            'nuclear_availability_pu':nuclear_pu,'gas_availability_pu':gas_pu,
+                            'shortfall_mwh':float(shortage.loc[shortage.ba.eq(ba),'unserved_energy_mwh'].iloc[0])})
+          gas_sensitivity=pd.DataFrame(gas_rows)
+          assert len(gas_sensitivity)==40
+          gas_sensitivity.to_csv(out/'gas_derating_threshold_sensitivity.csv',index=False)
+          for (_,_,_),group in gas_sensitivity.groupby(['scenario','ba','coal_availability_pu']):
+              ordered=group.sort_values('gas_availability_pu')
+              assert (ordered.shortfall_mwh.diff().dropna()<=1e-3).all()
+          print('SRP GAS DERATING THRESHOLD SENSITIVITY (MODEL ONLY)')
+          print(gas_sensitivity[gas_sensitivity.ba.eq('SRP')].to_string(index=False))
           result=pd.DataFrame(rows)
           assert len(result)==16
           result.to_csv(out/'official_multitech_availability_envelope.csv',index=False)
