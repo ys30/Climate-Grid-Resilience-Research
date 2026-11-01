@@ -93,6 +93,39 @@ jobs:
             --network-variant partial_fleet_assumed_links_10pct \
             --link-evidence hypothetical \
             --output outputs/real_input_screening
+      - name: Matched isolated-BA factorial counterfactual (no links)
+        run: |
+          python -m grid_resilience.research_run \
+            --demand inputs/observed/demand.csv \
+            --weather inputs/observed/weather.csv \
+            --capacity inputs/inventory/outputs/eia860_v2/capacity.csv \
+            --event-id 2024-07-01_07_REAL_INPUTS_ISOLATED \
+            --network-variant partial_fleet_no_links \
+            --link-evidence none \
+            --output outputs/real_input_isolated
+      - name: Compare BA interactions across isolated and hypothetical network
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          root=Path('outputs')
+          expected={'baseline','heat_only','wind_only','heat_wind'}
+          frames=[]
+          for variant,folder in [('isolated','real_input_isolated'),('hypothetical_links','real_input_screening')]:
+              d=pd.read_csv(root/folder/'solved/factorial_dispatch.csv')
+              assert len(d)==16 and set(d.scenario)==expected and d.groupby('ba').scenario.nunique().eq(4).all()
+              p=d.pivot(index='ba',columns='scenario',values='unserved_energy_mwh')
+              c=p['heat_wind']-p['heat_only']-p['wind_only']+p['baseline']
+              for ba,v in c.items():
+                  frames.append({'ba':ba,'network_variant':variant,'interaction_mwh':float(v)})
+          out=pd.DataFrame(frames).pivot(index='ba',columns='network_variant',values='interaction_mwh')
+          out['link_minus_isolated_mwh']=out['hypothetical_links']-out['isolated']
+          out.loc['SYSTEM']=out.sum(numeric_only=True)
+          assert out.loc['SYSTEM','hypothetical_links']>0
+          target=root/'real_input_screening'/'paired_network_interaction_by_ba.csv'
+          out.reset_index().to_csv(target,index=False)
+          print(out.to_string())
+          PY
       - name: Verify matching, numerical completeness, and nonadditivity
         run: |
           python - <<'PY'
@@ -183,4 +216,5 @@ jobs:
           retention-days: 60
           path: |
             outputs/real_input_screening/
+            outputs/real_input_isolated/
             inputs/hypothetical/links.csv
