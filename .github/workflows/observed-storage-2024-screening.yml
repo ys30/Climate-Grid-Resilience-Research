@@ -180,7 +180,10 @@ jobs:
               discharge=pd.read_csv(root/'storage_discharge_mw.csv')
               shortfall=pd.read_csv(root/'shortfall_hourly_mw.csv')
               assert len(charge)==len(discharge)==len(shortfall)==168
-              assert charge.timestamp.equals(discharge.timestamp) and charge.timestamp.equals(shortfall.timestamp)
+              for frame in (charge,discharge,shortfall):
+                  frame['timestamp']=pd.to_datetime(frame['timestamp'],utc=True,errors='raise')
+                  assert frame.timestamp.is_unique and frame.timestamp.is_monotonic_increasing
+              assert charge.timestamp.equals(discharge.timestamp) and charge.timestamp.equals(shortfall.timestamp), 'Hourly time keys mismatch after UTC normalization'
               for ba in ('AZPS','BPAT','CISO','SRP'):
                   ch=charge[f'{ba}_battery'].astype(float)
                   dis=discharge[f'{ba}_battery'].astype(float)
