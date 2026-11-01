@@ -207,6 +207,39 @@ jobs:
               assert (ordered.shortfall_mwh.diff().dropna()<=1e-3).all()
           print('SRP GAS DERATING THRESHOLD SENSITIVITY (MODEL ONLY)')
           print(gas_sensitivity[gas_sensitivity.ba.eq('SRP')].to_string(index=False))
+          # Refine the first nonzero-shortfall interval on the tested grid.
+          fine_rows=[]
+          fine_hours=[]
+          for scenario in ('baseline','heat_wind'):
+              base=out/f'{scenario}_demand.csv'
+              source_av=pd.read_csv(out/f'{scenario}_solar_daylight_hydro_budget_48h_availability.csv')
+              for coal_pu,nuclear_pu,levels in ((1.0,1.0,(0.30,0.35,0.40,0.45)),(0.5,0.75,(0.55,0.60,0.65,0.70))):
+                  for gas_pu in levels:
+                      av=source_av.copy()
+                      for fuel,pu in (('coal',coal_pu),('nuclear',nuclear_pu),('gas',gas_pu)):
+                          av.loc[av.technology.eq(fuel),'availability_pu']=pu
+                      tag=f'{scenario}_c{int(coal_pu*100)}_n{int(nuclear_pu*100)}_g{int(gas_pu*100)}'
+                      ap=out/f'{tag}_availability.csv'
+                      av.to_csv(ap,index=False)
+                      dest=out/'fine_gas_threshold'/tag
+                      solve(base,out/'official_multitech_hydro_budget_capacity.csv',ap,dest)
+                      hourly=pd.read_csv(dest/'shortfall_hourly_mw.csv')
+                      assert len(hourly)==168
+                      val=hourly['SRP_shortfall_mw'].clip(lower=0)
+                      fine_rows.append({'scenario':scenario,'ba':'SRP','coal_availability_pu':coal_pu,
+                          'nuclear_availability_pu':nuclear_pu,'gas_availability_pu':gas_pu,
+                          'shortfall_mwh':float(val.sum()),'shortfall_hours':int((val>1e-5).sum()),
+                          'max_shortfall_mw':float(val.max())})
+                      for t,mw in zip(hourly.timestamp,val):
+                          if mw>1e-5:fine_hours.append({'case':tag,'timestamp':t,'shortfall_mw':float(mw)})
+          fine=pd.DataFrame(fine_rows)
+          assert len(fine)==16
+          fine.to_csv(out/'fine_gas_derating_threshold.csv',index=False)
+          pd.DataFrame(fine_hours,columns=['case','timestamp','shortfall_mw']).to_csv(out/'fine_gas_shortfall_hours.csv',index=False)
+          for (_,_,_),g in fine.groupby(['scenario','coal_availability_pu','nuclear_availability_pu']):
+              assert (g.sort_values('gas_availability_pu').shortfall_mwh.diff().dropna()<=1e-3).all()
+          print('SRP REFINED GAS DERATING AND SHORTFALL HOURS')
+          print(fine.to_string(index=False))
           result=pd.DataFrame(rows)
           assert len(result)==16
           result.to_csv(out/'official_multitech_availability_envelope.csv',index=False)
