@@ -14,6 +14,7 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
     times={ba:set() for ba in BAS}
     missing_fields={(ba,mode,col):0 for ba in BAS for mode,cols in sets.items() for col in cols}
     missing_field_rows=[]
+    missing_field_times={(ba,mode,col):set() for ba in BAS for mode,cols in sets.items() for col in cols}
     with Path(source).open(newline="",encoding="utf-8-sig") as f:
         reader=csv.DictReader(f)
         if not set(sum((list(x) for x in sets.values()),[])+["UTC Time at End of Hour","Balancing Authority"]).issubset(reader.fieldnames or []):
@@ -32,6 +33,7 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
                     for col,value in zip(cols,values):
                         if not value:
                             missing_fields[ba,mode,col]+=1
+                            missing_field_times[ba,mode,col].add(t)
                             missing_field_rows.append((ba,t.isoformat(),mode,col))
                     record["missing"]+=1
                     continue
@@ -49,6 +51,29 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
         for ba in BAS:
             for t in sorted(all_hours-times[ba]):w.writerow([ba,t.isoformat(),"absent_row","",""])
         for ba,t,mode,col in missing_field_rows:w.writerow([ba,t,"empty_field",mode,col])
+    # Compress contiguous UTC gaps to make source-file boundary and reporting
+    # outages visible without treating them as observations.
+    gaps=[]
+    for ba in BAS:
+        groups=[("absent_row","","",all_hours-times[ba])]
+        groups += [("empty_field",mode,col,missing_field_times[ba,mode,col])
+                   for mode,cols in sets.items() for col in cols]
+        for kind,mode,col,missing in groups:
+            begin=previous=None
+            for t in sorted(missing):
+                if previous is not None and t-previous!=timedelta(hours=1):
+                    gaps.append([ba,kind,mode,col,begin.isoformat(),(previous+timedelta(hours=1)).isoformat(),int((previous-begin).total_seconds()/3600)+1])
+                    begin=t
+                if begin is None:begin=t
+                previous=t
+            if previous is not None:
+                gaps.append([ba,kind,mode,col,begin.isoformat(),(previous+timedelta(hours=1)).isoformat(),int((previous-begin).total_seconds()/3600)+1])
+    with (out/"eia930_missing_contiguous_intervals.csv").open("w",newline="") as f:
+        w=csv.writer(f);w.writerow(["ba","missing_type","basis","field","utc_start_inclusive","utc_end_exclusive","hours"]);w.writerows(gaps)
+    print("MISSING INTERVALS (UTC; boundary convention requires source verification):")
+    for item in gaps:
+        if item[0] in ("BPAT","CISO") and (item[1]=="absent_row" or (item[2]=="raw" and item[3]=="Total Interchange (MW)")):
+            print(",".join(map(str,item)))
     coverage["field_missing_counts"]={ba:{mode:{col:missing_fields[ba,mode,col] for col in cols} for mode,cols in sets.items()} for ba in BAS}
     (out/"eia930_hour_coverage.json").write_text(json.dumps(coverage,indent=2)+"\n")
     if any(len(times[ba])!=expected for ba in BAS) and not allow_incomplete:
