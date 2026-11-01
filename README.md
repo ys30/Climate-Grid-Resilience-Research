@@ -38,3 +38,7 @@ The [historical input harmonizer](src/grid_resilience/historical_inputs.py) take
 - Paper B's storage investment economics is deliberately outside this paper's main contribution.
 
 [Source Portfolio C](https://github.com/ys30/Climate-Grid-Resilience-PyPSA) · [Technical summary of completed demonstration](https://github.com/ys30/Climate-Grid-Resilience-PyPSA/blob/main/reports/FINAL_TECHNICAL_SUMMARY.md)
+
+## EIA-923 2024 observed-source audit (not historical calibration)
+
+The [verified HY/PS audit](reports/EIA923_2024_HYDRO_PS_OBSERVATION_AUDIT.md) records 245 conventional hydro Page 1 plant/BA source rows and 120 pumped-storage measured plant-month net-generation rows. **HY monthly MWh are not yet established**, nor are full-fleet mapping, hourly availability or historical reliability calibration. These observations must not be interpreted as modeled outage validation.
