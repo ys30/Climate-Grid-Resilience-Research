@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/eia923-official-intake.yml'
       - 'src/grid_resilience/eia923_prime_mover_audit.py'
+      - 'src/grid_resilience/eia923_hydro_monthly_evidence.py'
       - 'src/grid_resilience/eia923_archive.py'
 jobs:
   intake:
@@ -106,6 +107,10 @@ jobs:
           print('Available columns:',list(p.columns))
           print(p.head(16).to_string(index=False))
           PY
+      - name: Extract distinct real hydro and pumped storage monthly evidence
+        run: |
+          python -m grid_resilience.eia923_hydro_monthly_evidence --input outputs/eia923_intake/ba_prime_mover_month_audit.csv --output outputs/eia923_intake
+          cat outputs/eia923_intake/hydro_pumped_month_evidence_manifest.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -118,4 +123,6 @@ jobs:
             outputs/eia923_intake/eia923_generator_month_net_mwh.csv
             outputs/eia923_intake/ba_prime_mover_month_audit.csv
             outputs/eia923_intake/prime_mover_audit_manifest.json
+            outputs/eia923_intake/hydro_pumped_month_evidence.csv
+            outputs/eia923_intake/hydro_pumped_month_evidence_manifest.json
           if-no-files-found: warn
