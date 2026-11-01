@@ -273,6 +273,22 @@ jobs:
                   'mean_demand_affected_mw':float(affected.demand_mw.mean()) if len(affected) else None,
                   'mean_demand_all_hours_mw':float(group.demand_mw.mean()),
                   'affected_hours_with_solar_proxy_zero':int((affected.assumed_solar_availability_pu<1e-8).sum())})
+          # Compare shortage versus non-shortage hours without conditioning the
+          # reference distribution on shortage; do not label this as causality.
+          assert len(context)==16*168
+          assert not context.duplicated(['case','timestamp']).any()
+          for entry in report:
+              group=context.loc[context.case.eq(entry['case'])]
+              affected=group.loc[group.shortfall_mw>1e-5]
+              unaffected=group.loc[group.shortfall_mw<=1e-5]
+              assert len(affected)+len(unaffected)==168
+              assert abs(float(group.shortfall_mw.sum())-entry['shortfall_mwh'])<1e-5
+              entry['mean_demand_nonshortfall_mw']=float(unaffected.demand_mw.mean()) if len(unaffected) else None
+              entry['mean_solar_proxy_shortfall_pu']=float(affected.assumed_solar_availability_pu.mean()) if len(affected) else None
+              entry['mean_solar_proxy_nonshortfall_pu']=float(unaffected.assumed_solar_availability_pu.mean()) if len(unaffected) else None
+              entry['shortfall_hour_fraction']=len(affected)/168.0
+              entry['solar_zero_fraction_all_hours']=float((group.assumed_solar_availability_pu<1e-8).mean())
+              entry['solar_zero_fraction_shortfall_hours']=float((affected.assumed_solar_availability_pu<1e-8).mean()) if len(affected) else None
           pd.DataFrame(report).to_csv(out/'fine_gas_hourly_vulnerability_summary.csv',index=False)
           print('SRP HOURLY SHORTFALL / DEMAND / ASSUMED SOLAR CONTEXT')
           print(pd.DataFrame(report).to_string(index=False))
