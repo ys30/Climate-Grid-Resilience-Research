@@ -13,6 +13,7 @@ on:
       - 'src/grid_resilience/bpat_observation_coverage_guard.py'
       - 'src/grid_resilience/bpat_cross_month_evidence_gate.py'
       - 'src/grid_resilience/eia860_plant_ba_capacity.py'
+      - 'src/grid_resilience/eia860_storage_field_evidence_gate.py'
 jobs:
   march-validation:
     runs-on: ubuntu-latest
@@ -46,6 +47,8 @@ jobs:
           python -m grid_resilience.eia860_plant_ba_capacity --archive outputs/bpat_july2024/eia8602024.zip --generators outputs/bpat_july2024/eia860_2024_operable_generators.csv --output outputs/bpat_july2024
           cat outputs/bpat_july2024/eia860_plant_ba_capacity_manifest.json
           cat outputs/bpat_july2024/eia860_plant_ba_roster_attrition_by_fuel.csv
+          python -m grid_resilience.eia860_storage_field_evidence_gate --roster outputs/bpat_july2024/eia860_plant_ba_roster_attrition_by_fuel.csv --output outputs/bpat_july2024
+          cat outputs/bpat_july2024/storage_field_evidence_gate.json
           python - <<'PY'
           import pandas as pd
           d=pd.read_csv('outputs/bpat_july2024/eia860_plant_ba_roster_attrition_by_fuel.csv')
@@ -96,6 +99,8 @@ jobs:
           name: bpat-july2024-independent-era5-wind
           if-no-files-found: warn
           path: |
+            outputs/bpat_july2024/storage_related_ba_roster.csv
+            outputs/bpat_july2024/storage_field_evidence_gate.json
             outputs/bpat_july2024/eia860_plant_ba_roster_attrition_by_fuel.csv
             outputs/bpat_july2024/eia860_plant_ba_capacity_manifest.json
             outputs/bpat_july2024/eia860_plant_ba_capacity_candidates.csv
