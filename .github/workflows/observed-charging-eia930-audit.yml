@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/observed-charging-eia930-audit.yml'
       - 'src/grid_resilience/observed_charging_audit.py'
+      - 'src/grid_resilience/eia930_hourly.py'
 jobs:
   audit:
     runs-on: ubuntu-24.04
