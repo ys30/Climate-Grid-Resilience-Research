@@ -12,6 +12,8 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
     totals={(ba,mode):{"valid":0,"missing":0,"residual_mwh":0.0,"absolute_residual_mwh":0.0}
             for ba in BAS for mode in sets}
     times={ba:set() for ba in BAS}
+    missing_fields={(ba,mode,col):0 for ba in BAS for mode,cols in sets.items() for col in cols}
+    missing_field_rows=[]
     with Path(source).open(newline="",encoding="utf-8-sig") as f:
         reader=csv.DictReader(f)
         if not set(sum((list(x) for x in sets.values()),[])+["UTC Time at End of Hour","Balancing Authority"]).issubset(reader.fieldnames or []):
@@ -27,6 +29,10 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
                 record=totals[ba,mode]
                 values=[row[c].strip() for c in cols]
                 if not all(values):
+                    for col,value in zip(cols,values):
+                        if not value:
+                            missing_fields[ba,mode,col]+=1
+                            missing_field_rows.append((ba,t.isoformat(),mode,col))
                     record["missing"]+=1
                     continue
                 d,g,i=map(float,values)
@@ -37,6 +43,13 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
     expected=int((end-start).total_seconds()/3600)
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
     coverage={ba:{"present_hours":len(times[ba]),"expected_hours":expected,"missing_hours":expected-len(times[ba])} for ba in BAS}
+    all_hours={start+timedelta(hours=h) for h in range(expected)}
+    with (out/"eia930_missing_hours.csv").open("w",newline="") as f:
+        w=csv.writer(f);w.writerow(["ba","utc_hour_start","missing_type","basis","field"])
+        for ba in BAS:
+            for t in sorted(all_hours-times[ba]):w.writerow([ba,t.isoformat(),"absent_row","",""])
+        for ba,t,mode,col in missing_field_rows:w.writerow([ba,t,"empty_field",mode,col])
+    coverage["field_missing_counts"]={ba:{mode:{col:missing_fields[ba,mode,col] for col in cols} for mode,cols in sets.items()} for ba in BAS}
     (out/"eia930_hour_coverage.json").write_text(json.dumps(coverage,indent=2)+"\n")
     if any(len(times[ba])!=expected for ba in BAS) and not allow_incomplete:
         raise ValueError(f"Missing BA hour: {coverage}")
