@@ -1,0 +1,112 @@
+name: Observed 2024 EIA-930 ERA5 with official storage capacity screening
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/observed-storage-2024-screening.yml'
+jobs:
+  solve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - uses: actions/download-artifact@v4
+        with:
+          name: MATCHED-OBSERVED-EIA930-ERA5-2024
+          run-id: 41102363806
+          github-token: ${{ github.token }}
+          path: inputs/observed
+      - uses: actions/download-artifact@v4
+        with:
+          name: EIA860-2024-FOUR-BA-EXPLICIT-PARTIAL-FLEET
+          run-id: 41107169962
+          github-token: ${{ github.token }}
+          path: inputs/inventory
+      - uses: actions/download-artifact@v4
+        with:
+          name: bpat-july2024-independent-era5-wind
+          run-id: 41278841674
+          github-token: ${{ github.token }}
+          path: inputs/storage
+      - name: Prepare observed demand/weather and partial-fleet generation and official storage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          obs=Path('inputs/observed')
+          out=Path('outputs/observed_storage_2024');out.mkdir(parents=True,exist_ok=True)
+          d=pd.read_csv(obs/'demand.csv')
+          w=pd.read_csv(obs/'weather.csv')
+          cap=list(Path('inputs/inventory').rglob('capacity.csv'))
+          storage=list(Path('inputs/storage').rglob('four_ba_storageunit_scenario.csv'))
+          assert len(cap)==len(storage)==1,(cap,storage)
+          c=pd.read_csv(cap[0])
+          s=pd.read_csv(storage[0])
+          assert set(d.ba)==set(w.ba)==set(c.ba)==set(s.ba)=={'AZPS','BPAT','CISO','SRP'}
+          assert {'timestamp','ba','temperature_c','wind_availability'}.issubset(w.columns)
+          assert {'gas_mw','wind_mw','capacity_source'}.issubset(c.columns)
+          assert c.capacity_source.astype(str).str.contains('GENERIC_THERMAL_PROXY').all()
+          assert d.groupby('ba').size().eq(168).all()
+          assert len(w)==len(d)==672
+          expected={'wind':0.,'gas':70.}
+          rows=[]
+          for x in c.itertuples(index=False):
+              rows.extend([{'ba':x.ba,'technology':'gas','capacity_mw':x.gas_mw,'marginal_cost':70.},
+                           {'ba':x.ba,'technology':'wind','capacity_mw':x.wind_mw,'marginal_cost':0.}])
+          pd.DataFrame(rows).to_csv(out/'capacity.csv',index=False)
+          a=[]
+          for x in w.itertuples(index=False):
+              a.extend([{'timestamp':x.timestamp,'ba':x.ba,'technology':'gas','availability_pu':1.},
+                        {'timestamp':x.timestamp,'ba':x.ba,'technology':'wind','availability_pu':x.wind_availability}])
+          pd.DataFrame(a).to_csv(out/'availability.csv',index=False)
+          d[['timestamp','ba','demand_mw']].to_csv(out/'demand.csv',index=False)
+          w[['timestamp','ba','temperature_c']].to_csv(out/'weather.csv',index=False)
+          s.to_csv(out/'storage.csv',index=False)
+          print('Observed EIA-930 load and ERA5 weather + EIA-860 capacity; gas fleet is PARTIAL and uncalibrated.')
+          PY
+      - name: Paired observed-input climate-screening factorial, no storage
+        run: |
+          python -m grid_resilience.multi_technology_factorial --demand outputs/observed_storage_2024/demand.csv --weather outputs/observed_storage_2024/weather.csv --capacity outputs/observed_storage_2024/capacity.csv --availability outputs/observed_storage_2024/availability.csv --output outputs/observed_storage_2024/no_storage --event-id July2024_observed_input_partial_fleet_no_links
+      - name: Paired observed-input climate-screening factorial, reported storage capacities with assumed operation
+        run: |
+          python -m grid_resilience.multi_technology_factorial --demand outputs/observed_storage_2024/demand.csv --weather outputs/observed_storage_2024/weather.csv --capacity outputs/observed_storage_2024/capacity.csv --availability outputs/observed_storage_2024/availability.csv --storage outputs/observed_storage_2024/storage.csv --output outputs/observed_storage_2024/with_storage --event-id July2024_observed_input_partial_fleet_no_links_storage_assumptions
+      - name: Compare matched scenarios, fail closed
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          p=Path('outputs/observed_storage_2024')
+          a=pd.read_csv(p/'no_storage/multi_technology_factorial_dispatch.csv')
+          b=pd.read_csv(p/'with_storage/multi_technology_factorial_dispatch.csv')
+          assert len(a)==len(b)==16
+          keys=['scenario','ba']
+          assert not a.duplicated(keys).any() and not b.duplicated(keys).any()
+          m=a.merge(b,on=keys,validate='one_to_one',suffixes=('_no_storage','_with_storage'))
+          assert len(m)==16 and m.unserved_energy_mwh_with_storage.ge(-1e-5).all()
+          m['screening_difference_mwh']=m.unserved_energy_mwh_no_storage-m.unserved_energy_mwh_with_storage
+          m.to_csv(p/'observed_input_storage_screening_comparison.csv',index=False)
+          manifest={'input_demand':'observed EIA-930 July 2024','input_weather':'ERA5 July 2024',
+            'generation_supply':'partial EIA-860 gas+wind proxy; not calibrated entire fleet',
+            'storage_capacity':'reported EIA-860 2024 storage energy/charge/discharge',
+            'storage_operations':'assumed 90pct per-direction efficiency and 50pct initial SOC',
+            'intertie_model':'isolated BAs; no historical network ratings',
+            'wind_derating':'hypothetical 30pct','heat_impact':'assumed +4C and 1.2pct/C above threshold',
+            'historical_outage_validation':False,'credible_reliability_prediction':False}
+          (p/'observed_storage_screening_manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          print(m[keys+['unserved_energy_mwh_no_storage','unserved_energy_mwh_with_storage','screening_difference_mwh']].to_string(index=False))
+          print('WARNING: This is an observed-INPUT, partially synthetic SYSTEM screening, not historical validated reliability.')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: July2024-observed-input-official-storage-screening
+          path: outputs/observed_storage_2024/
+          if-no-files-found: warn
