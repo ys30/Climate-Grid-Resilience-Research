@@ -1,0 +1,26 @@
+name: Storage initial SOC depletion stress test
+on:
+  push:
+    paths:
+      - '.github/workflows/storage-initial-soc-stress.yml'
+      - 'src/grid_resilience/storage_initial_soc_stress_test.py'
+      - 'src/grid_resilience/multi_technology_dispatch.py'
+  workflow_dispatch:
+jobs:
+  soc-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - name: Verify physically binding initial SOC with finite energy and no recharge
+        run: python -m grid_resilience.storage_initial_soc_stress_test --output outputs/initial_soc_stress
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: storage-initial-soc-binding-stress-test
+          path: outputs/initial_soc_stress/
+          if-no-files-found: warn
