@@ -4,7 +4,7 @@ from datetime import datetime,timedelta,timezone
 from pathlib import Path
 BAS=("CISO","AZPS","BPAT","SRP")
 FMT="%m/%d/%Y %I:%M:%S %p"
-def audit(source,output,month="2024-02"):
+def audit(source,output,month="2024-02",allow_incomplete=False):
     start=datetime.strptime(month,"%Y-%m").replace(tzinfo=timezone.utc)
     end=start.replace(year=start.year+1,month=1) if start.month==12 else start.replace(month=start.month+1)
     sets={"raw":("Demand (MW)","Net Generation (MW)","Total Interchange (MW)"),
@@ -35,15 +35,20 @@ def audit(source,output,month="2024-02"):
                 record["valid"]+=1;record["residual_mwh"]+=residual
                 record["absolute_residual_mwh"]+=abs(residual)
     expected=int((end-start).total_seconds()/3600)
-    if any(len(times[ba])!=expected for ba in BAS):raise ValueError("Missing BA hour")
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
+    coverage={ba:{"present_hours":len(times[ba]),"expected_hours":expected,"missing_hours":expected-len(times[ba])} for ba in BAS}
+    (out/"eia930_hour_coverage.json").write_text(json.dumps(coverage,indent=2)+"\\n")
+    if any(len(times[ba])!=expected for ba in BAS) and not allow_incomplete:
+        raise ValueError(f"Missing BA hour: {coverage}")
     with (out/"eia930_raw_vs_adjusted_balance.csv").open("w",newline="") as f:
         w=csv.writer(f);w.writerow(["ba","basis","valid_hours","missing_hours","signed_residual_mwh","absolute_residual_mwh"])
         for ba in BAS:
             for mode in sets:
                 a=totals[ba,mode]
                 w.writerow([ba,mode,a["valid"],a["missing"],a["residual_mwh"],a["absolute_residual_mwh"]])
-    result={"period":month,"hours_per_ba":expected,"raw_adjusted_arithmetic_only":True,
+    result={"period":month,"hours_per_ba":expected,"coverage":coverage,
+            "complete_ba_hour_coverage":all(len(times[ba])==expected for ba in BAS),
+            "incomplete_comparison_not_calibrated":True,"raw_adjusted_arithmetic_only":True,
             "adjusted_not_assumed_to_be_verified_physical_flows":True,
             "historical_calibration_certified":False}
     (out/"eia930_raw_vs_adjusted_manifest.json").write_text(json.dumps(result,indent=2)+"\n")
