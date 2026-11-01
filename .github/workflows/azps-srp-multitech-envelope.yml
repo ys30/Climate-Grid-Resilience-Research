@@ -335,7 +335,11 @@ jobs:
              'costs':'assumed marginal_cost by technology',
              'transmission':'none','storage':'none',
              'excluded_generator_capacity':'never added',
-             'historical_calibration_certified':False},indent=2)+'\\n')
+             'historical_calibration_certified':False},indent=2)+'\n')
+          # Parse back the artifact so malformed JSON fails CI immediately.
+          parsed=json.loads((out/'manifest.json').read_text())
+          assert parsed['historical_calibration_certified'] is False
+          assert parsed['solar_proxy_is_observed'] is False
           print('OFFICIAL MULTI-TECHNOLOGY EXTREME AVAILABILITY ENVELOPE')
           print(result.to_string(index=False))
           PY
