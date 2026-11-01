@@ -128,3 +128,25 @@ This model was built for isolated-BA stress screening and retains a partial, unv
 | SRP | Wind | 226.0 | 2 |
 
 The previous screening inputs were generic thermal proxy capacities labeled gas. These official values should not silently replace proxy inputs; first compare capacities in a separate explicit diagnostic scenario and review generator status, firm availability, omitted technologies, and BA operational boundaries. EIA-860 nameplate MW is not comparable directly with EIA-930 generated MWh without a validated dispatch and availability model.
+
+## Official EIA-860 versus generic-proxy capacity paired screening (verified)
+
+[CI run 41340432611](../../actions/runs/41340432611) successfully ran the separate AZPS/SRP 168-hour, isolated-BA, no-storage paired experiment, replacing **only gas-labeled generic thermal proxy MW** with EIA-860 2024 Plant-BA-attributed single-fuel **gas nameplate MW**. Wind MW, demand, scenario weather/availability, marginal costs and model topology were held fixed. This contrasts different technology scopes, not independently verified like-for-like gas fleets.
+
+| BA | Technology | Previous capacity MW | Official candidate nameplate MW | Candidate / previous |
+|---|---|---:|---:|---:|
+| AZPS | Gas-labeled thermal proxy → official gas | 4,818.8 | 2,471.2 | 0.5128 |
+| AZPS | Wind | 628.5 | 628.5 | 1.0000 |
+| SRP | Gas-labeled thermal proxy → official gas | 9,263.9 | 7,655.1 | 0.8263 |
+| SRP | Wind | 226.0 | 226.0 | 1.0000 |
+
+| BA | Scenario | Proxy shortfall MWh | Official-candidate shortfall MWh | Additional modeled shortfall MWh |
+|---|---|---:|---:|---:|
+| AZPS | Baseline | 154,772.620 | 529,594.640 | +374,822.020 |
+| AZPS | Heat+wind | 207,290.816 | 595,089.968 | +387,799.152 |
+| SRP | Baseline | 0 | 142.700 | +142.700 |
+| SRP | Heat+wind | 0 | 5,712.510 | +5,712.510 |
+
+**Interpretation gate.** This confirms large **capacity-definition sensitivity**, not empirically observed unserved energy. The original gas-labeled input was a generic thermal proxy; EIA-860 gas-only candidates are not necessarily the same fleet. The candidate capacity excludes other fuels and potentially excluded/multifuel units, while gas availability remains fixed at 100%, transmission imports are absent, and plant status/dispatch are uncalibrated. Neither the apparent change in AZPS generation mismatch nor the increased model shortfall establishes historical performance or avoided outages.
+
+**Next validation:** audit omitted fuel capacities and generator attrition by BA, then address actual hourly availability/operational status before using official candidates as a full replacement model.
