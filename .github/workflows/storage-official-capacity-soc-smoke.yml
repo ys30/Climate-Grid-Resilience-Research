@@ -148,6 +148,46 @@ jobs:
           print(summary.to_string(index=False))
           print('SYNTHETIC SOLVE ONLY: official reported storage capacities, assumed initial SOC and efficiencies.')
           PY
+      - name: Audit SOC sensitivity identifiability and actual starting SOC
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import numpy as np
+          import pandas as pd
+          p=Path('outputs/soc_integration')
+          d=pd.read_csv(p/'storage_sensitivity_nine_by_four.csv')
+          rows=[]
+          for weather,g in d.groupby('weather_scenario'):
+              at_soc=g.groupby('assumed_initial_soc_fraction').shortfall_with_storage_mwh.agg(['min','max'])
+              at_eff=g.groupby('assumed_efficiency_store').shortfall_with_storage_mwh.agg(['min','max'])
+              soc_span=float(g.groupby('assumed_initial_soc_fraction').shortfall_with_storage_mwh.mean().max()-
+                             g.groupby('assumed_initial_soc_fraction').shortfall_with_storage_mwh.mean().min())
+              eff_span=float(g.groupby('assumed_efficiency_store').shortfall_with_storage_mwh.mean().max()-
+                             g.groupby('assumed_efficiency_store').shortfall_with_storage_mwh.mean().min())
+              rows.append({'weather_scenario':weather,'soc_25_to_75_shortfall_span_mwh':soc_span,
+                           'eff_85_to_95_shortfall_span_mwh':eff_span,
+                           'soc_effect_identified_by_this_test':soc_span>1e-5})
+          audit=pd.DataFrame(rows)
+          audit.to_csv(p/'storage_sensitivity_identifiability_audit.csv',index=False)
+          conf=pd.read_csv(p/'storage_matrix/eff90_soc50/four_ba_storageunit_scenario.csv').set_index('ba')
+          witness=[]
+          for soc_fraction in [0.25,0.5,0.75]:
+              folder=p/'sensitivity_solves'/f'eff90_soc{int(soc_fraction*100)}'
+              for weather in ['baseline','heat_only','wind_only','heat_wind']:
+                  h=pd.read_csv(folder/'solved'/weather/'storage_soc_mwh.csv')
+                  for ba in conf.index:
+                      v=pd.to_numeric(h[f'{ba}_battery'],errors='raise')
+                      cap=float(conf.loc[ba,'energy_mwh'])
+                      if not (v.between(-1e-4,cap+1e-4).all()):raise AssertionError('SOC bounds violated')
+                      witness.append({'weather_scenario':weather,'ba':ba,'assumed_initial_soc_fraction':soc_fraction,
+                                      'first_snapshot_soc_mwh':float(v.iloc[0]),
+                                      'final_snapshot_soc_mwh':float(v.iloc[-1]),
+                                      'minimum_soc_mwh':float(v.min()),'maximum_soc_mwh':float(v.max())})
+          pd.DataFrame(witness).to_csv(p/'soc_sensitivity_trajectory_witness.csv',index=False)
+          print(audit.to_string(index=False))
+          print('SOC zero sensitivity is a model-identifiability limitation; not proof of empirically robust storage benefits.')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
