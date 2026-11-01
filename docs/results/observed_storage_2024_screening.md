@@ -43,3 +43,17 @@ Conservation (1 h intervals): SOC[t] = SOC[t-1] + 0.9·charge[t] − discharge[t
 4. Independently test observed outages and weather-impact coefficients rather than treating assumed weather derates as measured events.
 
 **No claim of completed historical calibration or observed reliability improvement is made here.**
+
+## Initial SOC sensitivity: why CISO simulated shortages stay unchanged
+
+In the 168-hour compound heat-and-wind screening, CISO's modeled unserved energy is 65,948.065 MWh at initial SOC 25%, 50% and 75%, despite distinct initial stored energy. The verified [SOC trajectory CI](../../actions/runs/41285126521) shows:
+
+| Assumed initial SOC | CISO cumulative charging (MWh) | CISO cumulative discharge (MWh) | Final stored energy (MWh) |
+|---|---:|---:|---:|
+| 25% | 203,107.939 | 173,526.026 | 0 |
+| 50% | 191,986.217 | 173,526.026 | 0 |
+| 75% | 180,864.495 | 173,526.026 | 0 |
+
+The charge difference of approximately 11,121.722 MWh per 25 percentage points in SOC, at an assumed 90% charging efficiency, replaces approximately 10,009.55 MWh of initial stored energy. Thus simulated delivery is unchanged because the optimization substitutes charging for initial energy; this is **a modeled flexibility effect**, not evidence that historical CISO had these charging opportunities. By contrast, AZPS and BPAT modeled shortfalls decrease by about 964.17 and 56.88 MWh, respectively, between initial SOC 25% and 75%, in each weather scenario. SRP has no modeled shortages in these cases.
+
+The [cross-SOC energy substitution CI](../../actions/workflows/observed-storage-2024-screening.yml) now checks the complete SOC energy identity (initial energy, charging, discharging, final energy) for each of the 16 BA-by-weather groups. Actual historical storage dispatch, market and intertie constraints remain unverified. 
