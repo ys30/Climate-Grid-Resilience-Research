@@ -1,0 +1,71 @@
+name: February 2024 empirical demand and capacity screening solve
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/feb2024-eia-capacity-screening.yml'
+      - 'src/grid_resilience/eia2024_feb_screening_inputs.py'
+      - 'tests/test_eia2024_feb_screening_inputs.py'
+jobs:
+  empirical-input-screening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install model and source extraction requirements
+        run: python -m pip install -e '.[model,dev]'
+      - name: Download official 2024 EIA datasets with immutable hash audit
+        run: |
+          mkdir -p outputs/feb2024_screening
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from urllib.request import urlopen,Request
+          sources={
+              "eia930":"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv",
+              "eia860":"https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip"}
+          out=Path("outputs/feb2024_screening");inventory={}
+          for label,url in sources.items():
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as f:
+                  data=f.read()
+                  resolved=f.geturl()
+              if len(data)<1000:raise ValueError("Official input unexpectedly small")
+              name="eia930.csv" if label=="eia930" else "eia860.zip"
+              (out/name).write_bytes(data)
+              inventory[label]={"source_url":url,"resolved_url":resolved,"sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data)}
+          (out/"official_source_hashes.json").write_text(json.dumps(inventory,indent=2)+"\n")
+          print(json.dumps(inventory,indent=2))
+          PY
+      - name: Extract observed EIA-930 February demand
+        run: |
+          python -m grid_resilience.eia930_six_month_demand --csv outputs/feb2024_screening/eia930.csv --output outputs/feb2024_screening
+      - name: Extract EIA-860 operable inventory and official BA capacity
+        run: |
+          python -m grid_resilience.eia860_generator_extract --archive outputs/feb2024_screening/eia860.zip --output outputs/feb2024_screening
+          python -m grid_resilience.eia860_plant_ba_capacity --archive outputs/feb2024_screening/eia860.zip --generators outputs/feb2024_screening/eia860_2024_operable_generators.csv --output outputs/feb2024_screening
+      - name: Build candidate screening inputs with explicit unverified assumptions
+        run: |
+          python -m grid_resilience.eia2024_feb_screening_inputs --demand outputs/feb2024_screening/hourly_ba_demand.csv --capacity outputs/feb2024_screening/eia860_plant_ba_capacity_candidates.csv --output outputs/feb2024_screening/inputs
+          cat outputs/feb2024_screening/inputs/screening_input_manifest.json
+      - name: Solve full February 2024 screening dispatch
+        run: |
+          python -m grid_resilience.multi_technology_dispatch --demand outputs/feb2024_screening/inputs/demand.csv --capacity outputs/feb2024_screening/inputs/capacity.csv --availability outputs/feb2024_screening/inputs/availability.csv --output outputs/feb2024_screening/solve
+          python -m grid_resilience.monthly_generation_gate --hourly outputs/feb2024_screening/solve/generation_hourly.csv --output outputs/feb2024_screening/monthly
+          cat outputs/feb2024_screening/monthly/monthly_coverage_manifest.json
+          cat outputs/feb2024_screening/solve/shortfall_by_ba.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: feb2024-empirical-demand-capacity-screening-NOT-CALIBRATED
+          path: |
+            outputs/feb2024_screening/official_source_hashes.json
+            outputs/feb2024_screening/hourly_ba_demand_manifest.json
+            outputs/feb2024_screening/eia860_plant_ba_capacity_manifest.json
+            outputs/feb2024_screening/inputs/screening_input_manifest.json
+            outputs/feb2024_screening/solve/shortfall_by_ba.csv
+            outputs/feb2024_screening/monthly/modeled_generation_full_months.csv
+            outputs/feb2024_screening/monthly/monthly_coverage_manifest.json
+          if-no-files-found: warn
