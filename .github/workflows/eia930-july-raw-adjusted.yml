@@ -32,6 +32,44 @@ jobs:
               'url':url,'resolved_url':redirect,'sha256':hashlib.sha256(payload).hexdigest(),
               'bytes':len(payload)},indent=2)+'\n')
           PY
+      - name: Check first seven July UTC hours across official H1 and H2 CSV
+        run: |
+          python - <<'PY'
+          import csv,json
+          from datetime import datetime,timedelta,timezone
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          root=Path('outputs/eia930_july_adjusted')
+          h1='https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv'
+          with urlopen(Request(h1,headers={'User-Agent':'Mozilla/5.0'}),timeout=150) as r:
+              payload=r.read()
+          assert len(payload)>1000
+          import hashlib
+          (root/'official_h1_boundary_provenance.json').write_text(json.dumps({
+              'url':h1,'sha256':hashlib.sha256(payload).hexdigest(),'bytes':len(payload)},indent=2)+'\\n')
+          h1path=root/'official_h1_temporary.csv'
+          h1path.write_bytes(payload)
+          bas=('CISO','AZPS','BPAT','SRP')
+          target={datetime(2024,7,1,tzinfo=timezone.utc)+timedelta(hours=h) for h in range(7)}
+          def extract(path):
+              found={ba:set() for ba in bas}
+              with path.open(newline='',encoding='utf-8-sig') as file:
+                  for row in csv.DictReader(file):
+                      ba=row['Balancing Authority'].strip()
+                      if ba not in found:continue
+                      stamp=datetime.strptime(row['UTC Time at End of Hour'],'%m/%d/%Y %I:%M:%S %p').replace(tzinfo=timezone.utc)-timedelta(hours=1)
+                      if stamp in target:found[ba].add(stamp)
+              return found
+          first=extract(h1path);second=extract(root/'official_2024_h2_balance.csv')
+          result={ba:{'h1_found_utc_hours':[t.isoformat() for t in sorted(first[ba])],
+                       'h2_found_utc_hours':[t.isoformat() for t in sorted(second[ba])],
+                       'combined_missing_utc_hours':[t.isoformat() for t in sorted(target-first[ba]-second[ba])]}
+                  for ba in bas}
+          (root/'h1_h2_july_boundary_audit.json').write_text(json.dumps(result,indent=2)+'\\n')
+          print('OFFICIAL H1/H2 UTC BOUNDARY AUDIT')
+          print(json.dumps(result,indent=2))
+          h1path.unlink()
+          PY
       - name: Compare raw and adjusted hourly accounting for July 2024
         run: |
           python -m grid_resilience.eia930_adjusted_balance_comparison \
