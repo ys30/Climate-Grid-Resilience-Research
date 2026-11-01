@@ -115,3 +115,16 @@ The inventory and dispatch are gas-dominated, but EIA-930 NG is an **all-technol
 Source-workflow audit (November 2026): `.github/workflows/observed-storage-2024-screening.yml` explicitly asserts that every capacity source contains `GENERIC_THERMAL_PROXY`, then maps `gas_mw` to a generator labeled `gas` with fixed 100% hourly availability and marginal cost 70. Therefore the reported *modeled gas* generation in the AZPS/SRP 168-hour decomposition is **dispatch from a generic thermal proxy**, NOT independently verified EIA-860 gas-only BA capacity or EIA-923 gas generation. Prior labels should be interpreted accordingly.
 
 This model was built for isolated-BA stress screening and retains a partial, unverified generation fleet. Replacing the proxy with real gas capacities requires an independently validated plant-to-BA crosswalk, generator status and technology classification; it must not be achieved by a post-hoc normalization coefficient. The observed-versus-modeled comparison is a **model scope diagnostic** rather than a calibration validation. The repository's `eia860_ba_capacity_gap.py` independently identifies missing verified full BA attribution.
+
+## Official 2024 EIA-860 BA-attributed nameplate capacity candidates
+
+[Verified EIA-860 intake CI 41339744603](../../actions/runs/41339744603) joins the official 2024 Plant BA code to operable generator rows and conservatively retains eligible single-fuel gas and wind units. These are nameplate candidates, **not** time-varying available output or a complete, historically calibrated BA fleet.
+
+| BA | Fuel class | Official nameplate MW | Generator rows |
+|---|---|---:|---:|
+| AZPS | Gas | 2,471.2 | 27 |
+| AZPS | Wind | 628.5 | 5 |
+| SRP | Gas | 7,655.1 | 53 |
+| SRP | Wind | 226.0 | 2 |
+
+The previous screening inputs were generic thermal proxy capacities labeled gas. These official values should not silently replace proxy inputs; first compare capacities in a separate explicit diagnostic scenario and review generator status, firm availability, omitted technologies, and BA operational boundaries. EIA-860 nameplate MW is not comparable directly with EIA-930 generated MWh without a validated dispatch and availability model.
