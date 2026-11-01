@@ -1,0 +1,46 @@
+name: July 2024 EIA-930 raw versus adjusted balance audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/eia930-july-raw-adjusted.yml'
+      - 'src/grid_resilience/eia930_adjusted_balance_comparison.py'
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - name: Download official EIA-930 2024 July-December CSV
+        run: |
+          mkdir -p outputs/eia930_july_adjusted
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          url='https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jul_Dec.csv'
+          with urlopen(Request(url,headers={'User-Agent':'Mozilla/5.0'}),timeout=150) as r:
+              payload=r.read();redirect=r.geturl()
+          assert len(payload)>1000
+          root=Path('outputs/eia930_july_adjusted')
+          (root/'official_2024_h2_balance.csv').write_bytes(payload)
+          (root/'official_file_provenance.json').write_text(json.dumps({
+              'url':url,'resolved_url':redirect,'sha256':hashlib.sha256(payload).hexdigest(),
+              'bytes':len(payload)},indent=2)+'\n')
+          PY
+      - name: Compare raw and adjusted hourly accounting for July 2024
+        run: |
+          python -m grid_resilience.eia930_adjusted_balance_comparison \
+            --csv outputs/eia930_july_adjusted/official_2024_h2_balance.csv \
+            --month 2024-07 --output outputs/eia930_july_adjusted
+          cat outputs/eia930_july_adjusted/eia930_raw_vs_adjusted_balance.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: JULY2024-EIA930-OFFICIAL-RAW-ADJUSTED-BALANCE
+          path: outputs/eia930_july_adjusted
+          if-no-files-found: warn
