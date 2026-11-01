@@ -163,3 +163,16 @@ The previous screening inputs were generic thermal proxy capacities labeled gas.
 The *other eligible* fuel categories are AZPS coal 1,636.2 MW, oil 123.8 MW, solar 919.5 MW; SRP coal 821.8 MW, hydro 94.1 MW, nuclear 4,209.6 MW, solar 1,674.9 MW. The excluded generator roster includes mixed/secondary-fuel units, storage and unmapped fuel classifications. Excluded nameplate MW is **not dispatch-ready**, and storage MW cannot be treated as incremental thermal generation.
 
 **Implication:** The paired gas+wind-only capacity stress test (CI 41340432611) provides a *scope sensitivity*, not a bound on full-system shortfall. In particular, omitting 4,209.6 MW of eligible SRP nuclear nameplate materially changes the modeled technology representation; nameplate magnitude does not demonstrate actual hourly nuclear dispatch. Priority before reliability calibration: technology-resolved generator selection, 2024 operational status, observed source-specific production, unit availability and BA imports. Do not directly add all excluded capacities or calibrate shortages using arbitrary scale factors.
+
+## CI-verified official multi-technology extreme availability sensitivity
+
+[Workflow 41345391809](../../actions/runs/41345391809) solves separate 168-hour AZPS/SRP EIA-860 single-fuel capacity scenarios. Existing gas 100% availability and wind profiles are held fixed; the additional coal, solar, nuclear, hydro and oil categories are assigned **either 0% or 100%** availability in every hour. Marginal costs are assumptions; no BA transfers or storage are modeled.
+
+| BA | Scenario | Other fuels 0%: simulated shortfall MWh | Other fuels 100%: simulated shortfall MWh | Difference MWh |
+|---|---|---:|---:|---:|
+| AZPS | Baseline | 529,594.640 | 118,554.611 | 411,040.029 |
+| AZPS | Heat+wind | 595,089.968 | 164,578.423 | 430,511.545 |
+| SRP | Baseline | 142.700 | 0 | 142.700 |
+| SRP | Heat+wind | 5,712.510 | 0 | 5,712.510 |
+
+These **extreme availability assumptions** are not empirically established upper/lower limits on actual outages or reliability, and must not be interpreted as physically feasible historical operation. The baseline AZPS residual even under 100% other-fuel availability may reflect missing imports, BA metering/reporting boundaries, excluded units, or structural assumptions rather than a historical supply shortage. A next empirical step must validate technology-specific hourly wind/solar output, nuclear operating status, hydro power and energy constraints and inter-BA flows independently before treating any run as calibrated.
