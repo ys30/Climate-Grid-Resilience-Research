@@ -111,6 +111,28 @@ jobs:
             --generators outputs/eia860_intake/eia860_2024_operable_generators.csv \
             --output outputs/eia860_intake
           cat outputs/eia860_intake/eia860_plant_ba_capacity_manifest.json
+      - name: Summarize official EIA-860 AZPS and SRP gas/wind BA capacity candidates
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path('outputs/eia860_intake')
+          frame=pd.read_csv(root/'eia860_plant_ba_capacity_candidates.csv')
+          required={'ba','technology','nameplate_capacity_mw','generator_count'}
+          if not required.issubset(frame):raise ValueError('Missing verified candidate capacity columns')
+          if frame.duplicated(['ba','technology']).any():raise ValueError('Duplicate BA technology')
+          subset=frame.loc[frame.ba.isin(['AZPS','SRP']) & frame.technology.isin(['gas','wind'])].copy()
+          if set(subset.ba)!= {'AZPS','SRP'}:raise ValueError('AZPS or SRP absent from EIA-860 BA map')
+          subset.sort_values(['ba','technology']).to_csv(root/'azps_srp_official_ba_capacity_candidates.csv',index=False)
+          manifest={'provenance':'EIA-860 2024 Plant BA code joined to Operable generator rows',
+                    'candidate_rows':len(subset),'included_technologies':sorted(subset.technology.unique().tolist()),
+                    'generic_thermal_proxy_replaced':False,'hourly_availability_verified':False,
+                    'historical_calibration_certified':False}
+          (root/'azps_srp_capacity_candidates_manifest.json').write_text(json.dumps(manifest,indent=2)+'\\n')
+          print('AZPS/SRP OFFICIAL EIA-860 CAPACITY CANDIDATES (NOT CALIBRATION)')
+          print(subset.to_string(index=False))
+          PY
       - name: Extract real EIA-860 wind plant coordinates and BA coverage
         run: |
           python -m grid_resilience.eia860_wind_plant_locations \
@@ -438,6 +460,8 @@ jobs:
             outputs/eia860_intake/eia860_ba_capacity_gap_manifest.json
             outputs/eia860_intake/eia860_plant_ba_capacity_candidates.csv
             outputs/eia860_intake/eia860_plant_ba_capacity_manifest.json
+            outputs/eia860_intake/azps_srp_official_ba_capacity_candidates.csv
+            outputs/eia860_intake/azps_srp_capacity_candidates_manifest.json
             outputs/eia860_intake/eia860_2024_wind_plant_locations.csv
             outputs/eia860_intake/bpat_wind_plant_sampling/bpat_era5_sampling_plan.csv
             outputs/eia860_intake/bpat_wind_plant_sampling/bpat_era5_sampling_plan_manifest.json
