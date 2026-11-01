@@ -19,6 +19,8 @@ def check(coverage_path,observation_manifest_path,output):
             "blank_split_wind_category_values_assumed_zero":count,
             "blank_category_assumption_present":count>0,
             "comparison_eligible_with_disclosure":True,
+            "complete_wind_category_reporting_verified":count==0,
+            "reported_category_subtotal_not_verified_total":count>0,
             "official_wind_category_semantics_verified":False,
             "publication_ready_validation":False,
             "zero_assumption_requires_source_confirmation":count>0,
