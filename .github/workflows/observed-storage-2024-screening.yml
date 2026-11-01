@@ -45,10 +45,10 @@ jobs:
           d=pd.read_csv(obs/'demand.csv')
           w=pd.read_csv(obs/'weather.csv')
           cap=list(Path('inputs/inventory').rglob('capacity.csv'))
-          storage=list(Path('inputs/storage').rglob('four_ba_storageunit_scenario.csv'))
-          assert len(cap)==len(storage)==1,(cap,storage)
+          storage_file=Path('inputs/storage/four_ba_storageunit_scenario.csv')
+          assert len(cap)==1 and storage_file.is_file(),(cap,storage_file)
           c=pd.read_csv(cap[0])
-          s=pd.read_csv(storage[0])
+          s=pd.read_csv(storage_file)
           assert set(d.ba)==set(w.ba)==set(c.ba)==set(s.ba)=={'AZPS','BPAT','CISO','SRP'}
           assert {'timestamp','ba','temperature_c','wind_availability'}.issubset(w.columns)
           assert {'gas_mw','wind_mw','capacity_source'}.issubset(c.columns)
