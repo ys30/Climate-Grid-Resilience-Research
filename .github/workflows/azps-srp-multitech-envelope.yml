@@ -34,6 +34,7 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
+          from math import sin,pi
           import pandas as pd
           from grid_resilience.multi_technology_dispatch import solve
           source=Path('inputs/screening')
@@ -64,7 +65,7 @@ jobs:
               originals=original.set_index(['timestamp','ba','technology']).availability_pu
               times=sorted(pd.to_datetime(demand.timestamp,utc=True).unique())
               assert len(times)==168
-              for bound in ('conservative_nonwind_zero','optimistic_other_fuels_full'):
+              for bound in ('conservative_nonwind_zero','solar_daylight_proxy_other_fuels_full','optimistic_other_fuels_full'):
                   profiles=[]
                   for record in cap.itertuples(index=False):
                       for t in times:
@@ -72,6 +73,11 @@ jobs:
                               pu=float(originals.loc[(t,record.ba,'wind')])
                           elif record.technology=='gas':
                               pu=1.0  # original gas assumption preserved
+                          elif record.technology=='solar' and bound=='solar_daylight_proxy_other_fuels_full':
+                              # Transparent July Arizona local-time illustrative shape;
+                              # not observed ERA5 irradiance or historical plant output.
+                              hour=(t.hour-7)%24
+                              pu=max(0.0,sin(pi*(hour-6)/13)) if 6<=hour<=19 else 0.0
                           else:
                               pu=0.0 if bound=='conservative_nonwind_zero' else 1.0
                           profiles.append({'timestamp':t.isoformat(),'ba':record.ba,
@@ -87,15 +93,19 @@ jobs:
                                    'generation_mwh':float(gen.loc[gen.ba.eq(ba),'generation_mwh'].sum()),
                                    'shortfall_mwh':float(short.loc[short.ba.eq(ba),'unserved_energy_mwh'].iloc[0])})
           result=pd.DataFrame(rows)
-          assert len(result)==8
+          assert len(result)==12
           result.to_csv(out/'official_multitech_availability_envelope.csv',index=False)
           pivot=result.pivot(index=['scenario','ba'],columns='availability_case',values='shortfall_mwh')
           assert (pivot['optimistic_other_fuels_full']<=pivot['conservative_nonwind_zero']+1e-4).all()
+          assert (pivot['optimistic_other_fuels_full']<=pivot['solar_daylight_proxy_other_fuels_full']+1e-4).all()
+          assert (pivot['solar_daylight_proxy_other_fuels_full']<=pivot['conservative_nonwind_zero']+1e-4).all()
           (out/'manifest.json').write_text(json.dumps({
              'study_type':'extreme_assumption_envelope_not_historical_replay',
              'fleet':'EIA-860 Plant BA 2024 Operable single-fuel technology candidates',
              'conservative_other_technologies':'all omitted non-gas/non-wind unavailable (0%)',
              'optimistic_other_technologies':'all omitted non-gas/non-wind fully available (100%)',
+             'intermediate_case':'other non-gas/non-wind fuels fully available; solar 0 at illustrative local night, daylight sin(pi*(hour-6)/13)',
+             'solar_proxy_is_observed':False,
              'gas':'100% assumed hourly available in BOTH envelopes',
              'wind':'existing matched scenario profile, fixed in BOTH envelopes',
              'costs':'assumed marginal_cost by technology',
