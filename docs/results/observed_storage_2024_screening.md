@@ -83,3 +83,16 @@ The [verified exact terminal-SOC workflow](../../actions/runs/41285853425) then 
 The endpoint constraints were confirmed against the solved SOC trajectories. Requiring energy at the end of the horizon raises modeled shortage in AZPS/BPAT but not CISO. Combined with the earlier cross-initial-SOC charge substitution result, this indicates substantial *modelled* charging flexibility for CISO in this partial-fleet, isolated-BA experiment. It **does not verify** actual historical charging opportunities. Terminal constraints also do not remove other baseline biases from missing generation, imports, interties or dispatch costs.
 
 **Methodological priority before a publication-grade reliability claim:** reconcile supply and charging availability with measured EIA-930 generation/interchange, examine daily net load and surplus generation by BA, then calibrate storage operation and outage constraints. Do not treat any of the modeled shortage reductions above as actual avoided outages or policy benefits.
+
+## EIA-930 observed net generation versus modeled partial gas+wind fleet (168h)
+
+[Verified CI run 41337609622](../../actions/runs/41337609622). These are **coverage/mismatch diagnostics, not calibration accuracy**: observed EIA-930 NG represents the entire BA and the counterfactual modeled dispatch has only partial gas+wind generators, with no transfers. Scenarios with heat/wind perturbations are not historical generation replay.
+
+| Scenario | BA | Observed EIA-930 NG MWh | Modeled partial fleet MWh | Modeled minus observed MWh | Hourly MAE MW | Descriptive WAPE |
+|---|---|---:|---:|---:|---:|---:|
+| Baseline | AZPS | 521,162 | 847,877 | +326,715 | 1,945 | 62.7% |
+| Baseline | SRP | 1,354,967 | 1,003,455 | −351,512 | 2,092 | 25.9% |
+| Heat+wind | AZPS | 521,162 | 843,486 | +322,324 | 1,919 | 61.8% |
+| Heat+wind | SRP | 1,354,967 | 1,051,583 | −303,384 | 1,806 | 22.4% |
+
+**Modeling gate:** The baseline AZPS simulation exceeds all-fuel observed net generation despite only representing a subset of technology types; review inventory scope, BA plant attribution, must-run assumptions, and dispatch economics before treating generation magnitudes as representative. The SRP deficit may reflect missing technologies/production, fleet scope or dispatch assumptions. None of these descriptive differences constitutes a calibrated complete-fleet validation. Historical reliability benefit and avoided outage claims remain unsupported.
