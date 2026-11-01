@@ -268,6 +268,38 @@ jobs:
               print(sc, c[['initial_soc_percent','first_hour_end_soc_mwh','final_soc_mwh','charge_mwh','discharge_mwh']].to_string(index=False))
           print('SOC invariance is scenario-specific: compare different charging, discharging and end-state patterns.')
           PY
+      - name: Cross-SOC energy substitution audit for reported storage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path('outputs/observed_storage_2024')
+          d=pd.read_csv(p/'soc_trajectory_sensitivity_explanation.csv')
+          c=pd.read_csv(p/'storage.csv').set_index('ba')
+          rows=[]
+          for (scenario,ba),part in d.groupby(['scenario','ba']):
+              part=part.set_index('initial_soc_percent')
+              assert set(part.index)=={25,50,75}
+              initial_delta=float(c.loc[ba,'energy_mwh'])*0.5
+              eta=float(c.loc[ba,'efficiency_store'])
+              charge_delta=float(part.loc[25,'charge_mwh']-part.loc[75,'charge_mwh'])
+              discharge_delta=float(part.loc[75,'discharge_mwh']-part.loc[25,'discharge_mwh'])
+              final_delta=float(part.loc[75,'final_soc_mwh']-part.loc[25,'final_soc_mwh'])
+              eta_d=float(c.loc[ba,'efficiency_dispatch'])
+              residual=initial_delta-eta*charge_delta-discharge_delta/eta_d-final_delta
+              assert abs(residual)<1e-3,(scenario,ba,residual)
+              rows.append({'scenario':scenario,'ba':ba,
+                'initial_energy_soc75_minus_soc25_mwh':initial_delta,
+                'charge_soc25_minus_soc75_mwh':charge_delta,
+                'discharge_soc75_minus_soc25_mwh':discharge_delta,
+                'final_soc75_minus_soc25_mwh':final_delta,
+                'energy_identity_residual_mwh':residual})
+          out=pd.DataFrame(rows)
+          assert len(out)==16
+          out.to_csv(p/'cross_soc_energy_substitution_audit.csv',index=False)
+          print(out.to_string(index=False))
+          print('Verified SOC substitution identity, not an observed grid charging capability.')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
