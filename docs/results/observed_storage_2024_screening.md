@@ -189,3 +189,16 @@ These **extreme availability assumptions** are not empirically established upper
 | SRP | Heat+wind | 5,712.510 | 0 | 0 |
 
 For AZPS heat+wind, the daylight-only solar restriction increases modeled shortage by **81,974.955 MWh** compared with impossible all-hours solar availability, holding the other optimistic assumptions fixed. This is *model timing sensitivity*, not a historical outage estimate. Nuclear/coal/hydro dispatch and BA interchange must be constrained with independently verified data before calibration or measured reliability claims.
+
+## Verified illustrative 48-full-load-hour hydro energy budget
+
+[CI run 41348287162](../../actions/runs/41348287162) added an assumed 48 full-load-hour cumulative hydro production budget over 168h, while preserving illustrative solar daylight availability and the other-fuels-fully-available assumptions.
+
+| BA | Scenario | Solar daylight without hydro budget: shortfall MWh | Same with 48h hydro budget: shortfall MWh | Difference MWh |
+|---|---|---:|---:|---:|
+| AZPS | Baseline | 184,696.512 | 184,696.512 | 0 |
+| AZPS | Heat+wind | 246,553.378 | 246,553.378 | 0 |
+| SRP | Baseline | 0 | 0 | 0 |
+| SRP | Heat+wind | 0 | 0 | 0 |
+
+**Interpretation:** In this narrowly defined, other-thermal-and-nuclear-always-available experiment, the budget makes no observable difference to aggregate modeled shortage. AZPS has no eligible hydro capacity in the included candidate set; SRP has 94.1 MW eligible hydro nameplate, but unchanged shortfall does **not** prove the hydro generation budget binds, or that hydro cannot influence reliability under different fuel, transmission, and demand assumptions. Verify simulated hydro generation and 48h utilization before asserting the constraint is active. Budget length and source availability are illustrative, not measured historical flows.
