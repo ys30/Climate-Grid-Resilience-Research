@@ -147,6 +147,37 @@ jobs:
               assert abs(x.loc[~x.technology.eq('hydro'),'generation_change_mwh'].sum()+hydro_delta)<1e-3
           print('HYDRO BUDGET TECHNOLOGY REDISPATCH (MWh; MODEL ONLY)')
           print(replacements.to_string(index=False))
+          # Independent SRP adequacy stress: reduce assumed coal/nuclear
+          # availability while keeping all other assumptions unchanged.
+          stress=[]
+          for scenario in ('baseline','heat_wind'):
+              base=out/f'{scenario}_demand.csv'
+              original=out/f'{scenario}_solar_daylight_hydro_budget_48h_availability.csv'
+              availability=pd.read_csv(original)
+              for coal_pu,nuclear_pu in ((1.0,1.0),(0.5,1.0),(1.0,0.75),(0.5,0.75)):
+                  a=availability.copy()
+                  a.loc[a.technology.eq('coal'),'availability_pu']=coal_pu
+                  a.loc[a.technology.eq('nuclear'),'availability_pu']=nuclear_pu
+                  label=f'coal_{int(coal_pu*100)}_nuclear_{int(nuclear_pu*100)}'
+                  path=out/f'{scenario}_{label}_availability.csv'
+                  a.to_csv(path,index=False)
+                  destination=out/'coal_nuclear_stress'/scenario/label
+                  solve(base,out/'official_multitech_hydro_budget_capacity.csv',path,destination)
+                  shortage=pd.read_csv(destination/'shortfall_by_ba.csv')
+                  gen=pd.read_csv(destination/'generation_hourly.csv')
+                  for ba in ('AZPS','SRP'):
+                      part=gen[gen.ba.eq(ba)]
+                      stress.append({'scenario':scenario,'ba':ba,'coal_availability_pu':coal_pu,
+                          'nuclear_availability_pu':nuclear_pu,
+                          'shortfall_mwh':float(shortage.loc[shortage.ba.eq(ba),'unserved_energy_mwh'].iloc[0]),
+                          'hydro_generation_mwh':float(part.loc[part.technology.eq('hydro'),'generation_mwh'].sum()),
+                          'coal_generation_mwh':float(part.loc[part.technology.eq('coal'),'generation_mwh'].sum()),
+                          'gas_generation_mwh':float(part.loc[part.technology.eq('gas'),'generation_mwh'].sum())})
+          sensitivity=pd.DataFrame(stress)
+          assert len(sensitivity)==16
+          sensitivity.to_csv(out/'coal_nuclear_assumed_availability_sensitivity.csv',index=False)
+          print('SRP COAL AND NUCLEAR ASSUMED AVAILABILITY STRESS')
+          print(sensitivity[sensitivity.ba.eq('SRP')].to_string(index=False))
           result=pd.DataFrame(rows)
           assert len(result)==16
           result.to_csv(out/'official_multitech_availability_envelope.csv',index=False)
