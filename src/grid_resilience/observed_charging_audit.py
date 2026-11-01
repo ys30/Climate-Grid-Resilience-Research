@@ -73,6 +73,29 @@ def run(artifact, output, api_key):
     diagnostic.to_csv(out/"eia930_interchange_sign_hypotheses.csv",index=False)
     print("ALTERNATIVE INTERCHANGE SIGN HYPOTHESES (not physical calibration):")
     print(diagnostic.to_string(index=False))
+    # Diagnose UTC timestamp alignment as an alternative cause of hourly
+    # nonclosure. Report every lag, never choose the best lag automatically.
+    alignment=[]
+    for ba,part in merged[merged.scenario=="baseline"].groupby("ba"):
+        part=part.sort_values("timestamp").reset_index(drop=True)
+        observed_times=pd.DatetimeIndex(part.timestamp)
+        assert (observed_times[1:]-observed_times[:-1]==pd.Timedelta(hours=1)).all()
+        for shift_hours in (-2,-1,0,1,2):
+            shifted=part.eia930_ti_mw.shift(shift_hours)
+            valid=shifted.notna()
+            residual=part.eia930_ng_mw[valid]-part.demand_mw[valid]-shifted[valid]
+            limit=part.demand_mw[valid].mul(0.01).clip(lower=1)
+            alignment.append({"ba":ba,"ti_shift_hours_diagnostic_only":shift_hours,
+                "paired_hours":int(valid.sum()),
+                "nonclosing_hours":int((residual.abs()>limit).sum()),
+                "absolute_residual_sum_mwh":float(residual.abs().sum()),
+                "signed_residual_sum_mwh":float(residual.sum()),
+                "mean_absolute_residual_mw":float(residual.abs().mean())})
+    lag=pd.DataFrame(alignment)
+    assert len(lag)==20
+    lag.to_csv(out/"eia930_interchange_timestamp_shift_diagnostic.csv",index=False)
+    print("UTC INTERCHANGE ALIGNMENT DIAGNOSTIC (do not shift source data for calibration):")
+    print(lag.to_string(index=False))
     summary.to_csv(out/"charging_vs_observed_eia930_summary.csv",index=False)
     assert len(summary)==16 and summary.hours.eq(168).all()
     print("Caution: TI sign convention and BA accounting closure must be independently verified.")
