@@ -1,0 +1,96 @@
+name: Official storage capacity PyPSA SOC integration proof
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/storage-official-capacity-soc-smoke.yml'
+      - 'src/grid_resilience/eia860_storage_assumption_matrix.py'
+      - 'src/grid_resilience/eia860_storageunit_scenario_bridge.py'
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - uses: actions/download-artifact@v4
+        with:
+          name: bpat-july2024-independent-era5-wind
+          run-id: 41278841674
+          github-token: ${{ github.token }}
+          path: inputs
+      - name: Prepare synthetic four-BA load and generation and official capacity storage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from grid_resilience.eia860_storageunit_scenario_bridge import build
+          from grid_resilience.eia860_storage_assumption_matrix import generate
+          paths=list(Path('inputs').rglob('four_ba_reported_storage_candidates.csv'))
+          assert len(paths)==1,paths
+          out=Path('outputs/soc_integration');out.mkdir(parents=True,exist_ok=True)
+          generate(paths[0],out/'storage_matrix')
+          bas=['AZPS','BPAT','CISO','SRP']
+          times=pd.date_range('2024-07-01',periods=24,freq='h',tz='UTC')
+          demand=[];weather=[];availability=[];capacity=[]
+          for ba in bas:
+              for t in times:
+                  hour=t.hour
+                  demand.append({'timestamp':t,'ba':ba,'demand_mw':100 if hour<12 else 135})
+                  weather.append({'timestamp':t,'ba':ba,'temperature_c':32 if hour>=12 else 25})
+                  availability.append({'timestamp':t,'ba':ba,'technology':'gas','availability_pu':1})
+                  availability.append({'timestamp':t,'ba':ba,'technology':'wind','availability_pu':0.6 if hour<12 else 0.2})
+              capacity.extend([{'ba':ba,'technology':'gas','capacity_mw':100,'marginal_cost':70},
+                               {'ba':ba,'technology':'wind','capacity_mw':35,'marginal_cost':0}])
+          for filename,rows in [('demand.csv',demand),('weather.csv',weather),
+                                ('availability.csv',availability),('capacity.csv',capacity)]:
+              pd.DataFrame(rows).to_csv(out/filename,index=False)
+          print('Storage power/energy: official EIA-860 records; demand, weather, generators and efficiencies are illustrative.')
+          PY
+      - name: Solve matched four-scenario PyPSA with and without official-capacity storage
+        run: |
+          python -m grid_resilience.multi_technology_factorial \\
+            --demand outputs/soc_integration/demand.csv \\
+            --weather outputs/soc_integration/weather.csv \\
+            --availability outputs/soc_integration/availability.csv \\
+            --capacity outputs/soc_integration/capacity.csv \\
+            --event-id synthetic_24h_no_storage \\
+            --output outputs/soc_integration/no_storage
+          python -m grid_resilience.multi_technology_factorial \\
+            --demand outputs/soc_integration/demand.csv \\
+            --weather outputs/soc_integration/weather.csv \\
+            --availability outputs/soc_integration/availability.csv \\
+            --capacity outputs/soc_integration/capacity.csv \\
+            --storage outputs/soc_integration/storage_matrix/eff90_soc50/four_ba_storageunit_scenario.csv \\
+            --event-id synthetic_24h_official_capacity_assumed_soc \\
+            --output outputs/soc_integration/with_storage
+      - name: Assert storage solve and summarize without historical adequacy claims
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path('outputs/soc_integration')
+          a=pd.read_csv(p/'no_storage/multi_technology_factorial_dispatch.csv')
+          b=pd.read_csv(p/'with_storage/multi_technology_factorial_dispatch.csv')
+          assert len(a)==len(b)==16
+          assert set(a.scenario)==set(b.scenario)=={'baseline','heat_only','wind_only','heat_wind'}
+          x=a.groupby('scenario').unserved_energy_mwh.sum()
+          y=b.groupby('scenario').unserved_energy_mwh.sum()
+          summary=pd.DataFrame({'no_storage_mwh':x,'official_capacity_assumed_soc_mwh':y})
+          summary['difference_mwh']=summary.no_storage_mwh-summary.official_capacity_assumed_soc_mwh
+          summary.to_csv(p/'storage_integration_comparison.csv')
+          print(summary.to_string())
+          print('THIS IS A SYNTHETIC OPERATING TEST, NOT HISTORICAL SHORTFALL VALIDATION')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eia860-storage-capacity-synthetic-soc-integration
+          path: outputs/soc_integration/
+          if-no-files-found: warn
