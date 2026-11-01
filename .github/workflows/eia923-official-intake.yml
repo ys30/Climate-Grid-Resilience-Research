@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/eia923-official-intake.yml'
+      - 'src/grid_resilience/eia923_prime_mover_audit.py'
       - 'src/grid_resilience/eia923_archive.py'
 jobs:
   intake:
@@ -97,6 +98,14 @@ jobs:
           python -m grid_resilience.eia923_prime_mover_audit \
             --input outputs/eia923_intake/eia923_generator_month_net_mwh.csv \
             --output outputs/eia923_intake
+      - name: Print independently extracted hydropower monthly evidence
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          p=pd.read_csv('outputs/eia923_intake/ba_prime_mover_month_audit.csv')
+          print('Available columns:',list(p.columns))
+          print(p.head(16).to_string(index=False))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
