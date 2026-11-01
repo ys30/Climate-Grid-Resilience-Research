@@ -96,6 +96,20 @@ def audit(source,output,month="2024-02",allow_incomplete=False):
                   "all_hours_reported":len(matching)==expected,
                   "all_hours_arithmetic_close":len(matching)==expected and closed==expected,
                   "calibration_certified":False}
+    # Restrict the next empirical comparison to arithmetic-screened BAs;
+    # this is NOT an authorization to call their modeled fleets calibrated.
+    eligible=[ba for ba,v in byba.items()
+              if v["all_hours_reported"] and v["all_hours_arithmetic_close"]]
+    eligibility={"basis":"raw EIA-930 D/NG/TI within hourly arithmetic tolerance",
+                 "eligible_for_generation_input_comparison":eligible,
+                 "excluded":{ba:("missing D/NG/TI hours" if not v["all_hours_reported"]
+                                 else "hourly arithmetic nonclosure")
+                             for ba,v in byba.items() if ba not in eligible},
+                 "calibration_certified":False,
+                 "model_fleet_and_transmission_not_validated":True}
+    (out/"eia930_followup_eligibility.json").write_text(json.dumps(eligibility,indent=2)+"\\n")
+    print("FOLLOW-UP COMPARISON ELIGIBILITY (not model calibration):")
+    print(json.dumps(eligibility,indent=2))
     (out/"eia930_ba_calibration_gate.json").write_text(json.dumps(byba,indent=2)+"\\n")
     print("FULL-MONTH BA CALIBRATION GATE (never equate arithmetic closure with calibration):")
     print(json.dumps(byba,indent=2))
