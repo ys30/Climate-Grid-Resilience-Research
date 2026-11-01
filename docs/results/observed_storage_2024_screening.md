@@ -176,3 +176,16 @@ The *other eligible* fuel categories are AZPS coal 1,636.2 MW, oil 123.8 MW, sol
 | SRP | Heat+wind | 5,712.510 | 0 | 5,712.510 |
 
 These **extreme availability assumptions** are not empirically established upper/lower limits on actual outages or reliability, and must not be interpreted as physically feasible historical operation. The baseline AZPS residual even under 100% other-fuel availability may reflect missing imports, BA metering/reporting boundaries, excluded units, or structural assumptions rather than a historical supply shortage. A next empirical step must validate technology-specific hourly wind/solar output, nuclear operating status, hydro power and energy constraints and inter-BA flows independently before treating any run as calibrated.
+
+## CI-verified illustrative daylight-only solar sensitivity
+
+[CI run 41347960481](../../actions/runs/41347960481) compared an intermediate daylight-only solar availability proxy against two extreme 168-hour availability cases. All other additional single-fuel technologies remain at 100% availability in the daylight proxy case, gas remains 100% available, and wind uses the existing scenario profile. The solar shape is a deterministic illustrative clock-time sine profile, **not** ERA5 irradiance, observed photovoltaic production, or a verified geographic solar capacity factor.
+
+| BA | Scenario | Other fuels unavailable shortfall MWh | Daylight solar proxy shortfall MWh | All additional fuels always available shortfall MWh |
+|---|---|---:|---:|---:|
+| AZPS | Baseline | 529,594.640 | 184,696.512 | 118,554.611 |
+| AZPS | Heat+wind | 595,089.968 | 246,553.378 | 164,578.423 |
+| SRP | Baseline | 142.700 | 0 | 0 |
+| SRP | Heat+wind | 5,712.510 | 0 | 0 |
+
+For AZPS heat+wind, the daylight-only solar restriction increases modeled shortage by **81,974.955 MWh** compared with impossible all-hours solar availability, holding the other optimistic assumptions fixed. This is *model timing sensitivity*, not a historical outage estimate. Nuclear/coal/hydro dispatch and BA interchange must be constrained with independently verified data before calibration or measured reliability claims.
