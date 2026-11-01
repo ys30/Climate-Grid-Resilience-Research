@@ -53,6 +53,12 @@ jobs:
           cap=fleet[['ba','technology','nameplate_capacity_mw']].rename(columns={'nameplate_capacity_mw':'capacity_mw'})
           cap['marginal_cost']=cap.technology.map(costs)
           cap.to_csv(out/'official_multitech_capacity.csv',index=False)
+          # SRP hydro energy cap is an illustrative 48 full-load-hour budget
+          # per 168h window, NOT inferred actual reservoir inflows.
+          cap_budget=cap.copy()
+          cap_budget['energy_budget_mwh']=float('nan')
+          cap_budget.loc[cap_budget.technology.eq('hydro'),'energy_budget_mwh']=cap_budget.loc[cap_budget.technology.eq('hydro'),'capacity_mw']*48.0
+          cap_budget.to_csv(out/'official_multitech_hydro_budget_capacity.csv',index=False)
           rows=[]
           for scenario in ('baseline','heat_wind'):
               src=source/'no_storage'/'scenario_inputs'/scenario
@@ -65,7 +71,7 @@ jobs:
               originals=original.set_index(['timestamp','ba','technology']).availability_pu
               times=sorted(pd.to_datetime(demand.timestamp,utc=True).unique())
               assert len(times)==168
-              for bound in ('conservative_nonwind_zero','solar_daylight_proxy_other_fuels_full','optimistic_other_fuels_full'):
+              for bound in ('conservative_nonwind_zero','solar_daylight_proxy_other_fuels_full','solar_daylight_hydro_budget_48h','optimistic_other_fuels_full'):
                   profiles=[]
                   for record in cap.itertuples(index=False):
                       for t in times:
@@ -73,7 +79,7 @@ jobs:
                               pu=float(originals.loc[(t,record.ba,'wind')])
                           elif record.technology=='gas':
                               pu=1.0  # original gas assumption preserved
-                          elif record.technology=='solar' and bound=='solar_daylight_proxy_other_fuels_full':
+                          elif record.technology=='solar' and bound in ('solar_daylight_proxy_other_fuels_full','solar_daylight_hydro_budget_48h'):
                               # Transparent July Arizona local-time illustrative shape;
                               # not observed ERA5 irradiance or historical plant output.
                               hour=(t.hour-7)%24
@@ -85,7 +91,8 @@ jobs:
                   av=out/f'{scenario}_{bound}_availability.csv'
                   pd.DataFrame(profiles).to_csv(av,index=False)
                   dest=out/bound/scenario
-                  solve(out/f'{scenario}_demand.csv',out/'official_multitech_capacity.csv',av,dest)
+                  capacity_file=(out/'official_multitech_hydro_budget_capacity.csv' if bound=='solar_daylight_hydro_budget_48h' else out/'official_multitech_capacity.csv')
+                  solve(out/f'{scenario}_demand.csv',capacity_file,av,dest)
                   gen=pd.read_csv(dest/'generation_hourly.csv')
                   short=pd.read_csv(dest/'shortfall_by_ba.csv')
                   for ba in ('AZPS','SRP'):
@@ -93,12 +100,13 @@ jobs:
                                    'generation_mwh':float(gen.loc[gen.ba.eq(ba),'generation_mwh'].sum()),
                                    'shortfall_mwh':float(short.loc[short.ba.eq(ba),'unserved_energy_mwh'].iloc[0])})
           result=pd.DataFrame(rows)
-          assert len(result)==12
+          assert len(result)==16
           result.to_csv(out/'official_multitech_availability_envelope.csv',index=False)
           pivot=result.pivot(index=['scenario','ba'],columns='availability_case',values='shortfall_mwh')
           assert (pivot['optimistic_other_fuels_full']<=pivot['conservative_nonwind_zero']+1e-4).all()
           assert (pivot['optimistic_other_fuels_full']<=pivot['solar_daylight_proxy_other_fuels_full']+1e-4).all()
           assert (pivot['solar_daylight_proxy_other_fuels_full']<=pivot['conservative_nonwind_zero']+1e-4).all()
+          assert (pivot['solar_daylight_hydro_budget_48h']+1e-4>=pivot['solar_daylight_proxy_other_fuels_full']).all()
           (out/'manifest.json').write_text(json.dumps({
              'study_type':'extreme_assumption_envelope_not_historical_replay',
              'fleet':'EIA-860 Plant BA 2024 Operable single-fuel technology candidates',
@@ -106,6 +114,8 @@ jobs:
              'optimistic_other_technologies':'all omitted non-gas/non-wind fully available (100%)',
              'intermediate_case':'other non-gas/non-wind fuels fully available; solar 0 at illustrative local night, daylight sin(pi*(hour-6)/13)',
              'solar_proxy_is_observed':False,
+             'hydro_budget_case':'solar-daylight case plus hydro generation limited to 48 full-load hours over 168h',
+             'hydro_energy_budget_is_observed':False,
              'gas':'100% assumed hourly available in BOTH envelopes',
              'wind':'existing matched scenario profile, fixed in BOTH envelopes',
              'costs':'assumed marginal_cost by technology',
