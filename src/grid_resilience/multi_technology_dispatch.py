@@ -149,6 +149,10 @@ def solve(demand_csv, capacity_csv, availability_csv, output_dir, links_csv=None
     out.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(out / "generation_hourly.csv", index=False)
     pd.DataFrame(shortages).to_csv(out / "shortfall_by_ba.csv", index=False)
+    shortfall_hourly=pd.DataFrame({"timestamp":[t.isoformat() for t in times]})
+    for ba in bas:
+        shortfall_hourly[f"{ba}_shortfall_mw"] = n.generators_t.p[f"{ba}_shortfall"].to_numpy()
+    shortfall_hourly.to_csv(out / "shortfall_hourly_mw.csv", index=False)
     if storage is not None:
         soc = n.storage_units_t.state_of_charge.copy()
         soc.index.name = "timestamp"
