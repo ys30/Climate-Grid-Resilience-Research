@@ -59,6 +59,15 @@ jobs:
             --bilateral outputs/eia930_interchange/bilateral_hourly_totals.csv \
             --output outputs/eia930_interchange
           cat outputs/eia930_interchange/bilateral_vs_balance_summary.csv
+          cat outputs/eia930_interchange/bilateral_vs_balance_manifest.json
+          python - <<'PY'
+          import pandas as pd
+          p=pd.read_csv('outputs/eia930_interchange/bilateral_vs_balance_summary.csv')
+          assert len(p)==4 and set(p.ba)=={'AZPS','BPAT','CISO','SRP'}
+          assert (p.hours==696).all(), 'Official February bilateral coverage incomplete'
+          print('Official interchange reconciliation: all four BAs have 696 hourly comparisons')
+          print('Absolute discrepancy MWh by BA:', dict(zip(p.ba,p.absolute_difference_mwh)))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
