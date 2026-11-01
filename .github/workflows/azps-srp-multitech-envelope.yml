@@ -289,6 +289,17 @@ jobs:
               entry['shortfall_hour_fraction']=len(affected)/168.0
               entry['solar_zero_fraction_all_hours']=float((group.assumed_solar_availability_pu<1e-8).mean())
               entry['solar_zero_fraction_shortfall_hours']=float((affected.assumed_solar_availability_pu<1e-8).mean()) if len(affected) else None
+              # High-load classification uses each case's entire 168-hour
+              # demand distribution, never the shortage-only subset.
+              high_load_threshold=float(group.demand_mw.quantile(0.75))
+              high_load=group.demand_mw>=high_load_threshold
+              entry['demand_p75_all_hours_mw']=high_load_threshold
+              entry['high_load_fraction_all_hours']=float(high_load.mean())
+              entry['high_load_fraction_shortfall_hours']=float((affected.demand_mw>=high_load_threshold).mean()) if len(affected) else None
+              entry['shortfall_mwh_high_load_hours']=float(group.loc[high_load,'shortfall_mw'].sum())
+              entry['shortfall_mwh_solar_zero_hours']=float(group.loc[group.assumed_solar_availability_pu<1e-8,'shortfall_mw'].sum())
+              assert entry['shortfall_mwh_high_load_hours']<=entry['shortfall_mwh']+1e-5
+              assert entry['shortfall_mwh_solar_zero_hours']<=entry['shortfall_mwh']+1e-5
           pd.DataFrame(report).to_csv(out/'fine_gas_hourly_vulnerability_summary.csv',index=False)
           print('SRP HOURLY SHORTFALL / DEMAND / ASSUMED SOLAR CONTEXT')
           print(pd.DataFrame(report).to_string(index=False))
