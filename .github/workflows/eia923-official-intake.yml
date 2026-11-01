@@ -13,6 +13,8 @@ on:
       - 'src/grid_resilience/eia923_page1_ps_netgen.py'
       - 'src/grid_resilience/eia923_page1_hy_inventory.py'
       - 'src/grid_resilience/eia923_page1_netgen_schema.py'
+      - 'src/grid_resilience/eia923_page1_hy_netgen.py'
+      - 'tests/test_eia923_page1_hy_netgen.py'
       - 'tests/test_eia923_page1_hy_inventory.py'
       - 'src/grid_resilience/eia923_page1_ps_reconciliation.py'
       - 'tests/test_eia923_page1_ps_reconciliation.py'
@@ -132,6 +134,10 @@ jobs:
         run: |
           python -m grid_resilience.eia923_page1_hy_inventory --archive outputs/eia923_intake/f923_2024.zip --output outputs/eia923_intake
           cat outputs/eia923_intake/page1_hy_source_inventory_manifest.json
+      - name: Extract official Page 1 conventional hydro monthly net MWh
+        run: |
+          python -m grid_resilience.eia923_page1_hy_netgen --archive outputs/eia923_intake/f923_2024.zip --output outputs/eia923_intake
+          cat outputs/eia923_intake/page1_hy_netgen_manifest.json
       - name: Extract measured Page 1 energy-storage PS net MWh
         run: |
           python -m grid_resilience.eia923_page1_ps_netgen --archive outputs/eia923_intake/f923_2024.zip --output outputs/eia923_intake
@@ -167,6 +173,8 @@ jobs:
             outputs/eia923_intake/page1_netgen_schema.json
             outputs/eia923_intake/page1_hy_source_rows_2024.csv
             outputs/eia923_intake/page1_hy_source_inventory_manifest.json
+            outputs/eia923_intake/page1_hy_plant_month_net_mwh.csv
+            outputs/eia923_intake/page1_hy_netgen_manifest.json
             outputs/eia923_intake/eia923_page1_ps_plant_month_net_mwh.csv
             outputs/eia923_intake/eia923_page1_ps_manifest.json
             outputs/eia923_intake/page1_ps_ba_month_2024.csv
