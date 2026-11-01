@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/real-factorial-2024.yml'
+      - 'src/grid_resilience/multi_technology_factorial.py'
 jobs:
   solve:
     runs-on: ubuntu-24.04
@@ -108,6 +109,16 @@ jobs:
           assert m['intertie_evidence_classification']=='hypothetical'
           assert m['input_validation']['hours']==168
           print(d.groupby('scenario').unserved_energy_mwh.sum().to_string())
+          PY
+      - name: Verify 2024 source-backed real-input run does not assert historical calibration
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('outputs/real_input_screening/run_manifest.json').read_text())
+          assert m['intertie_evidence_classification']=='hypothetical'
+          assert m['input_validation']['hours']==168
+          print('2024 observed-input run remains explicitly uncalibrated')
           PY
       - name: Produce auditable modeled factorial summary
         run: |
