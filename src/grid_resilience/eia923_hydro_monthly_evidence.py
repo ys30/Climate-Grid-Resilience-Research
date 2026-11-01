@@ -22,7 +22,7 @@ def summarize(path,output):
           "historical_hourly_hydro_availability_calibrated":False,
           "blocked_reason":"Current Page 4 extractor contains no HY/PS rows. Need hydro-specific source coverage before numerical hydro calibration."}
         pd.DataFrame(columns=[*df.columns]).to_csv(out/"hydro_pumped_month_evidence.csv",index=False)
-        (out/"hydro_pumped_month_evidence_manifest.json").write_text(json.dumps(report,indent=2)+"\\n")
+        (out/"hydro_pumped_month_evidence_manifest.json").write_text(json.dumps(report,indent=2)+"\n")
         return report
     if sub.duplicated(["reported_ba","prime_mover","period"]).any():raise ValueError("Duplicate monthly category")
     sub.net_generation_mwh=pd.to_numeric(sub.net_generation_mwh,errors="raise")
