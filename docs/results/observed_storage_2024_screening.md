@@ -57,3 +57,29 @@ In the 168-hour compound heat-and-wind screening, CISO's modeled unserved energy
 The charge difference of approximately 11,121.722 MWh per 25 percentage points in SOC, at an assumed 90% charging efficiency, replaces approximately 10,009.55 MWh of initial stored energy. Thus simulated delivery is unchanged because the optimization substitutes charging for initial energy; this is **a modeled flexibility effect**, not evidence that historical CISO had these charging opportunities. By contrast, AZPS and BPAT modeled shortfalls decrease by about 964.17 and 56.88 MWh, respectively, between initial SOC 25% and 75%, in each weather scenario. SRP has no modeled shortages in these cases.
 
 The [cross-SOC energy substitution CI](../../actions/workflows/observed-storage-2024-screening.yml) now checks the complete SOC energy identity (initial energy, charging, discharging, final energy) for each of the 16 BA-by-weather groups. Actual historical storage dispatch, market and intertie constraints remain unverified. 
+
+## Verified model-horizon and terminal-SOC boundary sensitivity
+
+The [verified 72/120/168-hour workflow](../../actions/runs/41285666070) solved nested prefixes of the same compound heat-and-wind scenario, retaining the same assumed initial SOC and partial generation model. Modelled storage-related reductions in residual shortages (MWh) were:
+
+| BA | 72 h | 120 h | 168 h |
+|---|---:|---:|---:|
+| AZPS | 2,975.660 | 4,843.724 | 6,308.265 |
+| BPAT | 360.075 | 587.595 | 604.499 |
+| CISO | 56,960.224 | 106,560.571 | 173,526.026 |
+| SRP | 0 | 0 | 0 |
+
+These are different-length *modelled* windows, not directly comparable historical outage events. CISO's average relief per modelled day increased across these windows, while BPAT's decreased. Do not extrapolate linearly across durations.
+
+The [verified exact terminal-SOC workflow](../../actions/runs/41285853425) then solved the **same full 168-hour compound scenario** with an initial SOC assumption of 50% and alternative **exact** terminal SOC levels (not merely lower bounds):
+
+| BA | Unrestricted terminal SOC, modelled shortage MWh | Exactly 25% terminal SOC | Exactly 50% terminal SOC |
+|---|---:|---:|---:|
+| AZPS | 200,982.551 | 201,464.636 | 201,946.721 |
+| BPAT | 256,694.270 | 256,722.710 | 256,751.150 |
+| CISO | 65,948.065 | 65,948.065 | 65,948.065 |
+| SRP | 0 | 0 | 0 |
+
+The endpoint constraints were confirmed against the solved SOC trajectories. Requiring energy at the end of the horizon raises modeled shortage in AZPS/BPAT but not CISO. Combined with the earlier cross-initial-SOC charge substitution result, this indicates substantial *modelled* charging flexibility for CISO in this partial-fleet, isolated-BA experiment. It **does not verify** actual historical charging opportunities. Terminal constraints also do not remove other baseline biases from missing generation, imports, interties or dispatch costs.
+
+**Methodological priority before a publication-grade reliability claim:** reconcile supply and charging availability with measured EIA-930 generation/interchange, examine daily net load and surplus generation by BA, then calibrate storage operation and outage constraints. Do not treat any of the modeled shortage reductions above as actual avoided outages or policy benefits.
