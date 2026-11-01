@@ -18,7 +18,7 @@ def test_all_three_months_flag_amplitude_mismatch_without_calibration(tmp_path):
     assert report["calibration_certified"] is False
     result=pd.read_csv(tmp_path/"out"/"bpat_cross_month_shape_amplitude_audit.csv")
     assert result.shape[0]==3
-    assert result.shape_amplitude_mismatch.all()
+    assert result['shape_vs_amplitude_mismatch'].all()
 
 def test_duplicate_months_rejected(tmp_path):
     p=fixture(tmp_path)
