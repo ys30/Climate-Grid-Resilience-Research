@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/observed-storage-2024-screening.yml'
+      - 'src/grid_resilience/multi_technology_dispatch.py'
 jobs:
   solve:
     runs-on: ubuntu-24.04
@@ -332,6 +333,41 @@ jobs:
           piv.reset_index().to_csv(out/'compound_horizon_72_120_168h_comparison.csv',index=False)
           print(piv.to_string())
           print('Horizon sensitivity is a nested-prefix scenario test, not an observed outage validation.')
+          PY
+      - name: Test enforced non-depleted end-of-week storage SOC in compound event
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from grid_resilience.multi_technology_dispatch import solve
+          p=Path('outputs/observed_storage_2024')
+          inputs=p/'with_storage'/'scenario_inputs'/'heat_wind'
+          root=p/'terminal_soc_sensitivity';root.mkdir(exist_ok=True)
+          conf=pd.read_csv(p/'storage.csv')
+          assert conf.initial_soc_fraction.eq(0.5).all()
+          records=[]
+          for label,target in (('unconstrained',None),('terminal_25pct',0.25),('terminal_50pct',0.5)):
+              config=conf.copy()
+              if target is not None: config['terminal_soc_fraction']=target
+              c=root/f'{label}_storage.csv';config.to_csv(c,index=False)
+              output=root/label
+              r=solve(inputs/'demand.csv',p/'capacity.csv',inputs/'availability.csv',output,storage_csv=c)
+              end=pd.read_csv(output/'storage_soc_mwh.csv')
+              for item in r.itertuples(index=False):
+                  final=float(end[f'{item.ba}_battery'].iloc[-1])
+                  if target is not None:
+                      cap=float(conf.set_index('ba').loc[item.ba,'energy_mwh'])
+                      assert abs(final-target*cap)<1e-3,(label,item.ba,final,target*cap)
+                  records.append({'variant':label,'ba':item.ba,
+                                  'shortfall_mwh':item.unserved_energy_mwh,'final_soc_mwh':final})
+          d=pd.DataFrame(records)
+          assert len(d)==12
+          pivot=d.pivot(index='ba',columns='variant',values='shortfall_mwh')
+          assert (pivot.terminal_50pct+1e-3>=pivot.unconstrained).all()
+          assert (pivot.terminal_25pct+1e-3>=pivot.unconstrained).all()
+          d.to_csv(root/'terminal_soc_comparison.csv',index=False)
+          print(d.to_string(index=False))
+          print('Exact terminal SOC targets are experimental boundary assumptions, not observed operation.')
           PY
       - uses: actions/upload-artifact@v4
         if: always()
