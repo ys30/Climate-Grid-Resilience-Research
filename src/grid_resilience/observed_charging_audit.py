@@ -42,13 +42,21 @@ def run(artifact, output, api_key):
     assert len(merged)==2688
     merged["charging_with_reported_generation_below_demand"]=(merged.simulated_charge_mw>1e-5)&(merged.reported_generation_minus_demand_mw<0)
     merged.to_csv(out/"observed_generation_interchange_vs_simulated_charge_hourly.csv",index=False)
+    merged["reported_balance_residual_absolute_mw"]=merged.reported_balance_residual_if_ti_outflow_mw.abs()
+    merged["reported_balance_closure_flag"]=merged.reported_balance_residual_absolute_mw<=merged.demand_mw.mul(0.01).clip(lower=1)
+    merged["charging_during_nonclosure"]= (merged.simulated_charge_mw>1e-5)&(~merged.reported_balance_closure_flag)
     summary=merged.groupby(["scenario","ba"]).agg(
         hours=("timestamp","size"),modeled_charge_mwh=("simulated_charge_mw","sum"),
         observed_net_generation_mwh=("eia930_ng_mw","sum"),
         observed_demand_mwh=("demand_mw","sum"),
         observed_total_interchange_mwh=("eia930_ti_mw","sum"),
-        charging_hours_when_ng_below_demand=("charging_with_reported_generation_below_demand","sum")).reset_index()
+        charging_hours_when_ng_below_demand=("charging_with_reported_generation_below_demand","sum"),
+        hours_balance_nonclosure=("reported_balance_closure_flag",lambda x:int((~x).sum())),
+        charging_hours_during_balance_nonclosure=("charging_during_nonclosure","sum"),
+        max_absolute_reported_balance_residual_mw=("reported_balance_residual_absolute_mw","max")).reset_index()
     summary.to_csv(out/"charging_vs_observed_eia930_summary.csv",index=False)
+    assert len(summary)==16 and summary.hours.eq(168).all()
+    print("Caution: TI sign convention and BA accounting closure must be independently verified.")
     manifest={"source":"EIA-930 API NG and TI for same UTC hour and BA",
         "time_window_utc":[start.isoformat(),end.isoformat()],
         "interpretation":"Diagnostic comparison only. NG minus demand is NOT available charging headroom; observed imports, intra-hour operations and market conditions are not represented by this isolated BA optimization.",
