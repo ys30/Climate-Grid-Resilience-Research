@@ -1,0 +1,68 @@
+name: BPAT February-trained March-July hourly holdout
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bpat-cross-month-scale-holdout.yml'
+      - 'src/grid_resilience/bpat_cross_month_scale_holdout.py'
+jobs:
+  holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - uses: actions/download-artifact@v4
+        with:
+          name: bpat-era5-29-plant-capacity-weighted
+          run-id: 41246004728
+          github-token: ${{ github.token }}
+          path: inputs/feb
+      - uses: actions/download-artifact@v4
+        with:
+          name: bpat-march2024-independent-era5-wind
+          run-id: 41246004794
+          github-token: ${{ github.token }}
+          path: inputs/march
+      - uses: actions/download-artifact@v4
+        with:
+          name: bpat-july2024-independent-era5-wind
+          run-id: 41270995765
+          github-token: ${{ github.token }}
+          path: inputs/july
+      - name: Locate exactly one validated hourly record per source
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          out={}
+          for month in ('feb','march','july'):
+              paths=list(Path('inputs',month).rglob('bpat_29site_proxy_vs_reported.csv'))
+              if len(paths)!=1:raise ValueError(f'{month}: expected one hourly artifact, found {paths}')
+              out[month]=str(paths[0])
+          Path('hourly_input_paths.json').write_text(json.dumps(out))
+          print(out)
+          PY
+      - name: Fit February only and evaluate unseen March and July hourly wind
+        run: |
+          python - <<'PY'
+          import json
+          from grid_resilience.bpat_cross_month_scale_holdout import evaluate
+          d=json.load(open('hourly_input_paths.json'))
+          result=evaluate(d['feb'],d['march'],d['july'],'outputs/bpat_cross_month_holdout')
+          assert len(result)==6
+          PY
+          cat outputs/bpat_cross_month_holdout/bpat_cross_month_holdout_manifest.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-cross-month-wind-scale-holdout-not-calibrated
+          path: outputs/bpat_cross_month_holdout/
+          if-no-files-found: warn
