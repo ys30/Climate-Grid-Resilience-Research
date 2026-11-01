@@ -56,3 +56,16 @@ No observed outage or battery charging benefit is established by this screening 
 Raw and adjusted totals were identical in this audit. Source-row coverage is **not** field completeness. CISO has 511 empty interchange observations; its 236,522 MWh absolute residual only covers 233 evaluable hours, not the entire month. BPAT still has severe nonclosure with all 744 hours present. These are arithmetic diagnostics, not historical calibration.
 
 **Gate:** Calendar rows complete for all four BAs. Full D/NG/TI field coverage for AZPS, BPAT, SRP only. Balance closure near reporting precision for AZPS/SRP only. BPAT does not close; CISO cannot be certified for the whole month, and the partial month is materially nonclosing. Historical calibration is **not certified** for any BA. Investigate CISO reporting gaps and BPAT BA accounting scope before making historical reliability claims.
+
+## Verified hourly closure screening gate, July 2024
+
+[CI run 41325415594](../../actions/runs/41325415594) confirmed the following from the full-month official H1/H2 merged rows. Closure is defined as |NG − D − TI| <= max(1 MW, 1% of reported hourly demand), on hours with all three fields reported.
+
+| BA | Complete triplets / 744 hours | Arithmetic-closing hours | Closing fraction among complete triplets | Historical model calibrated? |
+|---|---:|---:|---:|---|
+| AZPS | 744 | 744 | 100% | No |
+| SRP | 744 | 744 | 100% | No |
+| BPAT | 744 | 0 | 0% | No |
+| CISO | 233 | 39 | 16.7% | No |
+
+**Eligibility for follow-up data reconciliation:** prioritize AZPS and SRP for further model-input matching; they meet the narrowly defined reporting arithmetic gate only. BPAT fails closure for the entire month, while CISO misses 511 interchange observations and has just 39 closed hours among the 233 evaluable observations. Do not call any BA historically calibrated on the basis of this diagnostic, nor represent simulated storage relief as measured avoided outages. No observed records were imputed or overwritten.
