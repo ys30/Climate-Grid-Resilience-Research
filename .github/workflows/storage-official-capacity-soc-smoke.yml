@@ -188,6 +188,32 @@ jobs:
           print(audit.to_string(index=False))
           print('SOC zero sensitivity is a model-identifiability limitation; not proof of empirically robust storage benefits.')
           PY
+      - name: Diagnose storage energy oversizing relative to synthetic demand
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import pandas as pd
+          p=Path('outputs/soc_integration')
+          capacity=pd.read_csv(p/'storage_matrix/eff90_soc50/four_ba_storageunit_scenario.csv')
+          demand=pd.read_csv(p/'demand.csv')
+          assert set(demand.ba)==set(capacity.ba)
+          rows=[]
+          for ba,g in demand.groupby('ba'):
+              c=capacity.set_index('ba').loc[ba]
+              total=float(g.demand_mw.sum())
+              energy=float(c.energy_mwh)
+              power=float(c.power_mw)
+              rows.append({'ba':ba,'synthetic_24h_demand_mwh':total,
+                           'official_storage_energy_mwh':energy,
+                           'storage_energy_over_24h_demand':energy/total,
+                           'initial_soc_25pct_mwh':0.25*energy,
+                           'initial_soc_75pct_mwh':0.75*energy,
+                           'nominal_discharge_duration_hours':energy/power})
+          pd.DataFrame(rows).to_csv(p/'storage_energy_vs_synthetic_load_audit.csv',index=False)
+          print(pd.DataFrame(rows).to_string(index=False))
+          print('Capacity mismatch diagnostic only. Original SOC insensitivity remains scenario-specific.')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
