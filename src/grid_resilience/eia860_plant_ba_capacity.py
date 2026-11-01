@@ -33,6 +33,16 @@ def build(archive,generators_csv,output):
     storage=selected.reported_technology.fillna("").str.contains("Storage|Battery|Pumped",case=False,regex=True)
     capacity=pd.to_numeric(selected.nameplate_capacity_mw,errors="coerce")
     good=~multiple&~storage&primary.isin(FUEL_TO_TECH)&capacity.notna()&(capacity>0)
+    # Disjoint attrition reasons on the four-BA operable generator roster.
+    # This audits selection into the single-fuel capacity subset, not the full fleet.
+    reasons=pd.Series("included",index=selected.index,dtype=str)
+    reasons.loc[~(capacity.notna()&(capacity>0))]="invalid_or_missing_nameplate"
+    reasons.loc[reasons.eq("included")&multiple]="multifuel_or_secondary_fuel"
+    reasons.loc[reasons.eq("included")&storage]="storage_excluded"
+    reasons.loc[reasons.eq("included")&~primary.isin(FUEL_TO_TECH)]="unmapped_primary_energy_source"
+    attrition=reasons.value_counts().to_dict()
+    assert sum(attrition.values())==len(selected)
+    assert int(attrition.get("included",0))==int(good.sum())
     selected=selected.loc[good].copy();selected["technology"]=primary.loc[good].map(FUEL_TO_TECH)
     selected["capacity_mw"]=capacity.loc[good]
     summary=selected.groupby(["ba","technology"],as_index=False).agg(
@@ -42,6 +52,9 @@ def build(archive,generators_csv,output):
     manifest={"plants_with_reported_ba":len(plant),"unmatched_generator_plant_ids":unmatched,
               "four_ba_operable_generator_rows":int(merged.ba.isin(BAS).sum()),
               "eligible_single_fuel_generator_rows":len(selected),
+              "four_ba_roster_attrition_counts":{str(k):int(v) for k,v in sorted(attrition.items())},
+              "fraction_of_four_ba_rows_selected":(len(selected)/int(merged.ba.isin(BAS).sum())
+                  if int(merged.ba.isin(BAS).sum()) else None),
               "eligible_nameplate_capacity_mw":float(selected.capacity_mw.sum()),
               "plant_ba_mapping_source":"EIA-860 2024 Plant balancing authority code",
               "full_ba_fleet_certified":False,"historical_calibration_certified":False,
