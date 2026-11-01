@@ -167,6 +167,36 @@ jobs:
           print(d.to_string(index=False))
           print('Energy accounting verified; this does not certify historical dispatch calibration.')
           PY
+      - name: Diagnose charging during model shortfall hours
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path('outputs/observed_storage_2024')
+          rows=[]
+          for scenario in ('baseline','heat_only','wind_only','heat_wind'):
+              root=p/'with_storage'/'solved'/scenario
+              charge=pd.read_csv(root/'storage_charge_mw.csv')
+              discharge=pd.read_csv(root/'storage_discharge_mw.csv')
+              shortfall=pd.read_csv(root/'shortfall_hourly_mw.csv')
+              assert len(charge)==len(discharge)==len(shortfall)==168
+              assert charge.timestamp.equals(discharge.timestamp) and charge.timestamp.equals(shortfall.timestamp)
+              for ba in ('AZPS','BPAT','CISO','SRP'):
+                  ch=charge[f'{ba}_battery'].astype(float)
+                  dis=discharge[f'{ba}_battery'].astype(float)
+                  deficit=shortfall[f'{ba}_shortfall_mw'].astype(float)
+                  active=(ch>1e-5)&(deficit>1e-5)
+                  simultaneous=(ch>1e-5)&(dis>1e-5)
+                  rows.append({'scenario':scenario,'ba':ba,
+                      'hours_charging_during_shortfall':int(active.sum()),
+                      'charging_during_shortfall_mwh':float(ch[active].sum()),
+                      'simultaneous_charge_discharge_hours':int(simultaneous.sum()),
+                      'overall_charge_mwh':float(ch.sum()),'overall_shortfall_mwh':float(deficit.sum())})
+          d=pd.DataFrame(rows)
+          d.to_csv(p/'charging_during_shortfall_audit.csv',index=False)
+          print(d.to_string(index=False))
+          print('Diagnostic only: positive charging while shortfall may require closer economic dispatch review.')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
