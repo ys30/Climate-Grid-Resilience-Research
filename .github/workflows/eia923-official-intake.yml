@@ -6,6 +6,7 @@ on:
       - '.github/workflows/eia923-official-intake.yml'
       - 'src/grid_resilience/eia923_prime_mover_audit.py'
       - 'src/grid_resilience/eia923_hydro_monthly_evidence.py'
+      - 'src/grid_resilience/eia923_page1_hydro_probe.py'
       - 'src/grid_resilience/eia923_archive.py'
 jobs:
   intake:
@@ -107,6 +108,9 @@ jobs:
           print('Available columns:',list(p.columns))
           print(p.head(16).to_string(index=False))
           PY
+      - name: Probe Page 1 hydro and pumped storage source layout
+        run: |
+          python -m grid_resilience.eia923_page1_hydro_probe --archive outputs/eia923_intake/f923_2024.zip --output outputs/eia923_intake/page1_hydro_probe.json
       - name: Extract distinct real hydro and pumped storage monthly evidence
         run: |
           python -m grid_resilience.eia923_hydro_monthly_evidence --input outputs/eia923_intake/ba_prime_mover_month_audit.csv --output outputs/eia923_intake
@@ -125,4 +129,5 @@ jobs:
             outputs/eia923_intake/prime_mover_audit_manifest.json
             outputs/eia923_intake/hydro_pumped_month_evidence.csv
             outputs/eia923_intake/hydro_pumped_month_evidence_manifest.json
+            outputs/eia923_intake/page1_hydro_probe.json
           if-no-files-found: warn
