@@ -31,7 +31,7 @@ def normalize(rows,bas,start,end,data_type='D'):
     if frame.demand_mw.isna().any() or not frame.demand_mw.map(lambda x: float("-inf")<x<float("inf")).all():
         raise ValueError("Null/nonfinite reported EIA-930 observation: no imputation")
     if data_type=="D" and frame.demand_mw.le(0).any():
-        raise ValueError("Nonpositive reported demand: no imputation")
+        raise ValueError("nonpositive reported demand: no imputation")
     return frame.sort_values(["timestamp","ba"]).reset_index(drop=True)
 
 def fetch(bas,start,end,api_key,length=5000,data_type='D'):
