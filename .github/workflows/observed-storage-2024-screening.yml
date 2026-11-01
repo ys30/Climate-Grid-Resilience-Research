@@ -200,6 +200,44 @@ jobs:
           print(d.to_string(index=False))
           print('Diagnostic only: positive charging while shortfall may require closer economic dispatch review.')
           PY
+      - name: Observed-input initial SOC sensitivity with unchanged reported storage capacities
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from grid_resilience.multi_technology_factorial import run
+          p=Path('outputs/observed_storage_2024')
+          baseline=pd.read_csv(p/'storage.csv')
+          assert baseline.initial_soc_fraction.eq(0.5).all()
+          a=pd.read_csv(p/'no_storage/multi_technology_factorial_dispatch.csv')
+          ref=a[['scenario','ba','unserved_energy_mwh']].rename(columns={'unserved_energy_mwh':'no_storage_shortfall_mwh'})
+          rows=[]
+          for soc in (0.25,0.50,0.75):
+              conf=baseline.copy();conf['initial_soc_fraction']=soc
+              conf_path=p/f'storage_soc_{int(soc*100)}.csv';conf.to_csv(conf_path,index=False)
+              destination=p/'soc_sensitivity'/f'soc{int(soc*100)}'
+              if soc==0.5:
+                  df=pd.read_csv(p/'with_storage/multi_technology_factorial_dispatch.csv')
+              else:
+                  run(p/'demand.csv',p/'weather.csv',p/'capacity.csv',p/'availability.csv',
+                      destination,storage=conf_path,event_id=f'July2024_observed_inputs_soc{int(soc*100)}')
+                  df=pd.read_csv(destination/'multi_technology_factorial_dispatch.csv')
+              df=df.merge(ref,on=['scenario','ba'],validate='one_to_one')
+              for x in df.itertuples(index=False):
+                  rows.append({'scenario':x.scenario,'ba':x.ba,'initial_soc_fraction':soc,
+                               'shortfall_with_storage_mwh':x.unserved_energy_mwh,
+                               'shortfall_without_storage_mwh':x.no_storage_shortfall_mwh,
+                               'modeled_storage_relief_mwh':x.no_storage_shortfall_mwh-x.unserved_energy_mwh})
+          d=pd.DataFrame(rows)
+          assert len(d)==48 and d.groupby(['scenario','ba']).initial_soc_fraction.nunique().eq(3).all()
+          d.to_csv(p/'observed_input_soc_sensitivity.csv',index=False)
+          pivot=d.pivot(index=['scenario','ba'],columns='initial_soc_fraction',values='shortfall_with_storage_mwh')
+          pivot['shortfall_soc25_minus_soc75_mwh']=pivot[0.25]-pivot[0.75]
+          pivot.reset_index().to_csv(p/'observed_input_soc_sensitivity_span.csv',index=False)
+          assert (pivot['shortfall_soc25_minus_soc75_mwh']>=-1e-3).all(), 'Unexpected non-monotonic SOC effect'
+          print(pivot.to_string())
+          print('Sensitivity is for assumed initial SOC in an uncalibrated isolated-BA screening model.')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
