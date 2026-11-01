@@ -238,6 +238,36 @@ jobs:
           print(pivot.to_string())
           print('Sensitivity is for assumed initial SOC in an uncalibrated isolated-BA screening model.')
           PY
+      - name: Explain CISO initial SOC invariance from alternative dispatch trajectories
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path('outputs/observed_storage_2024')
+          rows=[]
+          for scenario in ('baseline','heat_only','wind_only','heat_wind'):
+              for soc in (25,50,75):
+                  root=(p/'with_storage' if soc==50 else p/'soc_sensitivity'/f'soc{soc}')/'solved'/scenario
+                  charge=pd.read_csv(root/'storage_charge_mw.csv')
+                  discharge=pd.read_csv(root/'storage_discharge_mw.csv')
+                  states=pd.read_csv(root/'storage_soc_mwh.csv')
+                  for ba in ('AZPS','BPAT','CISO','SRP'):
+                      key=f'{ba}_battery'
+                      x=states[key].astype(float)
+                      rows.append({'scenario':scenario,'ba':ba,'initial_soc_percent':soc,
+                                   'first_hour_end_soc_mwh':float(x.iloc[0]),
+                                   'final_soc_mwh':float(x.iloc[-1]),
+                                   'min_soc_mwh':float(x.min()),
+                                   'charge_mwh':float(charge[key].sum()),
+                                   'discharge_mwh':float(discharge[key].sum())})
+          d=pd.DataFrame(rows)
+          assert len(d)==48
+          d.to_csv(p/'soc_trajectory_sensitivity_explanation.csv',index=False)
+          for sc in ('baseline','heat_only','wind_only','heat_wind'):
+              c=d[(d.scenario==sc)&(d.ba=='CISO')]
+              print(sc, c[['initial_soc_percent','first_hour_end_soc_mwh','final_soc_mwh','charge_mwh','discharge_mwh']].to_string(index=False))
+          print('SOC invariance is scenario-specific: compare different charging, discharging and end-state patterns.')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
