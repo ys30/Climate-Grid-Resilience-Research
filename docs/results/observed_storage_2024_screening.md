@@ -150,3 +150,16 @@ The previous screening inputs were generic thermal proxy capacities labeled gas.
 **Interpretation gate.** This confirms large **capacity-definition sensitivity**, not empirically observed unserved energy. The original gas-labeled input was a generic thermal proxy; EIA-860 gas-only candidates are not necessarily the same fleet. The candidate capacity excludes other fuels and potentially excluded/multifuel units, while gas availability remains fixed at 100%, transmission imports are absent, and plant status/dispatch are uncalibrated. Neither the apparent change in AZPS generation mismatch nor the increased model shortfall establishes historical performance or avoided outages.
 
 **Next validation:** audit omitted fuel capacities and generator attrition by BA, then address actual hourly availability/operational status before using official candidates as a full replacement model.
+
+## Verified EIA-860 2024 AZPS/SRP omitted fleet scope
+
+[Official EIA-860 CI 41341668303](../../actions/runs/41341668303) confirms that gas+wind-only sensitivity cases omit substantial other eligible single-fuel nameplate capacity. All MW below are **candidate nameplate**, not validated hourly generation capability.
+
+| BA | Eligible single-fuel gas + wind MW | Other eligible single-fuel MW | Excluded positive nameplate MW | Excluded unit rows |
+|---|---:|---:|---:|---:|
+| AZPS | 3,099.7 | 2,679.5 | 1,478.6 | 24 |
+| SRP | 7,881.1 | 6,800.4 | 2,182.1 | 22 |
+
+The *other eligible* fuel categories are AZPS coal 1,636.2 MW, oil 123.8 MW, solar 919.5 MW; SRP coal 821.8 MW, hydro 94.1 MW, nuclear 4,209.6 MW, solar 1,674.9 MW. The excluded generator roster includes mixed/secondary-fuel units, storage and unmapped fuel classifications. Excluded nameplate MW is **not dispatch-ready**, and storage MW cannot be treated as incremental thermal generation.
+
+**Implication:** The paired gas+wind-only capacity stress test (CI 41340432611) provides a *scope sensitivity*, not a bound on full-system shortfall. In particular, omitting 4,209.6 MW of eligible SRP nuclear nameplate materially changes the modeled technology representation; nameplate magnitude does not demonstrate actual hourly nuclear dispatch. Priority before reliability calibration: technology-resolved generator selection, 2024 operational status, observed source-specific production, unit availability and BA imports. Do not directly add all excluded capacities or calibrate shortages using arbitrary scale factors.
