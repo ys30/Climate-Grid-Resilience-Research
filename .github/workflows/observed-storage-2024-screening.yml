@@ -126,6 +126,47 @@ jobs:
           (p/'storage_initial_energy_diagnostic_manifest.json').write_text(json.dumps(report,indent=2)+'\n')
           print(d[['scenario','ba','screening_difference_mwh','assumed_initial_soc_mwh','relief_over_initial_soc','relief_exceeds_initial_soc']].to_string(index=False))
           PY
+      - name: Verify hourly storage charge discharge and SOC energy accounting
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path('outputs/observed_storage_2024')
+          conf=pd.read_csv(p/'storage.csv').set_index('ba')
+          rows=[]
+          for scenario in ['baseline','heat_only','wind_only','heat_wind']:
+              base=p/'with_storage'/'solved'/scenario
+              ch=pd.read_csv(base/'storage_charge_mw.csv')
+              dis=pd.read_csv(base/'storage_discharge_mw.csv')
+              soc=pd.read_csv(base/'storage_soc_mwh.csv')
+              for frame in (ch,dis,soc):
+                  frame['timestamp']=pd.to_datetime(frame.timestamp,utc=True)
+                  assert len(frame)==168 and frame.timestamp.is_unique
+              assert ch.timestamp.equals(dis.timestamp) and ch.timestamp.equals(soc.timestamp)
+              for ba,c in conf.iterrows():
+                  key=ba+'_battery'
+                  charge=ch[key].astype(float).to_numpy()
+                  discharge=dis[key].astype(float).to_numpy()
+                  states=soc[key].astype(float).to_numpy()
+                  energy=float(c.energy_mwh)
+                  initial=energy*float(c.initial_soc_fraction)
+                  eta_c=float(c.efficiency_store);eta_d=float(c.efficiency_dispatch)
+                  assert (charge>=-1e-4).all() and (discharge>=-1e-4).all()
+                  assert (states>=-1e-4).all() and (states<=energy+1e-4).all()
+                  # PyPSA hourly StorageUnit state: soc[t]=soc[t-1]+eta_c*charge[t]-discharge[t]/eta_d.
+                  previous=pd.Series(states).shift(1).to_numpy()
+                  previous[0]=initial
+                  residual=states-previous-eta_c*charge+discharge/eta_d
+                  assert abs(residual).max()<1e-3,(scenario,ba,abs(residual).max())
+                  rows.append({'scenario':scenario,'ba':ba,'initial_soc_mwh':initial,
+                    'charge_ac_mwh':float(charge.sum()),'discharge_ac_mwh':float(discharge.sum()),
+                    'final_soc_mwh':float(states[-1]),'max_hourly_energy_residual_mwh':float(abs(residual).max())})
+          d=pd.DataFrame(rows)
+          assert len(d)==16
+          d.to_csv(p/'hourly_storage_energy_balance_audit.csv',index=False)
+          print(d.to_string(index=False))
+          print('Energy accounting verified; this does not certify historical dispatch calibration.')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
