@@ -377,7 +377,7 @@ jobs:
             '|---|---:|',
           ]
           report += [f'| {case} | {val:.3f} |' for case,val in energy_hourly.items()]
-          message='\\n'.join(report)+'\\n'
+          message='\n'.join(report)+'\n'
           print(message)
           if os.environ.get('GITHUB_STEP_SUMMARY'):
               with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as stream:
