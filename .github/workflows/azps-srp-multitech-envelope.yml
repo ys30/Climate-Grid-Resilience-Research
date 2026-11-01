@@ -99,6 +99,27 @@ jobs:
                       rows.append({'availability_case':bound,'scenario':scenario,'ba':ba,
                                    'generation_mwh':float(gen.loc[gen.ba.eq(ba),'generation_mwh'].sum()),
                                    'shortfall_mwh':float(short.loc[short.ba.eq(ba),'unserved_energy_mwh'].iloc[0])})
+          # Audit actual hydro dispatch in the solved cases, not just shortages.
+          hydro_rows=[]
+          for scenario in ('baseline','heat_wind'):
+              for bound in ('solar_daylight_proxy_other_fuels_full','solar_daylight_hydro_budget_48h'):
+                  gen=pd.read_csv(out/bound/scenario/'generation_hourly.csv')
+                  for ba in ('AZPS','SRP'):
+                      x=gen[(gen.ba==ba)&(gen.technology=='hydro')]
+                      produced=float(x.generation_mwh.sum())
+                      capacity=float(cap.loc[(cap.ba==ba)&(cap.technology=='hydro'),'capacity_mw'].sum())
+                      budget=capacity*48.0
+                      if bound=='solar_daylight_hydro_budget_48h' and produced>budget+1e-4:
+                          raise AssertionError('Hydro budget exceeded')
+                      hydro_rows.append({'scenario':scenario,'availability_case':bound,'ba':ba,
+                          'hydro_generation_mwh':produced,'hydro_nameplate_mw':capacity,
+                          'assumed_48h_budget_mwh':budget,
+                          'budget_utilization_fraction':produced/budget if budget>0 else None,
+                          'budget_near_binding':abs(produced-budget)<1e-3 if capacity>0 and bound=='solar_daylight_hydro_budget_48h' else False})
+          hydro=pd.DataFrame(hydro_rows)
+          hydro.to_csv(out/'hydro_budget_dispatch_diagnostic.csv',index=False)
+          print('HYDRO ENERGY BUDGET UTILIZATION (MODEL OUTPUT, NOT OBSERVED)')
+          print(hydro.to_string(index=False))
           result=pd.DataFrame(rows)
           assert len(result)==16
           result.to_csv(out/'official_multitech_availability_envelope.csv',index=False)
