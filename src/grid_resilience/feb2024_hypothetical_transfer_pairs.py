@@ -41,11 +41,23 @@ def run(demand_csv, capacity_csv, base_availability_csv, output, levels=(0.7,0.4
         columns={"unserved_energy_mwh":"isolated_unserved_energy_mwh"})
     result=result.merge(controls,on=["ba","availability_fraction"],how="left",validate="many_to_one")
     result["shortfall_reduction_vs_isolated_mwh"]=result.isolated_unserved_energy_mwh-result.unserved_energy_mwh
+    # With unchanged demand, generation and costs, increasing an optional
+    # lossless transfer must not increase system-wide minimum unmet energy.
+    # An individual BA can worsen, so separately flag redistribution.
+    system=result.groupby(["availability_fraction","hypothetical_link_capacity_mw"],
+                          as_index=False).unserved_energy_mwh.sum()
+    for fraction,g in system.groupby("availability_fraction"):
+        ordered=g.sort_values("hypothetical_link_capacity_mw")
+        if (ordered.unserved_energy_mwh.diff().dropna()>1e-3).any():
+            raise AssertionError(f"System-wide unmet load increased with link capacity at {fraction}")
+    system.to_csv(out/"hypothetical_transfer_system_shortfall.csv",index=False)
+    shifted=result[(result.ba!="AZPS") & (result.unserved_energy_mwh>result.isolated_unserved_energy_mwh+1e-3)]
     result.sort_values(["availability_fraction","hypothetical_link_capacity_mw","ba"]).to_csv(
         out/"hypothetical_transfer_paired_shortfall.csv",index=False)
     manifest={"scenario_count":len(levels)*len(link_mw),"result_rows":len(result),
               "hypothetical_transfer_pair":"AZPS–SRP",
               "link_capacities_mw":list(link_mw),"availability_fractions":list(levels),
+              "other_bas_with_increased_shortfall":sorted(shifted.ba.unique().tolist()),
               "actual_line_ratings_verified":False,"historical_calibration_certified":False,
               "warning":"Single hypothetical lossless bidirectional transport Link. This does not represent observed bilateral topology, AC physics or physically verified transfer capacity."}
     (out/"hypothetical_transfer_manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
