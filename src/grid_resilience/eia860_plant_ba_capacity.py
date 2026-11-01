@@ -43,12 +43,24 @@ def build(archive,generators_csv,output):
     attrition=reasons.value_counts().to_dict()
     assert sum(attrition.values())==len(selected)
     assert int(attrition.get("included",0))==int(good.sum())
+    # Preserve excluded fuel codes and their BA distribution for a transparent
+    # roster audit; these counts are NOT equivalent to missing MW.
+    excluded=merged.loc[merged.ba.isin(BAS)].copy()
+    excluded["exclusion_reason"]=reasons
+    excluded["primary_fuel_code"]=primary.replace("", "MISSING").astype(str)
+    excluded["nameplate_mw_numeric"]=capacity
+    breakdown=(excluded.groupby(["ba","exclusion_reason","primary_fuel_code"],dropna=False)
+        .agg(generator_rows=("generator_id","size"),
+             positive_nameplate_mw=("nameplate_mw_numeric",
+                 lambda x:float(x[x>0].sum())))
+        .reset_index().sort_values(["ba","exclusion_reason","primary_fuel_code"]))
     selected=selected.loc[good].copy();selected["technology"]=primary.loc[good].map(FUEL_TO_TECH)
     selected["capacity_mw"]=capacity.loc[good]
     summary=selected.groupby(["ba","technology"],as_index=False).agg(
         nameplate_capacity_mw=("capacity_mw","sum"),generator_count=("generator_id","size"))
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
     summary.to_csv(out/"eia860_plant_ba_capacity_candidates.csv",index=False)
+    breakdown.to_csv(out/"eia860_plant_ba_roster_attrition_by_fuel.csv",index=False)
     manifest={"plants_with_reported_ba":len(plant),"unmatched_generator_plant_ids":unmatched,
               "four_ba_operable_generator_rows":int(merged.ba.isin(BAS).sum()),
               "eligible_single_fuel_generator_rows":len(selected),
