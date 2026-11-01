@@ -8,6 +8,7 @@ on:
       - 'src/grid_resilience/feb2024_capacity_availability_stress.py'
       - 'src/grid_resilience/feb2024_capacity_margin_audit.py'
       - 'src/grid_resilience/eia930_import_dependence_audit.py'
+      - 'src/grid_resilience/feb2024_hypothetical_transfer_pairs.py'
       - 'tests/test_eia2024_feb_screening_inputs.py'
 jobs:
   empirical-input-screening:
@@ -76,6 +77,10 @@ jobs:
         run: |
           python -m grid_resilience.feb2024_capacity_margin_audit --demand outputs/feb2024_screening/inputs/demand.csv --capacity outputs/feb2024_screening/inputs/capacity.csv --shortfall outputs/feb2024_screening/availability_stress/hypothetical_availability_shortfall.csv --output outputs/feb2024_screening/availability_stress
           cat outputs/feb2024_screening/availability_stress/screening_ba_capacity_margin.csv
+      - name: Paired isolated and hypothetical AZPS-SRP transfer sensitivity
+        run: |
+          python -m grid_resilience.feb2024_hypothetical_transfer_pairs --demand outputs/feb2024_screening/inputs/demand.csv --capacity outputs/feb2024_screening/inputs/capacity.csv --availability outputs/feb2024_screening/inputs/availability.csv --output outputs/feb2024_screening/transfer_pairs
+          cat outputs/feb2024_screening/transfer_pairs/hypothetical_transfer_paired_shortfall.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -96,4 +101,6 @@ jobs:
             outputs/feb2024_screening/availability_stress/hypothetical_availability_manifest.json
             outputs/feb2024_screening/availability_stress/screening_ba_capacity_margin.csv
             outputs/feb2024_screening/availability_stress/screening_ba_capacity_margin_manifest.json
+            outputs/feb2024_screening/transfer_pairs/hypothetical_transfer_paired_shortfall.csv
+            outputs/feb2024_screening/transfer_pairs/hypothetical_transfer_manifest.json
           if-no-files-found: warn
