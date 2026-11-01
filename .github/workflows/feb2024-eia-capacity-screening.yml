@@ -44,6 +44,10 @@ jobs:
       - name: Extract observed EIA-930 February demand
         run: |
           python -m grid_resilience.eia930_six_month_demand --csv outputs/feb2024_screening/eia930.csv --output outputs/feb2024_screening
+      - name: Audit real EIA-930 net interchange without inferring link ratings
+        run: |
+          python -m grid_resilience.eia930_interchange_reconciliation --csv outputs/feb2024_screening/eia930.csv --month 2024-02 --output outputs/feb2024_screening/interchange
+          cat outputs/feb2024_screening/interchange/interchange_reconciliation.csv
       - name: Extract EIA-860 operable inventory and official BA capacity
         run: |
           python -m grid_resilience.eia860_generator_extract --archive outputs/feb2024_screening/eia860.zip --output outputs/feb2024_screening
@@ -74,6 +78,8 @@ jobs:
             outputs/feb2024_screening/official_source_hashes.json
             outputs/feb2024_screening/hourly_ba_demand_manifest.json
             outputs/feb2024_screening/eia860_plant_ba_capacity_manifest.json
+            outputs/feb2024_screening/interchange/interchange_reconciliation.csv
+            outputs/feb2024_screening/interchange/interchange_reconciliation_manifest.json
             outputs/feb2024_screening/inputs/screening_input_manifest.json
             outputs/feb2024_screening/solve/shortfall_by_ba.csv
             outputs/feb2024_screening/monthly/modeled_generation_full_months.csv
