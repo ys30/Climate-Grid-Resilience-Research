@@ -32,8 +32,9 @@ def normalize(rows,bas,start,end):
         raise ValueError("Null/nonpositive reported demand: no imputation")
     return frame.sort_values(["timestamp","ba"]).reset_index(drop=True)
 
-def fetch(bas,start,end,api_key,length=5000):
+def fetch(bas,start,end,api_key,length=5000,data_type='D'):
     if not api_key:raise ValueError("EIA_API_KEY is required")
+    if data_type not in ('D','NG','TI'):raise ValueError('Unsupported EIA-930 region-data type')
     if not bas or len(set(bas))!=len(bas):raise ValueError("Unique BA identifiers required")
     st=pd.Timestamp(start);en=pd.Timestamp(end)
     if st.tzinfo is None or en.tzinfo is None:raise ValueError("Use timezone-aware UTC bounds")
@@ -44,7 +45,7 @@ def fetch(bas,start,end,api_key,length=5000):
     if last.minute or last.second or st.minute or st.second:
         raise ValueError("Whole UTC hours only")
     params=[("api_key",api_key),("frequency","hourly"),("data[0]","value"),
-            ("facets[type][]","D"),("start",st.strftime("%Y-%m-%dT%H")),
+            ("facets[type][]",data_type),("start",st.strftime("%Y-%m-%dT%H")),
             ("end",last.strftime("%Y-%m-%dT%H")),("length",str(length)),
             ("sort[0][column]","period"),("sort[0][direction]","asc"),
             ("sort[1][column]","respondent"),("sort[1][direction]","asc")]
