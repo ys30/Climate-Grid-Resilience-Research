@@ -259,3 +259,19 @@ All eight scenarios retain zero simulated shortage because other model resources
 | Heat+wind | 50% / 75% | 0 | 0 | 3,326.866 | 91,200.488 | 334,388.719 |
 
 **Interpretation:** The first nonzero point *among tested grid values* occurs at gas 25% in the full coal/nuclear cases, but at gas 50% with joint coal/nuclear derating. Neither is a precise numerical threshold. This test retains assumed solar daylight availability, fixed wind profiles, hypothetical hydro 48h energy limit, reported 2024 single-fuel candidate nameplates, no storage/imports, and no observed outages; true hour-specific availability and BA transfers are unverified. Confirm unit outages and firm imports before historical reliability interpretation.
+
+## CI-verified fine SRP gas-availability shortage intervals
+
+[CI 41351639308](../../actions/runs/41351639308) refined the 168-hour SRP gas-availability sensitivity at 5-percentage-point intervals and exported affected UTC hours in `fine_gas_shortfall_hours.csv`. These are synthetic/assumption-driven supply adequacy outcomes, **not measured utility outages**.
+
+| Weather / coal-nuclear assumption | Gas availability | Shortfall MWh | Shortfall hours | Max hourly shortfall MW |
+|---|---:|---:|---:|---:|
+| Baseline / 100%-100% | 30% | 450.880 | 4 | 258.970 |
+| Baseline / 100%-100% | 35% | 0 | 0 | 0 |
+| Heat+wind / 100%-100% | 30% | 4,342.666 | 15 | 706.306 |
+| Heat+wind / 100%-100% | 35% | 635.731 | 5 | 323.551 |
+| Heat+wind / 100%-100% | 40% | 0 | 0 | 0 |
+| Heat+wind / 50%-75% | 55% | 352.485 | 3 | 255.831 |
+| Heat+wind / 50%-75% | 60% | 0 | 0 | 0 |
+
+The transition intervals on this grid are 30–35% gas in baseline/full coal-nuclear, 35–40% in heat+wind/full coal-nuclear, and 55–60% in heat+wind/derated coal-nuclear. These are **brackets**, not estimated physical thresholds; interval endpoints denote tested percentages. Fixed gas availability, illustrative solar daylight, a hypothetical hydro budget, no imports/storage, and uncertified hourly unit status preclude historical adequacy claims.
