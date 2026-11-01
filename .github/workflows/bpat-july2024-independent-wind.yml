@@ -11,6 +11,7 @@ on:
       - 'src/grid_resilience/bpat_era5_three_month_summary.py'
       - 'src/grid_resilience/bpat_july_boundary_coverage_audit.py'
       - 'src/grid_resilience/bpat_observation_coverage_guard.py'
+      - 'src/grid_resilience/bpat_cross_month_evidence_gate.py'
 jobs:
   march-validation:
     runs-on: ubuntu-latest
@@ -70,6 +71,8 @@ jobs:
             --error outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv \
             --output outputs/bpat_july2024
           cat outputs/bpat_july2024/bpat_era5_three_month_validation.csv
+          python -m grid_resilience.bpat_cross_month_evidence_gate --csv outputs/bpat_july2024/bpat_era5_three_month_validation.csv --output outputs/bpat_july2024
+          cat outputs/bpat_july2024/bpat_cross_month_evidence_gate.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -88,3 +91,5 @@ jobs:
             outputs/bpat_july2024/bpat_29site_proxy_error_diagnostics.csv
             outputs/bpat_july2024/bpat_era5_three_month_validation.csv
             outputs/bpat_july2024/bpat_era5_three_month_manifest.json
+            outputs/bpat_july2024/bpat_cross_month_shape_amplitude_audit.csv
+            outputs/bpat_july2024/bpat_cross_month_evidence_gate.json
