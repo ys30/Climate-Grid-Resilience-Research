@@ -5,7 +5,6 @@ This is a source-scheduled external boundary, NOT a transmission flow simulation
 import argparse,json,calendar
 from pathlib import Path
 import pandas as pd
-from grid_resilience.srp_net_exchange_pypsa_screen import screened_load
 
 def run(balance, capacity, ba, year, month):
     import pypsa
@@ -37,11 +36,13 @@ def run(balance, capacity, ba, year, month):
         n.add("Generator","observed_import",bus=ba,p_nom=peak,p_min_pu=(imports/peak).to_numpy(),p_max_pu=(imports/peak).to_numpy(),marginal_cost=0)
     n.add("Generator","unserved",bus=ba,p_nom=float((b.demand_mw+exports).max())+1,marginal_cost=1e5)
     n.add("Generator","spill",bus=ba,p_nom=1e7,p_min_pu=-1,p_max_pu=0,marginal_cost=-1)
-    n.optimize(solver_name="highs")
+    status,condition=n.optimize(solver_name="highs")
+    if status!="ok" or condition!="optimal":
+        raise RuntimeError(f"Nonoptimal exchange solve: {status}, {condition}")
     g=n.generators_t.p
     if g.empty:raise RuntimeError("No dispatch")
     local=sum(float(g[f"local__{tech}"].sum()) for tech in c.technology)
-    result={"local_generation_mwh":local,"scheduled_import_mwh":float(imports.sum()),
+    result={"solver_status":status,"solver_condition":condition,"local_generation_mwh":local,"scheduled_import_mwh":float(imports.sum()),
         "scheduled_export_mwh":float(exports.sum()),"local_demand_mwh":float(b.demand_mw.sum()),
         "unserved_mwh":float(g["unserved"].sum()),"spilled_mwh":-float(g["spill"].sum()),
         "net_interchange_mwh":float(b.interchange_mw.sum()),
