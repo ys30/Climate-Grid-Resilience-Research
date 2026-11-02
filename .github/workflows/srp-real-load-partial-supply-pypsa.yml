@@ -183,7 +183,10 @@ jobs:
           assert r['historical_calibration_certified'] is False
           PY
       - name: Synthetic import-heavy and export regression
-        run: python -m grid_resilience.srp_exchange_synthetic_regression
+        run: |
+          mkdir -p outputs/srp_real_screen/ci_diagnostics
+          set -o pipefail
+          python -u -m grid_resilience.srp_exchange_synthetic_regression 2>&1 | tee outputs/srp_real_screen/ci_diagnostics/synthetic_exchange_test.log
       - name: Solve PyPSA using explicit scheduled imports, exports and spill
         run: |
           python -m grid_resilience.srp_explicit_import_export --balance outputs/srp_real_screen/eia930_hourly_balance_audit.csv --capacity outputs/srp_real_screen/fuel_assumption_capacity_screen.csv --ba SRP --year 2024 --month 1 --output outputs/srp_real_screen/explicit_exchange
@@ -213,6 +216,7 @@ jobs:
             outputs/srp_real_screen/interchange_case/interchange_screen_manifest.json
             outputs/srp_real_screen/interchange_case/modeled_generation_with_net_exchange.csv
             outputs/srp_real_screen/explicit_exchange/explicit_import_export_manifest.json
+            outputs/srp_real_screen/ci_diagnostics/synthetic_exchange_test.log
             outputs/srp_real_screen/bidirectional_case/bidirectional_boundary_screen.json
             outputs/srp_real_screen/exact_generator_scope_rows.csv
             outputs/srp_real_screen/exact_generator_scope_summary.csv
