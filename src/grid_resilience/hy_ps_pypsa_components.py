@@ -37,7 +37,7 @@ def add_hy_ps(n, bus, settings, *, prefix="SRP"):
     n.add("Link",f"{prefix}_ps_charge",bus0=bus,bus1=storage_bus,
           p_nom=float(settings["ps_charge_nameplate_mw_assumed"]),
           efficiency=eta)
-    # Link p_nom limits input-side power: divide by eta so bus1 output may\n    # reach the EIA-860 discharge nameplate rather than eta * nameplate.\n    n.add("Link",f"{prefix}_ps_discharge",bus0=storage_bus,bus1=bus,
+    # Link p_nom is input-side; divide by eta to preserve output nameplate.\n    n.add("Link",f"{prefix}_ps_discharge",bus0=storage_bus,bus1=bus,
           p_nom=float(settings["ps_discharge_nameplate_mw"])/eta,efficiency=eta)
     return {"hydro_link":f"{prefix}_hydro_out","storage_charge_link":f"{prefix}_ps_charge",
             "storage_discharge_link":f"{prefix}_ps_discharge",
