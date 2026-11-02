@@ -1,0 +1,94 @@
+name: Real SRP January demand and partial EIA-860 capacity PyPSA
+on:
+  push:
+    paths:
+      - '.github/workflows/srp-real-load-partial-supply-pypsa.yml'
+      - 'src/grid_resilience/eia860_partial_ba_capacity.py'
+  workflow_dispatch:
+jobs:
+  real-input-screen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model]' openpyxl
+      - name: Download actual EIA-930, EIA-860 and EIA-923 source archives
+        run: |
+          mkdir -p outputs/srp_real_screen
+          python - <<'PY'
+          import urllib.request,hashlib,json
+          from pathlib import Path
+          root=Path('outputs/srp_real_screen')
+          sources={
+             'eia930_2023H2':'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2023_Jul_Dec.csv',
+             'eia930_2024H1':'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv',
+             'eia860_2024':'https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip',
+             'eia923_2024':'https://www.eia.gov/electricity/data/eia923/archive/xls/f923_2024.zip'}
+          manifest={}
+          for key,url in sources.items():
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'}),timeout=120) as response:
+                  data=response.read(150_000_001)
+              if not data or len(data)>150_000_000:raise ValueError('Invalid source length')
+              suffix='.csv' if key.startswith('eia930') else '.zip'
+              (root/(key+suffix)).write_bytes(data)
+              manifest[key]={'url':url,'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)}
+          (root/'input_provenance.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          PY
+      - name: Recover full UTC January from adjacent official EIA-930 source files
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          root=Path('outputs/srp_real_screen')
+          series=[]
+          for key in ['eia930_2023H2','eia930_2024H1']:
+              x=pd.read_csv(root/(key+'.csv'),low_memory=False)
+              x=x[x['Balancing Authority'].astype(str).str.strip().eq('SRP')].copy()
+              x['_t']=pd.to_datetime(x['UTC Time at End of Hour'],utc=True,errors='raise')
+              x=x[(x._t>=pd.Timestamp('2024-01-01T01:00Z')) &
+                  (x._t<=pd.Timestamp('2024-02-01T00:00Z'))].drop(columns=['_t'])
+              series.append(x)
+          pd.concat(series,ignore_index=True).to_csv(root/'source_combined.csv',index=False)
+          PY
+          python -m grid_resilience.eia930_balance_archive_import --archive outputs/srp_real_screen/source_combined.csv --ba SRP --year 2024 --month 1 --output outputs/srp_real_screen/observed_hourly_demand.csv
+      - name: Extract EIA-860 inventory and EIA-923 BA generator identities
+        run: |
+          python -m grid_resilience.eia860_generator_extract --archive outputs/srp_real_screen/eia860_2024.zip --output outputs/srp_real_screen
+          python -m grid_resilience.eia923_generator_extract --archive outputs/srp_real_screen/eia923_2024.zip --output outputs/srp_real_screen
+          python -m grid_resilience.eia860_partial_ba_capacity --eia860 outputs/srp_real_screen/eia860_2024_operable_generators.csv --page4 outputs/srp_real_screen/eia923_generator_month_net_mwh.csv --ba SRP --output outputs/srp_real_screen
+      - name: Solve real load with partial real nameplate and explicit screening assumptions
+        run: |
+          python -m grid_resilience.monthly_pypsa_screen --demand outputs/srp_real_screen/observed_hourly_demand.csv --capacity outputs/srp_real_screen/partial_ba_capacity_screen.csv --year 2024 --month 1 --output outputs/srp_real_screen
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          r=Path('outputs/srp_real_screen')
+          d=pd.read_csv(r/'observed_hourly_demand.csv')
+          c=pd.read_csv(r/'partial_ba_capacity_screen.csv')
+          model=pd.read_csv(r/'modeled_monthly_generation.csv')
+          s=json.loads((r/'screening_manifest.json').read_text())
+          assert len(d)==744 and abs(d.demand_mw.sum()-2455626)<1e-3
+          assert len(c)>0 and c.capacity_mw.gt(0).all()
+          total=model.modeled_generation_mwh.sum()+s['modeled_unserved_mwh_by_ba']['SRP']
+          assert abs(total-d.demand_mw.sum())<1e-3, (total,d.demand_mw.sum())
+          print('Observed SRP demand MWh:',d.demand_mw.sum())
+          print('Partial source-matched capacity MW:',c.capacity_mw.sum())
+          print('Modeled generation MWh:',model.modeled_generation_mwh.sum())
+          print('Modeled unserved MWh:',s['modeled_unserved_mwh_by_ba']['SRP'])
+          print('Historical calibration certified: NO')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-jan2024-real-load-partial-supply-screen
+          path: |
+            outputs/srp_real_screen/input_provenance.json
+            outputs/srp_real_screen/observed_hourly_demand.csv
+            outputs/srp_real_screen/partial_ba_capacity_screen.csv
+            outputs/srp_real_screen/ba_capacity_identity_review.csv
+            outputs/srp_real_screen/capacity_screen_manifest.json
+            outputs/srp_real_screen/modeled_monthly_generation.csv
+            outputs/srp_real_screen/screening_manifest.json
