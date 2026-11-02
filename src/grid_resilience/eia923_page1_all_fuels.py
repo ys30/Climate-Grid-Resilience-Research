@@ -37,6 +37,8 @@ def extract(archive,output,ba="SRP",month=1):
                   "reported_fuel":str(row[14]).strip().upper(),
                   "period":f"2024-{month:02d}","net_generation_mwh":value})
         finally:wb.close()
+    if observed==0:raise ValueError(f"No official Page1 rows for BA {ba}")
+    if not output_rows:raise ValueError(f"No reported Page1 generation values for BA {ba}")
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
     keys=["plant_id","reported_ba","prime_mover","reported_fuel","period","net_generation_mwh"]
     with (out/"page1_all_fuels_reported_ba.csv").open("w",newline="") as f:
@@ -52,7 +54,8 @@ def extract(archive,output,ba="SRP",month=1):
     manifest={"ba":ba,"period":f"2024-{month:02d}","source_rows_for_ba":observed,
        "reported_month_rows":len(output_rows),"missing_netgen_cells":unreported,
        "observed_reported_ba_page1_net_mwh":sum(x["net_generation_mwh"] for x in output_rows),
-       "missing_is_zero":False,"historical_calibration_certified":False,
+       "missing_is_zero":False,"source_month_complete":unreported==0,
+       "sum_is_partial_if_missing":unreported>0,"historical_calibration_certified":False,
        "warning":"Page1 BA field is reporting attribution; full BA operational supply coverage and Page4 overlap are not established."}
     (out/"page1_all_fuels_manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
     print(json.dumps(manifest,indent=2))
