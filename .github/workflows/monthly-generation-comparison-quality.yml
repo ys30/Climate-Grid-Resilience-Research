@@ -4,11 +4,15 @@ on:
     paths:
       - 'src/grid_resilience/monthly_generation_comparison.py'
       - 'tests/test_monthly_generation_comparison.py'
+      - 'src/grid_resilience/eia923_cross_sheet_coverage.py'
+      - 'tests/test_eia923_cross_sheet_coverage.py'
       - '.github/workflows/monthly-generation-comparison-quality.yml'
   pull_request:
     paths:
       - 'src/grid_resilience/monthly_generation_comparison.py'
       - 'tests/test_monthly_generation_comparison.py'
+      - 'src/grid_resilience/eia923_cross_sheet_coverage.py'
+      - 'tests/test_eia923_cross_sheet_coverage.py'
       - '.github/workflows/monthly-generation-comparison-quality.yml'
   workflow_dispatch:
 jobs:
@@ -21,4 +25,4 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install -e '.[dev]' numpy
-      - run: python -m pytest -q tests/test_monthly_generation_comparison.py
+      - run: python -m pytest -q tests/test_monthly_generation_comparison.py tests/test_eia923_cross_sheet_coverage.py
