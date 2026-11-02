@@ -5,6 +5,7 @@ on:
       - '.github/workflows/srp-real-load-partial-supply-pypsa.yml'
       - 'src/grid_resilience/eia860_partial_ba_capacity.py'
       - 'src/grid_resilience/srp_monthly_availability_sensitivity.py'
+      - 'src/grid_resilience/fuel_specific_screen_assumptions.py'
   workflow_dispatch:
 jobs:
   real-input-screen:
@@ -84,6 +85,21 @@ jobs:
       - name: Run full-month hypothetical availability sensitivity with actual load
         run: |
           python -m grid_resilience.srp_monthly_availability_sensitivity --demand outputs/srp_real_screen/observed_hourly_demand.csv --capacity outputs/srp_real_screen/partial_ba_capacity_screen.csv --year 2024 --month 1 --output outputs/srp_real_screen
+      - name: Solve with illustrative fuel-specific derating and merit order
+        run: |
+          python -m grid_resilience.fuel_specific_screen_assumptions --capacity outputs/srp_real_screen/partial_ba_capacity_screen.csv --output outputs/srp_real_screen
+          python -m grid_resilience.monthly_pypsa_screen --demand outputs/srp_real_screen/observed_hourly_demand.csv --capacity outputs/srp_real_screen/fuel_assumption_capacity_screen.csv --year 2024 --month 1 --output outputs/srp_real_screen/fuel_scenario
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path('outputs/srp_real_screen/fuel_scenario')
+          m=json.loads((p/'screening_manifest.json').read_text())
+          d=pd.read_csv('outputs/srp_real_screen/observed_hourly_demand.csv')
+          g=pd.read_csv(p/'modeled_monthly_generation.csv')
+          u=m['modeled_unserved_mwh_by_ba']['SRP']
+          assert abs(g.modeled_generation_mwh.sum()+u-d.demand_mw.sum())<1e-3
+          print('Fuel-specific scenario modeled MWh:',g.modeled_generation_mwh.sum(),'unserved MWh:',u)
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -99,3 +115,7 @@ jobs:
             outputs/srp_real_screen/availability_sensitivity_summary.csv
             outputs/srp_real_screen/availability_sensitivity_generation.csv
             outputs/srp_real_screen/availability_sensitivity_manifest.json
+            outputs/srp_real_screen/fuel_assumption_capacity_screen.csv
+            outputs/srp_real_screen/fuel_assumption_manifest.json
+            outputs/srp_real_screen/fuel_scenario/modeled_monthly_generation.csv
+            outputs/srp_real_screen/fuel_scenario/screening_manifest.json
