@@ -9,6 +9,7 @@ on:
       - 'src/grid_resilience/srp_source_scope_gap.py'
       - 'src/grid_resilience/srp_net_exchange_pypsa_screen.py'
       - 'src/grid_resilience/srp_explicit_import_export.py'
+      - 'src/grid_resilience/srp_exchange_synthetic_regression.py'
       - 'src/grid_resilience/bidirectional_interchange_screen.py'
       - 'src/grid_resilience/exact_generator_scope_audit.py'
       - 'src/grid_resilience/excluded_capacity_upper_bound.py'
@@ -181,6 +182,8 @@ jobs:
           assert r['scenario']['max_hourly_bus_residual_mw']<1e-3
           assert r['historical_calibration_certified'] is False
           PY
+      - name: Synthetic import-heavy and export regression
+        run: python -m grid_resilience.srp_exchange_synthetic_regression
       - name: Solve PyPSA using explicit scheduled imports, exports and spill
         run: |
           python -m grid_resilience.srp_explicit_import_export --balance outputs/srp_real_screen/eia930_hourly_balance_audit.csv --capacity outputs/srp_real_screen/fuel_assumption_capacity_screen.csv --ba SRP --year 2024 --month 1 --output outputs/srp_real_screen/explicit_exchange
