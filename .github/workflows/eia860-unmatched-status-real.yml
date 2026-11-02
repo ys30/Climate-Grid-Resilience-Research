@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/eia860-unmatched-status-real.yml'
       - 'src/grid_resilience/eia860_full_status_triage.py'
+      - 'src/grid_resilience/retired_generator_observation_ledger.py'
       - 'src/grid_resilience/eia860_generator_extract.py'
       - 'src/grid_resilience/eia923_generator_extract.py'
 jobs:
@@ -66,6 +67,9 @@ jobs:
         run: |
           python -m grid_resilience.eia860_full_status_triage --archive outputs/status_audit/eia860.zip --unmatched outputs/status_audit/unmatched_generator_months_recomputed.csv --output outputs/status_audit/unmatched_all_status_sheets.csv
           cat outputs/status_audit/unmatched_all_status_sheets.csv
+      - name: Preserve measured EIA-923 net MWh separately from status eligibility
+        run: |
+          python -m grid_resilience.retired_generator_observation_ledger --observed outputs/status_audit/unmatched_generator_months_recomputed.csv --statuses outputs/status_audit/unmatched_all_status_sheets.csv --output outputs/status_audit/unmatched_observation_ledger.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -73,5 +77,6 @@ jobs:
           path: |
             outputs/status_audit/unmatched_generator_months_recomputed.csv
             outputs/status_audit/unmatched_all_status_sheets.csv
+            outputs/status_audit/unmatched_observation_ledger.csv
             outputs/status_audit/generator_extraction_manifest.json
             outputs/status_audit/eia860_extraction_manifest.json
