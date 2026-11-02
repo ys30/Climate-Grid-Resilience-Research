@@ -11,6 +11,7 @@ on:
       - 'src/grid_resilience/bidirectional_interchange_screen.py'
       - 'src/grid_resilience/exact_generator_scope_audit.py'
       - 'src/grid_resilience/excluded_capacity_upper_bound.py'
+      - 'src/grid_resilience/page4_fuel_descriptive_comparison.py'
       - 'tests/test_exact_generator_scope_audit.py'
   workflow_dispatch:
 jobs:
@@ -148,6 +149,9 @@ jobs:
           assert x['remaining_gap_lower_bound_mwh_given_only_these_additions']>0
           assert x['historical_calibration_certified'] is False
           PY
+      - name: Publish matched Page4 and modeled fuel table without calibration claims
+        run: |
+          python -m grid_resilience.page4_fuel_descriptive_comparison --page4 outputs/srp_real_screen/eia923_generator_month_net_mwh.csv --review outputs/srp_real_screen/ba_capacity_identity_review.csv --model outputs/srp_real_screen/interchange_case/modeled_generation_with_net_exchange.csv --output outputs/srp_real_screen
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -178,3 +182,5 @@ jobs:
             outputs/srp_real_screen/exact_generator_scope_summary.csv
             outputs/srp_real_screen/exact_generator_scope_manifest.json
             outputs/srp_real_screen/excluded_capacity_maximum_contribution.json
+            outputs/srp_real_screen/fuel_descriptive_noncali_comparison.csv
+            outputs/srp_real_screen/fuel_descriptive_noncali_manifest.json
