@@ -7,6 +7,7 @@ on:
       - 'src/grid_resilience/hy_ps_pypsa_components.py'
       - 'tests/test_hy_ps_budget_scenario.py'
       - 'tests/test_hy_ps_pypsa_components.py'
+      - 'tests/test_hy_ps_physical_invariants.py'
   workflow_dispatch:
 jobs:
   resource-tests:
@@ -20,7 +21,7 @@ jobs:
       - run: python -m pip install -e '.[model,dev]'
       - name: Compile HY PS source before tests
         run: python -m py_compile src/grid_resilience/hy_ps_pypsa_components.py src/grid_resilience/hy_ps_budget_scenario.py
-      - run: python -m pytest -q tests/test_hy_ps_budget_scenario.py tests/test_hy_ps_pypsa_components.py
+      - run: python -m pytest -q tests/test_hy_ps_budget_scenario.py tests/test_hy_ps_pypsa_components.py tests/test_hy_ps_physical_invariants.py
       - name: Validate actual PyPSA link/store formulation on 24-hour synthetic case
         run: |
           python - <<'PY'
