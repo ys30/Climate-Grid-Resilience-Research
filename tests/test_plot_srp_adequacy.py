@@ -47,3 +47,22 @@ def test_figure_renderer_rejects_energy_mismatch(tmp_path: Path):
     diurnal.to_csv(d, index=False)
     with pytest.raises(ValueError, match="disagree"):
         render(h, d, tmp_path / "figures")
+
+
+def test_figure_renderer_rejects_duplicate_utc_bins(tmp_path: Path):
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("matplotlib")
+    times = pd.date_range("2024-07-01", periods=168, freq="h", tz="UTC")
+    raw = pd.DataFrame({
+        "case": ["synthetic"] * 168, "timestamp": times,
+        "demand_mw": [100.] * 168,
+        "assumed_solar_availability_pu": [0.5] * 168,
+        "shortfall_mw": [0.] * 168,
+    })
+    hourly, diurnal = prepare(raw)
+    diurnal.loc[0, "hour_utc"] = diurnal.loc[1, "hour_utc"]
+    h, d = tmp_path / "hourly.csv", tmp_path / "diurnal.csv"
+    hourly.to_csv(h, index=False)
+    diurnal.to_csv(d, index=False)
+    with pytest.raises(ValueError, match="UTC hour-of-day bins"):
+        render(h, d, tmp_path / "figures")
