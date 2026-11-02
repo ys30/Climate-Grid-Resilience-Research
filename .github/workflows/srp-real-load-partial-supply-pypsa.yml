@@ -4,6 +4,7 @@ on:
     paths:
       - '.github/workflows/srp-real-load-partial-supply-pypsa.yml'
       - 'src/grid_resilience/eia860_partial_ba_capacity.py'
+      - 'src/grid_resilience/srp_monthly_availability_sensitivity.py'
   workflow_dispatch:
 jobs:
   real-input-screen:
@@ -80,6 +81,9 @@ jobs:
           print('Modeled unserved MWh:',s['modeled_unserved_mwh_by_ba']['SRP'])
           print('Historical calibration certified: NO')
           PY
+      - name: Run full-month hypothetical availability sensitivity with actual load
+        run: |
+          python -m grid_resilience.srp_monthly_availability_sensitivity --demand outputs/srp_real_screen/observed_hourly_demand.csv --capacity outputs/srp_real_screen/partial_ba_capacity_screen.csv --year 2024 --month 1 --output outputs/srp_real_screen
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -92,3 +96,6 @@ jobs:
             outputs/srp_real_screen/capacity_screen_manifest.json
             outputs/srp_real_screen/modeled_monthly_generation.csv
             outputs/srp_real_screen/screening_manifest.json
+            outputs/srp_real_screen/availability_sensitivity_summary.csv
+            outputs/srp_real_screen/availability_sensitivity_generation.csv
+            outputs/srp_real_screen/availability_sensitivity_manifest.json
