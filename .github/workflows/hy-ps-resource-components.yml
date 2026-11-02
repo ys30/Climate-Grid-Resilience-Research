@@ -1,0 +1,43 @@
+name: HY PS energy budget component tests
+on:
+  push:
+    paths:
+      - '.github/workflows/hy-ps-resource-components.yml'
+      - 'src/grid_resilience/hy_ps_budget_scenario.py'
+      - 'src/grid_resilience/hy_ps_pypsa_components.py'
+      - 'tests/test_hy_ps_budget_scenario.py'
+  workflow_dispatch:
+jobs:
+  resource-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - run: python -m pytest -q tests/test_hy_ps_budget_scenario.py
+      - name: Validate actual PyPSA link/store formulation on 24-hour synthetic case
+        run: |
+          python - <<'PY'
+          import pypsa
+          from grid_resilience.hy_ps_budget_scenario import assumptions
+          from grid_resilience.hy_ps_pypsa_components import add_hy_ps
+          settings=assumptions(12.0,4.0,0.81)
+          n=pypsa.Network();n.set_snapshots(range(24));n.add('Bus','SRP')
+          n.add('Load','test_load',bus='SRP',p_set=[2.0]*24)
+          n.add('Generator','backup',bus='SRP',p_nom=5,marginal_cost=100)
+          mapping=add_hy_ps(n,'SRP',settings)
+          status,condition=n.optimize(solver_name='highs')
+          assert condition=='optimal',(status,condition)
+          hy=n.links_t.p1[mapping['hydro_link']]
+          charge=n.links_t.p0[mapping['storage_charge_link']]
+          discharge=-n.links_t.p1[mapping['storage_discharge_link']]
+          soc=n.stores_t.e['SRP_ps_energy']
+          assert hy.sum()<=12.0001,hy.sum()
+          assert soc.between(-1e-5,settings['ps_energy_capacity_mwh_assumed']+1e-5).all()
+          assert abs(soc.iloc[-1])<1e-4
+          assert charge.min()>-1e-5 and discharge.min()>-1e-5
+          print('HY dispatched',hy.sum(),'PS charging',charge.sum(),'PS discharging',discharge.sum())
+          PY
