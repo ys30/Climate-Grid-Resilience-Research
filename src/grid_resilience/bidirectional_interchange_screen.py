@@ -33,10 +33,10 @@ def solve(balance,capacity,year,month,ba):
     # Import surplus is an explicit, costly disposal option (not a real historical flow).
     n.add("Generator","unserved",bus=ba,p_nom=float((d.demand_mw+exports).max())+1,
           marginal_cost=100000.0)
-    n.add("Load","import_surplus_disposal",bus=ba,p_set=0.0)
-    # Represent spill as a dispatchable store, able to absorb energy at 0.1 cost.
-    n.add("Store","boundary_spill",bus=ba,e_nom=float(imports.sum())+1,e_initial=0,
-          e_cyclic=False,marginal_cost=0.1)
+    # A dispatchable NEGATIVE generator absorbs surplus in the same hour.
+    # The small positive cost of negative dispatch discourages unnecessary spill.
+    n.add("Generator","boundary_spill",bus=ba,p_nom=float(imports.max())+1,
+          p_min_pu=-1.0,p_max_pu=0.0,marginal_cost=-0.1)
     for r in c.itertuples(index=False):
         n.add("Generator",str(r.technology),bus=ba,p_nom=float(r.capacity_mw),
               marginal_cost=float(r.marginal_cost))
@@ -46,8 +46,8 @@ def solve(balance,capacity,year,month,ba):
     actual= float(generation[[str(x) for x in c.technology]].to_numpy().sum())
     short=float(generation.unserved.sum())
     imported=float(generation.observed_imports.sum())
-    spill=float(-n.stores_t.p["boundary_spill"].sum())
-    # Net store charging, less any later discharge; positive means net absorption.
+    spill=float(-generation.boundary_spill.sum())
+    # This is irreversible same-hour surplus absorption, not a storage device.
     demand=float(d.demand_mw.sum());export=float(exports.sum())
     if abs(actual+imported+short-demand-export-spill)>max(0.01,(demand+export)*1e-8):
         raise ValueError("Boundary energy conservation failed")
