@@ -11,6 +11,10 @@ def test_identity_does_not_substitute_same_fuel():
     assert manifest["exact_generator_screened_rows"]==1
     assert manifest["excluded_or_unmatched_rows"]==1
     assert summary.observed_net_mwh.sum()==95
+    assert manifest["observed_page4_net_mwh"]==95
+    assert manifest["exact_screened_observed_net_mwh"]==100
+    assert manifest["excluded_or_unmatched_observed_net_mwh"]==-5
+    assert abs(manifest["screened_identity_share_of_absolute_mwh"]-100/105)<1e-12
     assert not manifest["complete_ba_fleet_certified"]
 
 def test_duplicate_inventory_fails():
