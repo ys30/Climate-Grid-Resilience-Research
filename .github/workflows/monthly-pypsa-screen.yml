@@ -1,0 +1,45 @@
+name: Full calendar month PyPSA screening smoke test
+on:
+  push:
+    paths:
+      - 'src/grid_resilience/monthly_pypsa_screen.py'
+      - '.github/workflows/monthly-pypsa-screen.yml'
+  workflow_dispatch:
+jobs:
+  monthly-solve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model]'
+      - name: Generate explicit hypothetical January inputs and solve 744 hours
+        run: |
+          mkdir -p outputs/monthly_smoke
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('outputs/monthly_smoke')
+          ts=pd.date_range('2024-01-01',periods=744,freq='h',tz='UTC')
+          pd.DataFrame({'timestamp':ts,'ba':'TEST_BA','demand_mw':50.0}).to_csv(out/'demand.csv',index=False)
+          pd.DataFrame([{'ba':'TEST_BA','technology':'gas','capacity_mw':60.0,'marginal_cost':50.0}]).to_csv(out/'capacity.csv',index=False)
+          PY
+          python -m grid_resilience.monthly_pypsa_screen --demand outputs/monthly_smoke/demand.csv --capacity outputs/monthly_smoke/capacity.csv --year 2024 --month 1 --output outputs/monthly_smoke
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path('outputs/monthly_smoke')
+          x=pd.read_csv(p/'modeled_monthly_generation.csv')
+          assert len(x)==1
+          assert abs(x.modeled_generation_mwh.iloc[0]-37200.0)<1e-3
+          m=json.loads((p/'screening_manifest.json').read_text())
+          assert abs(m['modeled_unserved_mwh_by_ba']['TEST_BA'])<1e-5
+          assert m['historical_calibration_certified'] is False
+          print('744-hour hypothetical monthly solve passed')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hypothetical-monthly-pypsa-smoke
+          path: outputs/monthly_smoke
