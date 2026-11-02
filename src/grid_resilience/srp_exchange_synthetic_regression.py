@@ -14,6 +14,7 @@ def main():
         assert abs(result["scheduled_import_mwh"]-expected_import)<1e-6
         assert abs(result["scheduled_export_mwh"]-expected_export)<1e-6
         assert result["solver_status"]=="ok" and result["solver_condition"]=="optimal"
+        assert result["max_absolute_hourly_balance_residual_mw"]<1e-4
         assert abs(result["energy_balance_residual_mwh"])<1e-4
         assert result["unserved_mwh"]<1e-4
         if name=="net_export":
@@ -36,6 +37,7 @@ def main():
     assert result["hours_with_unserved"]==0
     assert result["solver_condition"]=="optimal"
     assert abs(result["energy_balance_residual_mwh"])<1e-4
+    assert result["max_absolute_hourly_balance_residual_mw"]<1e-4
     print("mixed_import_export",result)
     for field in ("demand_mw","interchange_mw"):
         bad=mixed.copy()
