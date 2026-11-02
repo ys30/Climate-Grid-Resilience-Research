@@ -68,7 +68,6 @@ def main():
     a=p.parse_args()
     m=run(pd.read_csv(a.balance),pd.read_csv(a.capacity),a.ba,a.year,a.month)
     o=Path(a.output);o.mkdir(parents=True,exist_ok=True)
-    (o/"explicit_import_export_manifest.json").write_text(json.dumps(m,indent=2)+"
-")
+    (o/"explicit_import_export_manifest.json").write_text(json.dumps(m,indent=2)+"\n")
     print(json.dumps(m,indent=2))
 if __name__=="__main__":main()
