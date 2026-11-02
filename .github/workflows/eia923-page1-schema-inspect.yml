@@ -32,6 +32,6 @@ jobs:
                   ws=w[sheet]
                   print('SHEET:',sheet)
                   for i,row in enumerate(ws.iter_rows(min_row=1,max_row=12,values_only=True),1):
-                      print('HEADER_ROW',i,':',repr(list(row[:40])))
+                      print('HEADER_ROW',i,':',repr(list(enumerate(row)) if i==6 and sheet=='Page 1 Generation and Fuel Data' else list(row[:40])))
               w.close()
           PY
