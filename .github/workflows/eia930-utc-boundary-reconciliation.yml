@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/eia930-utc-boundary-reconciliation.yml'
+      - 'src/grid_resilience/eia930_net_interchange_audit.py'
   workflow_dispatch:
 jobs:
   reconcile:
@@ -62,6 +63,9 @@ jobs:
           assert len(x)==744
           print('SOURCE-VERIFIED 744 hours:',len(x),'MWh total demand:',x.demand_mw.sum())
           PY
+      - name: Audit official SRP generation interchange demand identity
+        run: |
+          python -m grid_resilience.eia930_net_interchange_audit --csv outputs/eia930_boundary/combined_official_balance.csv --ba SRP --year 2024 --month 1 --output outputs/eia930_boundary
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -70,3 +74,5 @@ jobs:
             outputs/eia930_boundary/source_manifest.json
             outputs/eia930_boundary/srp_2024_jan_utc_744.csv
             outputs/eia930_boundary/combined_official_balance.csv
+            outputs/eia930_boundary/eia930_hourly_balance_audit.csv
+            outputs/eia930_boundary/eia930_balance_metrics.json
