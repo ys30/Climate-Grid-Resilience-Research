@@ -7,7 +7,9 @@ on:
       - 'src/grid_resilience/eia923_cross_sheet_coverage.py'
       - 'tests/test_eia923_cross_sheet_coverage.py'
       - 'src/grid_resilience/eia860_unmatched_triage.py'
-      - 'tests/test_eia860_unmatched_triage.py'
+      - 'tests/test_eia860_unmatched_triage.py tests/test_eia860_full_status_triage.py'
+      - 'src/grid_resilience/eia860_full_status_triage.py'
+      - 'tests/test_eia860_full_status_triage.py'
       - '.github/workflows/monthly-generation-comparison-quality.yml'
   pull_request:
     paths:
@@ -17,6 +19,8 @@ on:
       - 'tests/test_eia923_cross_sheet_coverage.py'
       - 'src/grid_resilience/eia860_unmatched_triage.py'
       - 'tests/test_eia860_unmatched_triage.py'
+      - 'src/grid_resilience/eia860_full_status_triage.py'
+      - 'tests/test_eia860_full_status_triage.py'
       - '.github/workflows/monthly-generation-comparison-quality.yml'
   workflow_dispatch:
 jobs:
@@ -28,5 +32,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -e '.[dev]' numpy
+      - run: python -m pip install -e '.[dev]' numpy openpyxl
       - run: python -m pytest -q tests/test_monthly_generation_comparison.py tests/test_eia923_cross_sheet_coverage.py tests/test_eia860_unmatched_triage.py
