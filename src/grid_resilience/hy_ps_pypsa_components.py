@@ -17,6 +17,7 @@ def add_hy_ps(n, bus, settings, *, prefix="SRP"):
     if settings["historical_calibration_certified"] is not False:
         raise ValueError("Scenario must not assert historical calibration")
     if bus not in n.buses.index:raise ValueError("Target BA bus absent")
+    if len(n.snapshots)==0:raise ValueError("Snapshots required before adding resources")
     hydro_bus=f"{prefix}_hydro_resource";storage_bus=f"{prefix}_ps_resource"
     if hydro_bus in n.buses.index or storage_bus in n.buses.index:
         raise ValueError("Duplicate resource buses")
