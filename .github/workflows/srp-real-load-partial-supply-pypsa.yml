@@ -8,6 +8,7 @@ on:
       - 'src/grid_resilience/fuel_specific_screen_assumptions.py'
       - 'src/grid_resilience/srp_source_scope_gap.py'
       - 'src/grid_resilience/srp_net_exchange_pypsa_screen.py'
+      - 'src/grid_resilience/srp_explicit_import_export.py'
       - 'src/grid_resilience/bidirectional_interchange_screen.py'
       - 'src/grid_resilience/exact_generator_scope_audit.py'
       - 'src/grid_resilience/excluded_capacity_upper_bound.py'
@@ -180,6 +181,9 @@ jobs:
           assert r['scenario']['max_hourly_bus_residual_mw']<1e-3
           assert r['historical_calibration_certified'] is False
           PY
+      - name: Solve PyPSA using explicit scheduled imports, exports and spill
+        run: |
+          python -m grid_resilience.srp_explicit_import_export --balance outputs/srp_real_screen/eia930_hourly_balance_audit.csv --capacity outputs/srp_real_screen/fuel_assumption_capacity_screen.csv --ba SRP --year 2024 --month 1 --output outputs/srp_real_screen/explicit_exchange
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -205,6 +209,7 @@ jobs:
             outputs/srp_real_screen/eia930_balance_metrics.json
             outputs/srp_real_screen/interchange_case/interchange_screen_manifest.json
             outputs/srp_real_screen/interchange_case/modeled_generation_with_net_exchange.csv
+            outputs/srp_real_screen/explicit_exchange/explicit_import_export_manifest.json
             outputs/srp_real_screen/bidirectional_case/bidirectional_boundary_screen.json
             outputs/srp_real_screen/exact_generator_scope_rows.csv
             outputs/srp_real_screen/exact_generator_scope_summary.csv
