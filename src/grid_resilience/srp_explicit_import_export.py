@@ -2,7 +2,7 @@
 
 This is a source-scheduled external boundary, NOT a transmission flow simulation.
 """
-import argparse,json,calendar
+import argparse,json,calendar,math
 from pathlib import Path
 import pandas as pd
 
@@ -14,6 +14,7 @@ def run(balance, capacity, ba, year, month):
     b["timestamp"]=pd.to_datetime(b.timestamp,utc=True,errors="raise")
     for k in ("demand_mw","interchange_mw"):b[k]=pd.to_numeric(b[k],errors="raise")
     if b[["timestamp","demand_mw","interchange_mw"]].isna().any().any():raise ValueError("Missing boundary data")
+    if not b[["demand_mw","interchange_mw"]].map(math.isfinite).all().all():raise ValueError("Nonfinite boundary data")
     expected=pd.date_range(f"{year}-{month:02d}-01",periods=calendar.monthrange(year,month)[1]*24,freq="h",tz="UTC")
     if len(b)!=len(expected) or b.timestamp.duplicated().any() or not pd.DatetimeIndex(b.timestamp.sort_values()).equals(expected):raise ValueError("Incomplete UTC month")
     b=b.set_index("timestamp").reindex(expected)
@@ -22,6 +23,7 @@ def run(balance, capacity, ba, year, month):
     if c.empty or c.technology.duplicated().any():raise ValueError("Missing or duplicate capacity")
     for k in ("capacity_mw","marginal_cost"):c[k]=pd.to_numeric(c[k],errors="raise")
     if c[["capacity_mw","marginal_cost"]].isna().any().any() or (c.capacity_mw<0).any():raise ValueError("Invalid capacity")
+    if not c[["capacity_mw","marginal_cost"]].map(math.isfinite).all().all():raise ValueError("Nonfinite capacity or costs")
     imports=(-b.interchange_mw).clip(lower=0)
     exports=b.interchange_mw.clip(lower=0)
     n=pypsa.Network();n.set_snapshots(expected.tz_localize(None));n.add("Bus",ba)
