@@ -1,0 +1,31 @@
+name: Exchange boundary focused regression
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/exchange-boundary-regression.yml'
+      - 'src/grid_resilience/srp_explicit_import_export.py'
+      - 'src/grid_resilience/srp_exchange_synthetic_regression.py'
+jobs:
+  check-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model,dev]'
+      - name: Preflight source compile
+        run: python -m py_compile src/grid_resilience/srp_explicit_import_export.py src/grid_resilience/srp_exchange_synthetic_regression.py
+      - name: Run synthetic imports, exports and mixed hourly exchange
+        run: |
+          mkdir -p outputs/exchange_test
+          set -o pipefail
+          python -u -m grid_resilience.srp_exchange_synthetic_regression 2>&1 | tee outputs/exchange_test/regression.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exchange-boundary-test-logs
+          path: outputs/exchange_test/
+          if-no-files-found: warn
