@@ -40,3 +40,19 @@ Comparing all 10 unmatched keys against `eia860_2024_operable_generators.csv` in
 | BPAT plant 58109 / TG1 | TG2 | identity not confirmed; **do not auto-recode** |
 
 This does not prove either key changed names; other candidate generators are not justified matches. The other eight unmatched keys arise from seven distinct absent plant IDs (three separate generator keys at plant 356). This is a source-scope fact, not a root cause: status/vintage checks against full official EIA-860 are still required.
+
+
+## Official EIA-860 full-status resolution (run 41395106441)
+
+**Updated evidence:** [successful all-status workflow run 41395106441](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41395106441), code commit `f368e4708a7e358f9a0ab2f251caa9b93400ffda`, [artifact 13118652393](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41395106441/artifacts/13118652393). The workflow downloaded official 2024 EIA-860 and EIA-923 ZIPs, recomputed the unmatched set and checked each exact generator key against all recognized EIA-860 generator workbook sheets.
+
+**7 of 10 distinct unmatched EIA-923 generator identities have exact matches in the official EIA-860 2024 `Retired and Canceled` worksheet with reported status `RE`:**
+
+- BPAT `58109/TG1`
+- CISO `10446/GEN1`, `10661/GEN4`, `50632/GEN1`, `50837/GEN1`, `54626/TG01`, `60100/G-1`
+
+**3 remaining unmatched identities** are `CISO 356/5`, `CISO 356/6` and `CISO 356/8`. No corresponding plant was located in recognized 2024 EIA-860 generator workbook sheets. This is absence from the examined workbook, **not proof of retirement or zero generation**.
+
+The previously observed `58109/TG2` and `10661/GEN5` are other same-plant operable generator IDs, *not* verified renames or replacements for TG1/GEN4. Seven matches on `RE` mean only that the official 2024 workbook carries those precise IDs in the `Retired and Canceled` sheet with that code; further study would be needed to reconcile EIA-923 reported energy with specific retirement dates and status definitions.
+
+**Historical calibration certified: NO.** Full BA fleet completeness and withheld-year modeled-versus-observed generation validation remain pending.
