@@ -43,3 +43,11 @@ def test_null_generation_fails_closed():
     review=pd.DataFrame([{"plant_id":"1","generator_id":"A","screening_candidate":True}])
     with pytest.raises(ValueError,match="Invalid observed"):
         validate(observed,review)
+
+
+def test_empty_review_rejected():
+    observed=pd.DataFrame([{"plant_id":"1","generator_id":"A","reported_ba":"SRP",
+        "period":"2024-01","generation_mwh":2}])
+    review=pd.DataFrame(columns=["plant_id","generator_id","screening_candidate"])
+    with pytest.raises(ValueError,match="Empty capacity review"):
+        validate(observed,review)
