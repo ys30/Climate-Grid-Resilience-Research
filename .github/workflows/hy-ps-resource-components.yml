@@ -29,6 +29,7 @@ jobs:
           n.add('Load','test_load',bus='SRP',p_set=[2.0]*24)
           n.add('Generator','backup',bus='SRP',p_nom=5,marginal_cost=100)
           mapping=add_hy_ps(n,'SRP',settings)
+          assert abs(n.links.loc[mapping['storage_discharge_link'],'p_nom'] * n.links.loc[mapping['storage_discharge_link'],'efficiency']-154.1)<1e-8
           status,condition=n.optimize(solver_name='highs')
           assert condition=='optimal',(status,condition)
           hy=n.links_t.p1[mapping['hydro_link']]
