@@ -4,6 +4,12 @@ on:
   push:
     paths:
       - '.github/workflows/azps-srp-multitech-envelope.yml'
+      - 'src/grid_resilience/multi_technology_dispatch.py'
+      - 'src/grid_resilience/srp_hourly_figures.py'
+      - 'src/grid_resilience/plot_srp_adequacy.py'
+      - 'tests/test_srp_hourly_figures.py'
+      - 'tests/test_plot_srp_adequacy.py'
+      - 'pyproject.toml'
 jobs:
   envelope:
     runs-on: ubuntu-24.04
