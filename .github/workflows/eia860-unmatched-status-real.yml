@@ -12,6 +12,7 @@ on:
       - 'src/grid_resilience/eia923_generator_extract.py'
       - 'src/grid_resilience/eia923_page1_hy_ps.py'
       - 'src/grid_resilience/eia923_page1_all_fuels.py'
+      - 'src/grid_resilience/page1_hy_ps_source_coverage.py'
       - 'tests/test_eia923_page1_all_fuels.py'
 jobs:
   status-audit:
@@ -120,6 +121,16 @@ jobs:
           print('HY/PS monthly independent source extraction reconciled for 12 months')
           print('2024-01 HY MWh',h,'PS MWh',p)
           PY
+      - name: Emit separate Page1 hydro-pumped storage coverage matrix
+        run: |
+          python -m grid_resilience.page1_hy_ps_source_coverage --page1 outputs/status_audit/page1_hy_ps_monthly_observations.csv --ba SRP --output outputs/status_audit
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('outputs/status_audit/page1_hy_ps_source_coverage_manifest.json').read_text())
+          assert m['observed_month_slots']==24, m
+          assert m['page4_coverage_not_interchangeable']
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -140,3 +151,5 @@ jobs:
             outputs/status_audit/page1_all_fuels_reported_ba.csv
             outputs/status_audit/page1_prime_mover_fuel_month_summary.csv
             outputs/status_audit/page1_all_fuels_manifest.json
+            outputs/status_audit/page1_hy_ps_source_coverage.csv
+            outputs/status_audit/page1_hy_ps_source_coverage_manifest.json
