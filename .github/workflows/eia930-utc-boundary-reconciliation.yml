@@ -1,0 +1,72 @@
+name: EIA-930 UTC month boundary from adjacent official half-year CSVs
+on:
+  push:
+    paths:
+      - '.github/workflows/eia930-utc-boundary-reconciliation.yml'
+  workflow_dispatch:
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - name: Download 2023 Jul-Dec and 2024 Jan-Jun original Balance CSVs
+        run: |
+          mkdir -p outputs/eia930_boundary
+          python - <<'PY'
+          import urllib.request,hashlib,json
+          from pathlib import Path
+          out=Path('outputs/eia930_boundary')
+          sources={
+            '2023_Jul_Dec':'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2023_Jul_Dec.csv',
+            '2024_Jan_Jun':'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv'}
+          manifest={}
+          for key,url in sources.items():
+              req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+              with urllib.request.urlopen(req,timeout=120) as res: raw=res.read(120_000_001)
+              if not raw or len(raw)>120_000_000:raise ValueError('Empty or too large')
+              (out/(key+'.csv')).write_bytes(raw)
+              manifest[key]={'url':url,'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw)}
+              print(key,manifest[key])
+          (out/'source_manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          PY
+      - name: Combine only original reported rows and validate UTC January
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('outputs/eia930_boundary')
+          files=[out/'2023_Jul_Dec.csv',out/'2024_Jan_Jun.csv']
+          parts=[]
+          for f in files:
+              x=pd.read_csv(f,low_memory=False)
+              assert {'Balancing Authority','UTC Time at End of Hour','Demand (MW)'}.issubset(x.columns)
+              x=x[x['Balancing Authority'].astype(str).str.strip().eq('SRP')].copy()
+              x['_end']=pd.to_datetime(x['UTC Time at End of Hour'],utc=True,errors='raise')
+              x=x[(x._end>=pd.Timestamp('2024-01-01T01:00Z'))&
+                  (x._end<=pd.Timestamp('2024-02-01T00:00Z'))].drop(columns=['_end'])
+              print(f.name,'January-relevant rows:',len(x))
+              parts.append(x)
+          full=pd.concat(parts,ignore_index=True)
+          full.to_csv(out/'combined_official_balance.csv',index=False)
+          PY
+          python -m grid_resilience.eia930_balance_archive_import --archive outputs/eia930_boundary/combined_official_balance.csv --ba SRP --year 2024 --month 1 --output outputs/eia930_boundary/srp_2024_jan_utc_744.csv
+          python - <<'PY'
+          import pandas as pd
+          p='outputs/eia930_boundary/srp_2024_jan_utc_744.csv'
+          x=pd.read_csv(p)
+          assert len(x)==744
+          print('SOURCE-VERIFIED 744 hours:',len(x),'MWh total demand:',x.demand_mw.sum())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eia930-2024-jan-utc-boundary-audit
+          path: |
+            outputs/eia930_boundary/source_manifest.json
+            outputs/eia930_boundary/srp_2024_jan_utc_744.csv
+            outputs/eia930_boundary/combined_official_balance.csv
