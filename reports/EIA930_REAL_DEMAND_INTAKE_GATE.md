@@ -20,3 +20,14 @@ EIA documentation describes API authentication, access, and official CSV downloa
 4. Independently validate EIA-923 monthly technology observations and availability of 2019–2024 years before calibration/holdout metrics.
 
 **Empirical PyPSA calibration certified: NO.**
+
+
+## Alternative archive access test (run 41402367603)
+
+A specific versioned source was identified: [Catalyst Cooperative / PUDL raw EIA-930 Zenodo record 18366739](https://zenodo.org/records/18366739) with `eia930-2024half1.zip`, advertised MD5 `b8cc4d16ee54724d94ca3df4f8f1bb3a` (the source version is pinned because newer archived snapshots can have different content/checksums). EIA's [EIA-930 source documentation](https://www.eia.gov/electricity/930-content/about.html) confirms official six-month balance CSV availability.
+
+An [actual GitHub Actions archive acquisition run 41402367603](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41402367603) **failed** at the public Zenodo download with `urllib.error.HTTPError: HTTP Error 403: Forbidden`. This is an independent 403 block affecting the second source domain in the CI runner environment, not a checksum mismatch. The archive never downloaded, so its internal schema and observed 744 SRP hours remain **unverified**; do not claim real data ingestion or monthly empirical simulation.
+
+Recommended next path: acquire the official EIA-930 six-month balance CSV from the EIA Grid Monitor interface and pass it into a reviewed importer (or use a source-supported GitHub release / artifact mirror with provenance and checksum); diagnose CI outbound HTTP filtering and access policies. Avoid bypassing access controls. Until actual file bytes and hourly completeness are verified, leave the model's real-data gate closed.
+
+**Current state:** 744-hour *hypothetical* PyPSA screen has a passing CI; real EIA-930 → PyPSA solve not executed.
