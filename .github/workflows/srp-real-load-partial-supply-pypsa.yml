@@ -9,6 +9,8 @@ on:
       - 'src/grid_resilience/srp_source_scope_gap.py'
       - 'src/grid_resilience/srp_net_exchange_pypsa_screen.py'
       - 'src/grid_resilience/bidirectional_interchange_screen.py'
+      - 'src/grid_resilience/exact_generator_scope_audit.py'
+      - 'tests/test_exact_generator_scope_audit.py'
   workflow_dispatch:
 jobs:
   real-input-screen:
@@ -19,7 +21,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -e '.[model]' openpyxl
+      - run: python -m pip install -e '.[model,dev]' openpyxl
+      - run: python -m pytest -q tests/test_exact_generator_scope_audit.py
       - name: Download actual EIA-930, EIA-860 and EIA-923 source archives
         run: |
           mkdir -p outputs/srp_real_screen
@@ -129,6 +132,9 @@ jobs:
           assert abs(x['observed_import_injection_mwh']+x['modeled_plant_generation_mwh']+x['modeled_unserved_mwh']-x['demand_mwh']-x['observed_export_sink_mwh']-x['modeled_import_surplus_disposal_mwh'])<1e-3
           assert x['historical_calibration_certified'] is False
           PY
+      - name: Verify exact generator eligibility against observed January Page4
+        run: |
+          python -m grid_resilience.exact_generator_scope_audit --page4 outputs/srp_real_screen/eia923_generator_month_net_mwh.csv --review outputs/srp_real_screen/ba_capacity_identity_review.csv --ba SRP --month 2024-01 --output outputs/srp_real_screen
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -155,3 +161,6 @@ jobs:
             outputs/srp_real_screen/interchange_case/interchange_screen_manifest.json
             outputs/srp_real_screen/interchange_case/modeled_generation_with_net_exchange.csv
             outputs/srp_real_screen/bidirectional_case/bidirectional_boundary_screen.json
+            outputs/srp_real_screen/exact_generator_scope_rows.csv
+            outputs/srp_real_screen/exact_generator_scope_summary.csv
+            outputs/srp_real_screen/exact_generator_scope_manifest.json
