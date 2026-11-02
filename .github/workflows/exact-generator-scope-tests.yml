@@ -1,0 +1,35 @@
+name: Exact generator scope unit tests
+on:
+  push:
+    paths:
+      - '.github/workflows/exact-generator-scope-tests.yml'
+      - 'src/grid_resilience/exact_generator_scope_audit.py'
+      - 'tests/test_exact_generator_scope_audit.py'
+  pull_request:
+    paths:
+      - '.github/workflows/exact-generator-scope-tests.yml'
+      - 'src/grid_resilience/exact_generator_scope_audit.py'
+      - 'tests/test_exact_generator_scope_audit.py'
+  workflow_dispatch:
+jobs:
+  identity-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only audit test requirements
+        run: python -m pip install -e '.[dev]'
+      - name: Run strict identity and missing-data tests
+        run: python -m pytest -q tests/test_exact_generator_scope_audit.py
+      - name: Audit source provenance boundaries
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          code=Path('src/grid_resilience/exact_generator_scope_audit.py').read_text()
+          assert 'complete_ba_fleet_certified' in code
+          assert 'historical_calibration_certified' in code
+          print('Unit tests check identity matching; full SRP historical coverage is NOT certified.')
+          PY
