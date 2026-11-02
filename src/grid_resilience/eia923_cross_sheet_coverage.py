@@ -16,7 +16,7 @@ def audit(page4,hy,ps):
         for field in ("plant_id","reported_ba","period"):
             f[field]=f[field].astype("string").str.strip()
             if f[field].isna().any() or f[field].eq("").any():raise ValueError(f"{name}: invalid {field}")
-        f["plant_id"]=f.plant_id.str.replace(r"^0+(?=\\d)", "",regex=True)
+        f["plant_id"]=f.plant_id.str.replace(r"^0+(?=[0-9])", "",regex=True)
         frames.append(f)
     g,h,p=frames
     if not h.prime_mover.eq("HY").all() or not p.prime_mover.eq("PS").all():
