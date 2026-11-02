@@ -17,3 +17,7 @@ def test_hy_ps_components_exist_and_discharge_output_is_nameplate():
     discharge=n.links.loc[mapping["storage_discharge_link"]]
     assert discharge.p_nom*discharge.efficiency==pytest.approx(154.1)
     assert n.stores.loc["SRP_ps_energy","e_nom"]==pytest.approx(616.4)
+    assert not bool(n.stores.loc["SRP_ps_energy","e_cyclic"])
+    assert n.stores.loc["SRP_ps_energy","e_initial"]==pytest.approx(0)
+    assert n.stores_t.e_max_pu["SRP_ps_energy"].iloc[-1]==pytest.approx(0)
+    assert n.stores_t.e_min_pu["SRP_ps_energy"].iloc[-1]==pytest.approx(0)
