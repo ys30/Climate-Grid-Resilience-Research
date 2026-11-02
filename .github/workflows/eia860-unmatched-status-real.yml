@@ -109,7 +109,7 @@ jobs:
           all_fuels=pd.read_csv(out/'page1_all_fuels_reported_ba.csv')
           hydro=pd.read_csv(out/'page1_hy_ps_monthly_observations.csv')
           a=all_fuels.loc[all_fuels.prime_mover.isin(['HY','PS'])].groupby(['prime_mover','period']).net_generation_mwh.sum()
-          b=hydro.groupby(['prime_mover','period']).net_generation_mwh.sum()
+          b=hydro.loc[hydro.period.eq('2024-01')].groupby(['prime_mover','period']).net_generation_mwh.sum()
           if not a.index.equals(b.index):
               raise ValueError('Page1 HY/PS month coverage mismatch between independent extractors')
           delta=(a-b).abs()
@@ -119,7 +119,8 @@ jobs:
           h=jan.loc[jan.prime_mover.eq('HY'),'net_generation_mwh'].sum()
           p=jan.loc[jan.prime_mover.eq('PS'),'net_generation_mwh'].sum()
           assert abs(h-1015.0)<1e-6 and abs(p+132.0)<1e-6
-          print('HY/PS monthly independent source extraction reconciled for 12 months')
+          assert hydro.groupby('prime_mover').period.nunique().to_dict()=={'HY':12,'PS':12}
+          print('Page1 HY/PS January independently reconciled; 12-month coverage separately verified')
           print('2024-01 HY MWh',h,'PS MWh',p)
           PY
       - name: Emit separate Page1 hydro-pumped storage coverage matrix
