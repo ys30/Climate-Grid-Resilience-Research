@@ -46,8 +46,8 @@ def solve(balance,capacity,year,month,ba):
     actual= float(generation[[str(x) for x in c.technology]].to_numpy().sum())
     short=float(generation.unserved.sum())
     imported=float(generation.observed_imports.sum())
-    spill=float((-n.stores_t.p["boundary_spill"]).clip(lower=0).sum())
-    # Stores charging is positive consumption when stores_t.p is negative.
+    spill=float(-n.stores_t.p["boundary_spill"].sum())
+    # Net store charging, less any later discharge; positive means net absorption.
     demand=float(d.demand_mw.sum());export=float(exports.sum())
     if abs(actual+imported+short-demand-export-spill)>max(0.01,(demand+export)*1e-8):
         raise ValueError("Boundary energy conservation failed")
