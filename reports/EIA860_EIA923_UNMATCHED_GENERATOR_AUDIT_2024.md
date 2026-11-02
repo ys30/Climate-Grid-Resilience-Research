@@ -65,3 +65,12 @@ A public 2021 EIA-860 Schedule 6A boiler/generator association table submitted a
 This resolves a historical *plant and generator identification lead*, but **does not resolve 2024 operating/retirement status**, why the three identifiers are absent from the examined 2024 EIA-860 generator workbook, or 2024 EIA-923 reporting interpretation. Do not relabel them as 2024 operable or as zero generation. Investigate the official 2021–2023 EIA-860 status snapshots and 2024 EIA-923 reporting months before excluding or aliasing any measurements.
 
 **Status accounting:** 7 exact keys found in the 2024 Retired and Canceled worksheet; 3 remaining keys have a historical 2021 official-form identification lead, with 2024 classification unresolved. Full BA historical calibration remains **NOT CERTIFIED**.
+
+
+## Historical retirement evidence for AES Redondo Beach (plant 356)
+
+**Source confirmation beyond the 2024 EIA-860 workbook:** The [AES 2023 Form 10-K](https://www.sec.gov/Archives/edgar/data/874761/000087476124000011/aes-20231231.htm) states that remaining AES Redondo Beach once-through-cooling generating units were permanently retired effective **January 1, 2024**. The [CAISO 2023–2024 transmission-plan appendix](https://www.caiso.com/documents/appendix-a-board-approved-2023-2024-transmission-plan.pdf) separately identifies Redondo Beach units **5, 6 and 8** with end-2023 retirement/compliance timing. This supports a retired-by-2024 explanation of all three unmatched EIA-923 source identifiers, without inventing a generator alias.
+
+**Crucial limitation:** The [EIA-860 annual data documentation](https://www.eia.gov/electricity/data/eia860/) warns that the Retired and Canceled tab is not a comprehensive historical-retirement register. These statements explain why absence from the 2024 annual workbook is compatible with retirement, **but do not independently establish how reported EIA-923 2024 monthly entries for the same IDs should be interpreted**. Before model-observation reconciliation, inspect the three 2024 EIA-923 month-level rows, signed MWh, any reporting adjustments, and 2023 final or EIA-860M status records. Do not auto-convert a missing identity into zero observed energy.
+
+**Assessment:** Generator identity is historically corroborated and a contemporaneous corporate retirement effective date is supported; the remaining issue is reconciling 2024 EIA-923 reporting with retirement and documenting the chosen treatment. Historical grid-model calibration is still **not certified**.
