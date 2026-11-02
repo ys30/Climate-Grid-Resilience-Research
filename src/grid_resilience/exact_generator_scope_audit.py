@@ -32,7 +32,17 @@ def validate(page4,review,ba="SRP",month="2024-01"):
     joined.loc[joined["_merge"].eq("both")&joined.screening_candidate.eq(False),"identity_scope"]="reviewed_but_excluded"
     joined.loc[joined["_merge"].eq("both")&joined.screening_candidate.eq(True),"identity_scope"]="exact_screened_generator"
     summary=joined.groupby("identity_scope").agg(rows=("generator_id","size"),observed_net_mwh=("generation_mwh","sum")).reset_index()
+    matched=joined.identity_scope.eq("exact_screened_generator")
+    observed_total=float(p.generation_mwh.sum())
+    observed_abs_total=float(p.generation_mwh.abs().sum())
+    matched_total=float(joined.loc[matched,"generation_mwh"].sum())
+    matched_abs=float(joined.loc[matched,"generation_mwh"].abs().sum())
     manifest={"ba":ba,"month":month,"observed_page4_rows":len(p),
+        "observed_page4_net_mwh":observed_total,
+        "exact_screened_observed_net_mwh":matched_total,
+        "excluded_or_unmatched_observed_net_mwh":observed_total-matched_total,
+        "observed_page4_absolute_mwh":observed_abs_total,
+        "screened_identity_share_of_absolute_mwh":matched_abs/observed_abs_total if observed_abs_total else None,
         "exact_generator_screened_rows":int(joined.identity_scope.eq("exact_screened_generator").sum()),
         "excluded_or_unmatched_rows":int(joined.identity_scope.ne("exact_screened_generator").sum()),
         "all_page4_observed_generators_screened":bool(joined.identity_scope.eq("exact_screened_generator").all()),
