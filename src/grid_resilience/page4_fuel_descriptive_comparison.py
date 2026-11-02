@@ -23,7 +23,10 @@ def compare(page4, review, model, ba="SRP", month="2024-01"):
     j.loc[j.screening_candidate.eq(True),"source_status"]="exact_candidate"
     fuel="energy_source_1_inventory" if "energy_source_1_inventory" in j else "energy_source_1"
     if fuel not in j:raise ValueError("Missing source fuel")
-    j["fuel"]=j[fuel].astype("string")
+    j["fuel"]=j[fuel].astype("string").str.strip().str.upper()
+    selected=j.source_status.eq("exact_candidate")
+    if j.loc[selected,"fuel"].isna().any() or j.loc[selected,"fuel"].eq("").any():
+        raise ValueError("Missing fuel for selected exact generator")
     observed=j[j.source_status.eq("exact_candidate")].groupby("fuel",as_index=False).agg(page4_matched_net_mwh=("generation_mwh","sum"),matched_rows=("generator_id","size"))
     m=m[m.ba.eq(ba)].copy()
     if m.empty or m.duplicated(["ba","technology"]).any():raise ValueError("Bad model fuel summary")
