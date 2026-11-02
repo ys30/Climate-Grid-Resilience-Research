@@ -56,3 +56,12 @@ This does not prove either key changed names; other candidate generators are not
 The previously observed `58109/TG2` and `10661/GEN5` are other same-plant operable generator IDs, *not* verified renames or replacements for TG1/GEN4. Seven matches on `RE` mean only that the official 2024 workbook carries those precise IDs in the `Retired and Canceled` sheet with that code; further study would be needed to reconcile EIA-923 reported energy with specific retirement dates and status definitions.
 
 **Historical calibration certified: NO.** Full BA fleet completeness and withheld-year modeled-versus-observed generation validation remain pending.
+
+
+## Historical identity evidence for plant 356 (2021 reference; not 2024 status)
+
+A public 2021 EIA-860 Schedule 6A boiler/generator association table submitted as a regulatory document identifies **plant code 356** as **AES Redondo Beach LLC** (utility ID 22484) and lists generator IDs **5, 6, 7, 8**, including exactly the three 2024 EIA-923 unmatched keys 5/6/8. Source: [EPA regulatory attachment, 2021 EIA-860 Schedule 6A](https://downloads.regulations.gov/EPA-R06-OAR-2025-0197-0061/attachment_16.pdf).
+
+This resolves a historical *plant and generator identification lead*, but **does not resolve 2024 operating/retirement status**, why the three identifiers are absent from the examined 2024 EIA-860 generator workbook, or 2024 EIA-923 reporting interpretation. Do not relabel them as 2024 operable or as zero generation. Investigate the official 2021–2023 EIA-860 status snapshots and 2024 EIA-923 reporting months before excluding or aliasing any measurements.
+
+**Status accounting:** 7 exact keys found in the 2024 Retired and Canceled worksheet; 3 remaining keys have a historical 2021 official-form identification lead, with 2024 classification unresolved. Full BA historical calibration remains **NOT CERTIFIED**.
