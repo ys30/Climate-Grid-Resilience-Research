@@ -1,5 +1,6 @@
 """Synthetic regression covering import>local demand and outward exchange."""
 import pandas as pd
+import math
 from grid_resilience.srp_explicit_import_export import run
 
 def main():
@@ -36,4 +37,21 @@ def main():
     assert result["solver_condition"]=="optimal"
     assert abs(result["energy_balance_residual_mwh"])<1e-4
     print("mixed_import_export",result)
+    for field in ("demand_mw","interchange_mw"):
+        bad=mixed.copy()
+        bad.loc[0,field]=math.inf
+        try:
+            run(bad,cap,"SRP",2024,1)
+        except ValueError as exc:
+            assert "Nonfinite" in str(exc),str(exc)
+        else:
+            raise AssertionError(f"Nonfinite {field} was accepted")
+    bad_cap=cap.copy()
+    bad_cap.loc[0,"capacity_mw"]=math.inf
+    try:
+        run(mixed,bad_cap,"SRP",2024,1)
+    except ValueError as exc:
+        assert "Nonfinite" in str(exc),str(exc)
+    else:
+        raise AssertionError("Nonfinite capacity was accepted")
 if __name__=="__main__":main()
