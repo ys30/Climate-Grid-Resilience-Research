@@ -14,15 +14,15 @@ def main():
     p.add_argument("--roundtrip-efficiency",type=float,default=.81)
     a=p.parse_args()
     balance=pd.read_csv(a.balance);capacity=pd.read_csv(a.capacity)
-    prior=solve(balance,capacity,a.year,a.month,a.ba)
+    out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
+    prior=solve(balance,capacity,a.year,a.month,a.ba,hourly_output=out/"baseline_hourly_diagnostics.csv")
     settings=assumptions(a.hydro_budget_mwh,a.storage_hours,a.roundtrip_efficiency)
-    scenario=solve(balance,capacity,a.year,a.month,a.ba,resource_settings=settings)
+    scenario=solve(balance,capacity,a.year,a.month,a.ba,resource_settings=settings,hourly_output=out/"hy_ps_hourly_diagnostics.csv")
     delta=prior["modeled_unserved_mwh"]-scenario["modeled_unserved_mwh"]
     report={"baseline":prior,"scenario":scenario,"delta_unserved_mwh":delta,
         "hydro_budget_is_explicit_scenario_not_verified_availability":True,
         "storage_duration_and_efficiency_are_assumed":True,
         "historical_calibration_certified":False}
-    out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
     (out/"hy_ps_paired_sensitivity.json").write_text(json.dumps(report,indent=2)+"\n")
     print(json.dumps(report,indent=2))
 if __name__=="__main__":main()
