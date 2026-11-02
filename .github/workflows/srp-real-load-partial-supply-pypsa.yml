@@ -12,6 +12,9 @@ on:
       - 'src/grid_resilience/exact_generator_scope_audit.py'
       - 'src/grid_resilience/excluded_capacity_upper_bound.py'
       - 'src/grid_resilience/page4_fuel_descriptive_comparison.py'
+      - 'src/grid_resilience/hy_ps_pypsa_components.py'
+      - 'src/grid_resilience/hy_ps_budget_scenario.py'
+      - 'src/grid_resilience/srp_hy_ps_paired_sensitivity.py'
       - 'tests/test_exact_generator_scope_audit.py'
   workflow_dispatch:
 jobs:
@@ -152,6 +155,17 @@ jobs:
       - name: Publish matched Page4 and modeled fuel table without calibration claims
         run: |
           python -m grid_resilience.page4_fuel_descriptive_comparison --page4 outputs/srp_real_screen/eia923_generator_month_net_mwh.csv --review outputs/srp_real_screen/ba_capacity_identity_review.csv --model outputs/srp_real_screen/interchange_case/modeled_generation_with_net_exchange.csv --output outputs/srp_real_screen
+      - name: Solve observed-boundary baseline and assumed energy-limited HY PS case
+        run: |
+          python -m grid_resilience.srp_hy_ps_paired_sensitivity --balance outputs/srp_real_screen/eia930_hourly_balance_audit.csv --capacity outputs/srp_real_screen/fuel_assumption_capacity_screen.csv --year 2024 --month 1 --ba SRP --hydro-budget-mwh 1015 --storage-hours 4 --roundtrip-efficiency .81 --output outputs/srp_real_screen/hy_ps_case
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('outputs/srp_real_screen/hy_ps_case/hy_ps_paired_sensitivity.json').read_text())
+          assert abs(r['baseline']['modeled_unserved_mwh']-472996.955)<0.01
+          assert r['scenario']['hydro_dispatch_mwh']<=1015.00001
+          assert r['historical_calibration_certified'] is False
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -184,3 +198,4 @@ jobs:
             outputs/srp_real_screen/excluded_capacity_maximum_contribution.json
             outputs/srp_real_screen/fuel_descriptive_noncali_comparison.csv
             outputs/srp_real_screen/fuel_descriptive_noncali_manifest.json
+            outputs/srp_real_screen/hy_ps_case/hy_ps_paired_sensitivity.json
