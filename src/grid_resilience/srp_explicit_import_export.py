@@ -48,6 +48,17 @@ def run(balance, capacity, ba, year, month):
         raise RuntimeError("Unserved energy and deliberate spillage simultaneously in one hour")
     if (g["spill"]>1e-6).any() or (g["unserved"] < -1e-6).any():
         raise RuntimeError("Unexpected spillage or unserved dispatch direction")
+    # Check the actual optimizer output hour by hour; monthly sums can hide cancellations.
+    modeled_import=(g["observed_import"] if peak>0 else pd.Series(0.0,index=g.index))
+    if (modeled_import.to_numpy()-imports.to_numpy()).__abs__().max()>1e-5:
+        raise RuntimeError("Optimized import dispatch differs from fixed EIA-930 schedule")
+    local_hourly=sum((g[f"local__{tech}"] for tech in c.technology),pd.Series(0.0,index=g.index))
+    hourly_residual=(local_hourly.to_numpy()+modeled_import.to_numpy()
+        +g["unserved"].to_numpy()+g["spill"].to_numpy()
+        -b.demand_mw.to_numpy()-exports.to_numpy())
+    max_hourly_residual=float(abs(hourly_residual).max())
+    if max_hourly_residual>1e-4:
+        raise RuntimeError(f"Hourly dispatch balance violated: {max_hourly_residual} MW")
     local=sum(float(g[f"local__{tech}"].sum()) for tech in c.technology)
     result={"solver_status":status,"solver_condition":condition,"local_generation_mwh":local,"scheduled_import_mwh":float(imports.sum()),
         "scheduled_export_mwh":float(exports.sum()),"local_demand_mwh":float(b.demand_mw.sum()),
@@ -55,6 +66,7 @@ def run(balance, capacity, ba, year, month):
         "net_interchange_mwh":float(b.interchange_mw.sum()),
         "hours_with_unserved":int((g["unserved"]>1e-6).sum()),
         "hours_with_spillage":int((g["spill"]< -1e-6).sum()),
+        "max_absolute_hourly_balance_residual_mw":max_hourly_residual,
         "historical_calibration_certified":False,"real_network_interchange_simulated":False}
     residual=result["local_generation_mwh"]+result["scheduled_import_mwh"]+result["unserved_mwh"]-result["local_demand_mwh"]-result["scheduled_export_mwh"]-result["spilled_mwh"]
     result["energy_balance_residual_mwh"]=residual
