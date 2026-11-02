@@ -13,6 +13,7 @@ on:
       - 'src/grid_resilience/eia923_page1_hy_ps.py'
       - 'src/grid_resilience/eia923_page1_all_fuels.py'
       - 'src/grid_resilience/page1_hy_ps_source_coverage.py'
+      - 'tests/test_page1_hy_ps_source_coverage.py'
       - 'tests/test_eia923_page1_all_fuels.py'
 jobs:
   status-audit:
@@ -25,7 +26,7 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -e '.[dev]' openpyxl pandas
       - name: Test Page1 provenance and missing-value handling
-        run: python -m pytest -q tests/test_eia923_page1_all_fuels.py
+        run: python -m pytest -q tests/test_eia923_page1_all_fuels.py tests/test_page1_hy_ps_source_coverage.py
       - name: Download official 2024 archives
         run: |
           mkdir -p outputs/status_audit
