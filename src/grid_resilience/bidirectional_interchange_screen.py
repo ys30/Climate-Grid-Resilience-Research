@@ -7,7 +7,7 @@ import argparse,calendar,json
 from pathlib import Path
 import pandas as pd
 
-def solve(balance,capacity,year,month,ba,resource_settings=None):
+def solve(balance,capacity,year,month,ba,resource_settings=None,hourly_output=None):
     import pypsa
     needed={"timestamp","demand_mw","interchange_mw"}
     if not needed.issubset(balance) or not {"ba","technology","capacity_mw","marginal_cost"}.issubset(capacity):
@@ -67,6 +67,22 @@ def solve(balance,capacity,year,month,ba,resource_settings=None):
         hourly=hourly-n.links_t.p1[resource_mapping["storage_discharge_link"]]
         hourly=hourly-n.links_t.p0[resource_mapping["storage_charge_link"]]
     hourly_residual=hourly-d.demand_mw.to_numpy()-exports.to_numpy()
+    if hourly_output is not None:
+        hourly_table=pd.DataFrame({
+            "timestamp_utc":hours.astype(str),
+            "demand_mw":d.demand_mw.to_numpy(),
+            "observed_export_mw":exports.to_numpy(),
+            "observed_import_mw":generation.observed_imports.to_numpy(),
+            "screened_fleet_generation_mw":generation[[str(x) for x in c.technology]].sum(axis=1).to_numpy(),
+            "modeled_unserved_mw":generation.unserved.to_numpy(),
+            "boundary_spill_mw":(-generation.boundary_spill).to_numpy(),
+            "hydro_dispatch_mw":(-n.links_t.p1[resource_mapping["hydro_link"]]).to_numpy() if resource_mapping else 0.0,
+            "ps_charge_mw":n.links_t.p0[resource_mapping["storage_charge_link"]].to_numpy() if resource_mapping else 0.0,
+            "ps_discharge_mw":(-n.links_t.p1[resource_mapping["storage_discharge_link"]]).to_numpy() if resource_mapping else 0.0,
+            "bus_balance_residual_mw":hourly_residual.to_numpy()
+        })
+        path=Path(hourly_output);path.parent.mkdir(parents=True,exist_ok=True)
+        hourly_table.to_csv(path,index=False)
     max_hourly_residual_mw=float(hourly_residual.abs().max())
     if max_hourly_residual_mw>1e-3:
         raise ValueError(f"Hourly SRP bus balance failed: max residual {max_hourly_residual_mw} MW")
