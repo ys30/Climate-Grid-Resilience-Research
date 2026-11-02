@@ -207,3 +207,5 @@ jobs:
             outputs/srp_real_screen/fuel_descriptive_noncali_comparison.csv
             outputs/srp_real_screen/fuel_descriptive_noncali_manifest.json
             outputs/srp_real_screen/hy_ps_case/hy_ps_paired_sensitivity.json
+            outputs/srp_real_screen/hy_ps_case/baseline_hourly_diagnostics.csv
+            outputs/srp_real_screen/hy_ps_case/hy_ps_hourly_diagnostics.csv
