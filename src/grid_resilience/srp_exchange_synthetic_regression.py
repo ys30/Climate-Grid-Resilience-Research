@@ -12,9 +12,21 @@ def main():
         result=run(data,cap,"SRP",2024,1)
         assert abs(result["scheduled_import_mwh"]-expected_import)<1e-6
         assert abs(result["scheduled_export_mwh"]-expected_export)<1e-6
+        assert result["solver_status"]=="ok" and result["solver_condition"]=="optimal"
         assert abs(result["energy_balance_residual_mwh"])<1e-4
         assert result["unserved_mwh"]<1e-4
         if name=="large_import":
             assert abs(result["spilled_mwh"]-744*20)<1e-4
         print(name,result)
+    # Alternate import/export hours; check signed aggregation is not confused with gross flows.
+    interchange=[-70 if i%2==0 else 20 for i in range(744)]
+    mixed=pd.DataFrame({"timestamp":timestamps,"demand_mw":50.,"interchange_mw":interchange})
+    result=run(mixed,cap,"SRP",2024,1)
+    assert abs(result["scheduled_import_mwh"]-372*70)<1e-6
+    assert abs(result["scheduled_export_mwh"]-372*20)<1e-6
+    assert abs(result["net_interchange_mwh"]-(372*20-372*70))<1e-6
+    assert abs(result["spilled_mwh"]-372*20)<1e-4
+    assert result["solver_condition"]=="optimal"
+    assert abs(result["energy_balance_residual_mwh"])<1e-4
+    print("mixed_import_export",result)
 if __name__=="__main__":main()
