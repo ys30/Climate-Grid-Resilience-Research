@@ -1,0 +1,18 @@
+name: EIA-930 offline Balance archive importer quality
+on:
+  push:
+    paths:
+      - 'src/grid_resilience/eia930_balance_archive_import.py'
+      - 'tests/test_eia930_balance_archive_import.py'
+      - '.github/workflows/eia930-offline-import-quality.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q tests/test_eia930_balance_archive_import.py
