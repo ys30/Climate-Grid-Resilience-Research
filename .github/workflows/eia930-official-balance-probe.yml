@@ -1,0 +1,42 @@
+name: Official EIA-930 2024H1 Balance direct download probe
+on:
+  push:
+    paths:
+      - '.github/workflows/eia930-official-balance-probe.yml'
+  workflow_dispatch:
+jobs:
+  official-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - name: Download official published six-month Balance CSV and verify January
+        run: |
+          mkdir -p outputs/official_eia930
+          python - <<'PY'
+          import urllib.request,hashlib,json
+          from pathlib import Path
+          url='https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv'
+          req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0','Accept':'text/csv,*/*'})
+          with urllib.request.urlopen(req,timeout=120) as response:
+              print('HTTP status:',response.status)
+              content=response.read(100_000_001)
+          if not content or len(content)>100_000_000: raise ValueError('Empty or oversized source')
+          path=Path('outputs/official_eia930/source.csv')
+          path.write_bytes(content)
+          sha=hashlib.sha256(content).hexdigest()
+          print('Downloaded bytes:',len(content),'SHA256:',sha)
+          Path('outputs/official_eia930/source_manifest.json').write_text(json.dumps({'url':url,'sha256':sha,'bytes':len(content),'provenance':'official EIA-930 2024 Jan-Jun Balance CSV'},indent=2)+'\n')
+          PY
+          python -m grid_resilience.eia930_balance_archive_import --archive outputs/official_eia930/source.csv --ba SRP --year 2024 --month 1 --output outputs/official_eia930/srp_jan_2024.csv
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: official-srp-eia930-jan-2024-validated
+          path: |
+            outputs/official_eia930/srp_jan_2024.csv
+            outputs/official_eia930/source_manifest.json
