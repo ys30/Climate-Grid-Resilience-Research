@@ -407,12 +407,12 @@ jobs:
               'figure_count':len(pngs),
               'historical_calibration_certified':False
           }
-          (root/'ci_validation_provenance.json').write_text(json.dumps(provenance,indent=2)+'\\n')
+          (root/'ci_validation_provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
           report=[
             '## SRP numerical validation',
             '',
-            f"- Commit: \`{provenance['commit_sha']}\`",
-            f"- Run: \`{provenance['run_id']}\` (attempt \`{provenance['run_attempt']}\`)",
+            f"- Commit: `{provenance['commit_sha']}`",
+            f"- Run: `{provenance['run_id']}` (attempt `{provenance['run_attempt']}`)",
             '- Upstream screening artifact run: 41285853425',
             '- Upstream EIA-860 artifact run: 41341668303',
             '',
