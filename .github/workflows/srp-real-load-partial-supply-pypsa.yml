@@ -6,6 +6,7 @@ on:
       - 'src/grid_resilience/eia860_partial_ba_capacity.py'
       - 'src/grid_resilience/srp_monthly_availability_sensitivity.py'
       - 'src/grid_resilience/fuel_specific_screen_assumptions.py'
+      - 'src/grid_resilience/srp_source_scope_gap.py'
   workflow_dispatch:
 jobs:
   real-input-screen:
@@ -100,6 +101,9 @@ jobs:
           assert abs(g.modeled_generation_mwh.sum()+u-d.demand_mw.sum())<1e-3
           print('Fuel-specific scenario modeled MWh:',g.modeled_generation_mwh.sum(),'unserved MWh:',u)
           PY
+      - name: Audit Page4 source and screened fleet overlap, fail closed on source discrepancy
+        run: |
+          python -m grid_resilience.srp_source_scope_gap --page4 outputs/srp_real_screen/eia923_generator_month_net_mwh.csv --inventory outputs/srp_real_screen/eia860_2024_operable_generators.csv --screen outputs/srp_real_screen/partial_ba_capacity_screen.csv --ba SRP --month 2024-01 --output outputs/srp_real_screen
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -119,3 +123,6 @@ jobs:
             outputs/srp_real_screen/fuel_assumption_manifest.json
             outputs/srp_real_screen/fuel_scenario/modeled_monthly_generation.csv
             outputs/srp_real_screen/fuel_scenario/screening_manifest.json
+            outputs/srp_real_screen/page4_month_scope_rows.csv
+            outputs/srp_real_screen/page4_month_scope_summary.csv
+            outputs/srp_real_screen/page4_month_scope_manifest.json
