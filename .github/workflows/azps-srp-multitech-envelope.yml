@@ -390,8 +390,31 @@ jobs:
           energy_hourly=hourly.groupby('case').shortfall_mw.sum().sort_index()
           energy_diurnal=daily.groupby('case').shortfall_mwh.sum().sort_index()
           assert ((energy_hourly-energy_diurnal).abs()<1e-4).all()
+          import json
+          manifest=json.loads((root/'manifest.json').read_text())
+          assert manifest['historical_calibration_certified'] is False
+          provenance={
+              'workflow':os.environ.get('GITHUB_WORKFLOW',''),
+              'repository':os.environ.get('GITHUB_REPOSITORY',''),
+              'commit_sha':os.environ.get('GITHUB_SHA',''),
+              'run_id':os.environ.get('GITHUB_RUN_ID',''),
+              'run_attempt':os.environ.get('GITHUB_RUN_ATTEMPT',''),
+              'source_screening_run_id':'41285853425',
+              'source_eia860_run_id':'41341668303',
+              'scenario_count':cases,
+              'hourly_rows':len(hourly),
+              'diurnal_rows':len(daily),
+              'figure_count':len(pngs),
+              'historical_calibration_certified':False
+          }
+          (root/'ci_validation_provenance.json').write_text(json.dumps(provenance,indent=2)+'\\n')
           report=[
             '## SRP numerical validation',
+            '',
+            f"- Commit: \`{provenance['commit_sha']}\`",
+            f"- Run: \`{provenance['run_id']}\` (attempt \`{provenance['run_attempt']}\`)",
+            '- Upstream screening artifact run: 41285853425',
+            '- Upstream EIA-860 artifact run: 41341668303',
             '',
             f'- Cases: **{cases}**',
             f'- Hourly rows: **{len(hourly)}**',
