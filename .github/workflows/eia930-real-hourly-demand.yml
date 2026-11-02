@@ -1,0 +1,25 @@
+name: EIA-930 real hourly demand intake
+on:
+  push:
+    paths:
+      - 'src/grid_resilience/eia930_monthly_demand.py'
+      - '.github/workflows/eia930-real-hourly-demand.yml'
+  workflow_dispatch:
+jobs:
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e .
+      - name: Retrieve official full January 2024 EIA-930 demand
+        run: |
+          python -m grid_resilience.eia930_monthly_demand --ba SRP --year 2024 --month 1 --output outputs/eia930_srp_2024_01
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eia930-srp-2024-jan-demand
+          path: outputs/eia930_srp_2024_01/
