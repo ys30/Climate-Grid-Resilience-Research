@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/eia930-official-balance-probe.yml'
+      - 'src/grid_resilience/eia930_hour_gap_audit.py'
   workflow_dispatch:
 jobs:
   official-probe:
@@ -32,11 +33,15 @@ jobs:
           print('Downloaded bytes:',len(content),'SHA256:',sha)
           Path('outputs/official_eia930/source_manifest.json').write_text(json.dumps({'url':url,'sha256':sha,'bytes':len(content),'provenance':'official EIA-930 2024 Jan-Jun Balance CSV'},indent=2)+'\n')
           PY
+          python -m grid_resilience.eia930_hour_gap_audit --csv outputs/official_eia930/source.csv --ba SRP --year 2024 --month 1 --output outputs/official_eia930
           python -m grid_resilience.eia930_balance_archive_import --archive outputs/official_eia930/source.csv --ba SRP --year 2024 --month 1 --output outputs/official_eia930/srp_jan_2024.csv
       - uses: actions/upload-artifact@v4
-        if: success()
+        if: always()
         with:
           name: official-srp-eia930-jan-2024-validated
           path: |
             outputs/official_eia930/srp_jan_2024.csv
             outputs/official_eia930/source_manifest.json
+            outputs/official_eia930/hour_coverage_audit.json
+            outputs/official_eia930/missing_hours.csv
+            outputs/official_eia930/duplicate_hours.csv
