@@ -11,6 +11,7 @@ on:
       - 'src/grid_resilience/eia860_generator_extract.py'
       - 'src/grid_resilience/eia923_generator_extract.py'
       - 'src/grid_resilience/eia923_page1_hy_ps.py'
+      - 'src/grid_resilience/eia923_page1_all_fuels.py'
 jobs:
   status-audit:
     runs-on: ubuntu-24.04
@@ -82,6 +83,18 @@ jobs:
       - name: Extract Page1 observed hydro and pumped storage
         run: |
           python -m grid_resilience.eia923_page1_hy_ps --archive outputs/status_audit/eia923.zip --ba SRP --output outputs/status_audit
+      - name: Extract independent Page1 all-fuel SRP January source summary
+        run: |
+          python -m grid_resilience.eia923_page1_all_fuels --archive outputs/status_audit/eia923.zip --ba SRP --month 1 --output outputs/status_audit
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          d=Path('outputs/status_audit')
+          s=pd.read_csv(d/'page1_prime_mover_fuel_month_summary.csv')
+          m=json.loads((d/'page1_all_fuels_manifest.json').read_text())
+          assert abs(s.observed_net_mwh.sum()-m['observed_reported_ba_page1_net_mwh'])<1e-6
+          assert not m['historical_calibration_certified']
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -99,3 +112,6 @@ jobs:
             outputs/status_audit/eia860_extraction_manifest.json
             outputs/status_audit/page1_hy_ps_monthly_observations.csv
             outputs/status_audit/page1_hy_ps_manifest.json
+            outputs/status_audit/page1_all_fuels_reported_ba.csv
+            outputs/status_audit/page1_prime_mover_fuel_month_summary.csv
+            outputs/status_audit/page1_all_fuels_manifest.json
