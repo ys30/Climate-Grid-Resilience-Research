@@ -28,3 +28,15 @@ Compare raw-string plant and generator identifiers against EIA-860 2024 operable
 The source inventory used by the current join is a selected operable EIA-860 inventory; absence there cannot by itself prove the generator never existed, nor that measured EIA-923 energy is zero. Keep original rows separately with `unmatched` status and source-year provenance.
 
 This unmatched audit does not certify full-fleet coverage, plant-to-BA crosswalk, modeled-versus-observed monthly dispatch, or independent-year historical calibration.
+
+
+## Same-plant inventory probe (2024 operable EIA-860)
+
+Comparing all 10 unmatched keys against `eia860_2024_operable_generators.csv` in the **same artifact**: eight unmatched keys have no rows for their plant ID in this selected inventory. Two unmatched keys share a plant ID with a **different** generator:
+
+| Unmatched EIA-923 key | Other generator in EIA-860 selected inventory | Decision |
+|---|---|---|
+| CISO plant 10661 / GEN4 | GEN5 | identity not confirmed; **do not auto-recode** |
+| BPAT plant 58109 / TG1 | TG2 | identity not confirmed; **do not auto-recode** |
+
+This does not prove either key changed names; other candidate generators are not justified matches. The other eight unmatched keys arise from seven distinct absent plant IDs (three separate generator keys at plant 356). This is a source-scope fact, not a root cause: status/vintage checks against full official EIA-860 are still required.
