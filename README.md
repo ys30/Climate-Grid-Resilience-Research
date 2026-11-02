@@ -42,3 +42,34 @@ The [historical input harmonizer](src/grid_resilience/historical_inputs.py) take
 ## EIA-923 2024 observed-source audit (not historical calibration)
 
 The [verified HY/PS audit](reports/EIA923_2024_HYDRO_PS_OBSERVATION_AUDIT.md) records 245 conventional hydro Page 1 plant/BA source rows and 120 pumped-storage measured plant-month net-generation rows. **HY monthly MWh are not yet established**, nor are full-fleet mapping, hourly availability or historical reliability calibration. These observations must not be interpreted as modeled outage validation.
+
+## SRP hourly adequacy diagnostics (model-based, validation pending)
+
+The [SRP multi-technology workflow](.github/workflows/azps-srp-multitech-envelope.yml)
+generates 16 refined gas/coal/nuclear availability cases for an illustrative
+168-hour window. Per-case modeled shortfall is compared with demand and an
+**assumed** solar availability profile; this does not represent observed power
+outages or a historically calibrated reliability model.
+
+On a successful run it should emit:
+
+- `fine_gas_derating_threshold.csv` and `fine_gas_shortfall_hours.csv`;
+- `fine_gas_hourly_demand_solar_context.csv` and
+  `fine_gas_hourly_vulnerability_summary.csv`;
+- `srp_hourly_figure_data.csv` (16 × 168 expected rows) and
+  `srp_diurnal_figure_data.csv` (16 × 24 expected rows);
+- `figures/` containing 16 hourly and 16 UTC-hour-of-day PNG diagnostics;
+- `manifest.json` retaining explicit non-calibration flags.
+
+The [lightweight SRP figure quality workflow](.github/workflows/srp-figure-quality.yml)
+checks data integrity and synthetic figure rendering independently of expensive
+PyPSA solves. The full workflow also runs these tests before optimization and
+checks output counts, energies, and figure files afterward.
+
+**Verification gate:** code commits and workflow configuration are **not**
+evidence of a successful run. Record the exact GitHub Actions run URL and
+commit SHA, verify the run conclusion and artifact contents, and only then
+transfer numerical findings or images into the manuscript. EIA-923/930
+reconciliation, transmission assumptions, and out-of-year validation remain
+outstanding. See
+[SRP hourly context methods](reports/SRP_SHORTFALL_HOURLY_CONTEXT_METHODS.md).
