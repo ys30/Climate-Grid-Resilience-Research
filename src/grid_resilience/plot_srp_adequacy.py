@@ -27,6 +27,13 @@ def render(hourly_csv: Path, diurnal_csv: Path, out_dir: Path) -> None:
         summary = diurnal.loc[diurnal.case.eq(case)]
         if len(part) != 168 or len(summary) != 24:
             raise ValueError(f"{case}: expected 168 and 24 rows")
+        if summary.hour_utc.isna().any() or set(summary.hour_utc) != set(range(24)):
+            raise ValueError(f"{case}: invalid or duplicate UTC hour-of-day bins")
+        if part.timestamp.isna().any() or part.timestamp.duplicated().any():
+            raise ValueError(f"{case}: missing or duplicate UTC timestamps")
+        if not (part.timestamp.sort_values().diff().dropna() == pd.Timedelta(hours=1)).all():
+            raise ValueError(f"{case}: nonconsecutive UTC hourly timestamps")
+
         if abs(float(part.shortfall_mw.sum()) - float(summary.shortfall_mwh.sum())) > 1e-4:
             raise ValueError(f"{case}: figure inputs disagree on shortage energy")
     out_dir.mkdir(parents=True, exist_ok=True)
