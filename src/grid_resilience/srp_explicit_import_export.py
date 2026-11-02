@@ -19,6 +19,8 @@ def run(balance, capacity, ba, year, month):
     if len(b)!=len(expected) or b.timestamp.duplicated().any() or not pd.DatetimeIndex(b.timestamp.sort_values()).equals(expected):raise ValueError("Incomplete UTC month")
     b=b.set_index("timestamp").reindex(expected)
     if (b.demand_mw<0).any():raise ValueError("Negative demand")
+    if not {"ba","technology","capacity_mw","marginal_cost"}.issubset(c.columns):
+        raise ValueError("Missing capacity fields")
     c=c[c.ba.eq(ba)].copy()
     if c.empty or c.technology.duplicated().any():raise ValueError("Missing or duplicate capacity")
     for k in ("capacity_mw","marginal_cost"):c[k]=pd.to_numeric(c[k],errors="raise")
@@ -50,7 +52,7 @@ def run(balance, capacity, ba, year, month):
         raise RuntimeError("Unexpected spillage or unserved dispatch direction")
     # Check the actual optimizer output hour by hour; monthly sums can hide cancellations.
     modeled_import=(g["observed_import"] if peak>0 else pd.Series(0.0,index=g.index))
-    if (modeled_import.to_numpy()-imports.to_numpy()).__abs__().max()>1e-5:
+    if abs(modeled_import.to_numpy()-imports.to_numpy()).max()>1e-5:
         raise RuntimeError("Optimized import dispatch differs from fixed EIA-930 schedule")
     local_hourly=sum((g[f"local__{tech}"] for tech in c.technology),pd.Series(0.0,index=g.index))
     hourly_residual=(local_hourly.to_numpy()+modeled_import.to_numpy()
