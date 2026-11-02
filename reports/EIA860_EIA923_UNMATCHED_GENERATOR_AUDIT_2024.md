@@ -74,3 +74,18 @@ This resolves a historical *plant and generator identification lead*, but **does
 **Crucial limitation:** The [EIA-860 annual data documentation](https://www.eia.gov/electricity/data/eia860/) warns that the Retired and Canceled tab is not a comprehensive historical-retirement register. These statements explain why absence from the 2024 annual workbook is compatible with retirement, **but do not independently establish how reported EIA-923 2024 monthly entries for the same IDs should be interpreted**. Before model-observation reconciliation, inspect the three 2024 EIA-923 month-level rows, signed MWh, any reporting adjustments, and 2023 final or EIA-860M status records. Do not auto-convert a missing identity into zero observed energy.
 
 **Assessment:** Generator identity is historically corroborated and a contemporaneous corporate retirement effective date is supported; the remaining issue is reconciling 2024 EIA-923 reporting with retirement and documenting the chosen treatment. Historical grid-model calibration is still **not certified**.
+
+
+## 2024 EIA-923 month-level reconciliation for plant 356 (artifact-verified)
+
+Inspected the actual `eia923_generator_month_net_mwh.csv` from [official EIA-923 workflow run 41263007401](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41263007401), artifact `13065659112`. There are precisely **three** 2024 Page-4 extracted records at plant ID 356:
+
+| Plant ID | Generator ID | Prime mover | Reported BA | Reporting month | Net generation (MWh) |
+|---|---|---|---|---|---:|
+| 356 | 5 | ST | CISO | 2024-01 | 0.0 |
+| 356 | 6 | ST | CISO | 2024-01 | 0.0 |
+| 356 | 8 | ST | CISO | 2024-01 | 0.0 |
+
+No February–December rows for these generators occur **in the extracted Page-4 source**. Absence in an extracted source must not be translated into 11 months of observed zero generation. This narrow observation is consistent with the AES 2024-01-01 retirement statement and CAISO unit list. It does not imply all 2024 2024 plant output is independently certified, nor resolve full-BA source coverage.
+
+**Revised status:** The three 2024 unmatched identities now have a coherent historical retirement explanation *and* a checked January 2024 zero-generation source entry. Retain the measured January zero rows with a retired-source flag, and exclude these retired IDs from 2024 operable nameplate supply; do not silently discard or auto-impute missing later-month records. The 7 earlier RE rows may carry different month/energy behavior and still require separate reconciliation.
