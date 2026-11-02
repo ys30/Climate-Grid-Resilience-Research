@@ -58,6 +58,18 @@ def solve(balance,capacity,year,month,ba,resource_settings=None):
         ps_charge_mwh=float(n.links_t.p0[resource_mapping["storage_charge_link"]].sum())
         ps_discharge_mwh=float(-n.links_t.p1[resource_mapping["storage_discharge_link"]].sum())
         assert hydro_mwh<=resource_mapping["energy_budget_mwh"]+1e-5
+    # Check every hourly balance, not only monthly totals. Link bus1 sign is negative
+    # for delivered power; charging is a positive withdrawal from the BA bus.
+    hourly=generation[[str(x) for x in c.technology]].sum(axis=1)
+    hourly=hourly+generation.observed_imports+generation.unserved+generation.boundary_spill
+    if resource_mapping is not None:
+        hourly=hourly-n.links_t.p1[resource_mapping["hydro_link"]]
+        hourly=hourly-n.links_t.p1[resource_mapping["storage_discharge_link"]]
+        hourly=hourly-n.links_t.p0[resource_mapping["storage_charge_link"]]
+    hourly_residual=hourly-d.demand_mw.to_numpy()-exports.to_numpy()
+    max_hourly_residual_mw=float(hourly_residual.abs().max())
+    if max_hourly_residual_mw>1e-3:
+        raise ValueError(f"Hourly SRP bus balance failed: max residual {max_hourly_residual_mw} MW")
     demand=float(d.demand_mw.sum());export=float(exports.sum())
     if abs(actual+imported+short+hydro_mwh+ps_discharge_mwh-demand-export-spill-ps_charge_mwh)>max(0.01,(demand+export)*1e-8):
         raise ValueError("Boundary energy conservation failed")
@@ -65,6 +77,7 @@ def solve(balance,capacity,year,month,ba,resource_settings=None):
             "observed_import_injection_mwh":imported,"observed_export_sink_mwh":export,
             "modeled_plant_generation_mwh":actual,"modeled_unserved_mwh":short,
             "modeled_import_surplus_disposal_mwh":spill,
+            "max_hourly_bus_residual_mw":max_hourly_residual_mw,
             "hydro_dispatch_mwh":hydro_mwh,"ps_charge_mwh":ps_charge_mwh,
             "ps_discharge_mwh":ps_discharge_mwh,"hy_ps_counterfactual_enabled":resource_mapping is not None,
             "historical_calibration_certified":False,
