@@ -20,8 +20,10 @@ def validate(page4,review,ba="SRP",month="2024-01"):
             if f[k].isna().any() or f[k].eq("").any():raise ValueError("Blank generator ID")
         f["plant_id"]=f.plant_id.str.replace(r"^0+(?=[0-9])","",regex=True)
     if r.duplicated(KEYS).any():raise ValueError("Duplicate candidate generator IDs")
+    if r.empty:raise ValueError("Empty capacity review")
     p=p[p.reported_ba.eq(ba)&p.period.eq(month)].copy()
     if p.empty or p.duplicated(KEYS).any():raise ValueError("Empty or duplicate observed generator-month IDs")
+    if p[KEYS].isna().any().any() or p[KEYS].eq("").any().any():raise ValueError("Blank selected generator IDs")
     p["generation_mwh"]=pd.to_numeric(p.generation_mwh,errors="raise")
     if p.generation_mwh.isna().any() or not p.generation_mwh.map(lambda x:float("-inf")<float(x)<float("inf")).all():
         raise ValueError("Invalid observed net generation")
@@ -48,7 +50,8 @@ def validate(page4,review,ba="SRP",month="2024-01"):
         "all_page4_observed_generators_screened":bool(joined.identity_scope.eq("exact_screened_generator").all()),
         "complete_ba_fleet_certified":False,"historical_calibration_certified":False,
         "warning":"Exact identity inclusion is only within partial Page4 source; EIA-930 total and Page1 have separate scope."}
-    assert summary.observed_net_mwh.sum()==p.generation_mwh.sum()
+    if abs(float(summary.observed_net_mwh.sum())-observed_total)>max(1e-8,abs(observed_total)*1e-10):
+        raise ValueError("Observed energy ledger failed reconciliation")
     return joined.drop(columns=["_merge"]),summary,manifest
 
 def main():
