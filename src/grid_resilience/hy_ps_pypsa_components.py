@@ -30,9 +30,16 @@ def add_hy_ps(n, bus, settings, *, prefix="SRP"):
           e_cyclic=False)
     n.add("Link",f"{prefix}_hydro_out",bus0=hydro_bus,bus1=bus,
           p_nom=float(settings["hydro_nameplate_mw"]),efficiency=1.0)
+    # Non-cyclic Store enforces the zero initial state explicitly. Fix the
+    # final state to zero as well, so the scenario cannot borrow energy from
+    # outside the model horizon or abandon charging at the final snapshot.
+    terminal_min=[0.0]*len(n.snapshots)
+    terminal_max=[1.0]*len(n.snapshots)
+    terminal_max[-1]=0.0
     n.add("Store",f"{prefix}_ps_energy",bus=storage_bus,
           e_nom=float(settings["ps_energy_capacity_mwh_assumed"]),
-          e_initial=0.0,e_cyclic=True)
+          e_initial=0.0,e_cyclic=False,
+          e_min_pu=terminal_min,e_max_pu=terminal_max)
     eta=sqrt(efficiency)
     n.add("Link",f"{prefix}_ps_charge",bus0=bus,bus1=storage_bus,
           p_nom=float(settings["ps_charge_nameplate_mw_assumed"]),
