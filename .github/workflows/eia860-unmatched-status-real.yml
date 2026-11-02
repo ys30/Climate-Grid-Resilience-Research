@@ -1,0 +1,77 @@
+name: Official EIA-860 unmatched status investigation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/eia860-unmatched-status-real.yml'
+      - 'src/grid_resilience/eia860_full_status_triage.py'
+      - 'src/grid_resilience/eia860_generator_extract.py'
+      - 'src/grid_resilience/eia923_generator_extract.py'
+jobs:
+  status-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e . openpyxl pandas
+      - name: Download official 2024 archives
+        run: |
+          mkdir -p outputs/status_audit
+          python - <<'PY'
+          import urllib.request,time
+          from pathlib import Path
+          sources={
+            "eia860":"https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip",
+            "eia923":"https://www.eia.gov/electricity/data/eia923/archive/xls/f923_2024.zip"}
+          for key,url in sources.items():
+              for attempt in range(3):
+                  try:
+                      req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+                      with urllib.request.urlopen(req,timeout=120) as response:
+                          data=response.read()
+                      if len(data)<10000:raise RuntimeError("Unexpectedly small official ZIP")
+                      (Path("outputs/status_audit")/(key+".zip")).write_bytes(data)
+                      break
+                  except Exception:
+                      if attempt==2:raise
+                      time.sleep(5*(attempt+1))
+          PY
+      - name: Extract 2024 reported generator-month rows and EIA-860 operable inventory
+        run: |
+          python -m grid_resilience.eia923_generator_extract --archive outputs/status_audit/eia923.zip --output outputs/status_audit
+          python -m grid_resilience.eia860_generator_extract --archive outputs/status_audit/eia860.zip --output outputs/status_audit
+      - name: Generate strict unmatched keys from official sources
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path("outputs/status_audit")
+          p=pd.read_csv(out/"eia923_generator_month_net_mwh.csv",dtype="string")
+          e=pd.read_csv(out/"eia860_2024_operable_generators.csv",dtype="string")
+          for df in (p,e):
+              df["plant_id"]=df.plant_id.str.strip().str.replace(r"^0+(?=[0-9])","",regex=True)
+              df["generator_id"]=df.generator_id.str.strip()
+          matches=e[["plant_id","generator_id"]].drop_duplicates()
+          marked=p.merge(matches.assign(exact_operable=True),how="left",on=["plant_id","generator_id"],validate="many_to_one")
+          unmatched=marked[marked.exact_operable.isna()].drop(columns=["exact_operable"])
+          if unmatched.empty:raise ValueError("No unmatched rows: investigate upstream crosswalk changes")
+          unmatched.to_csv(out/"unmatched_generator_months_recomputed.csv",index=False)
+          print("Reported Page-4 unmatched generator-month rows:",len(unmatched))
+          print("Distinct plant/generator pairs:",len(unmatched[["plant_id","generator_id"]].drop_duplicates()))
+          PY
+      - name: Compare unmatched identities across all official EIA-860 generator worksheets
+        run: |
+          python -m grid_resilience.eia860_full_status_triage --archive outputs/status_audit/eia860.zip --unmatched outputs/status_audit/unmatched_generator_months_recomputed.csv --output outputs/status_audit/unmatched_all_status_sheets.csv
+          cat outputs/status_audit/unmatched_all_status_sheets.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eia860-2024-unmatched-status-real
+          path: |
+            outputs/status_audit/unmatched_generator_months_recomputed.csv
+            outputs/status_audit/unmatched_all_status_sheets.csv
+            outputs/status_audit/generator_extraction_manifest.json
+            outputs/status_audit/eia860_extraction_manifest.json
