@@ -41,3 +41,21 @@ PS monthly signed net generation is not pumping consumption, state of charge, in
 **Historical calibration certified: NO.** These are source-audit results, not a historically calibrated grid-reliability forecast or observed outage statistics.
 
 Reproduce the technical extraction through `.github/workflows/eia923-official-intake.yml`. The generated CSV and JSON files are retained as GitHub workflow artifacts, not silently treated as committed historical datasets.
+
+
+## Updated verified HY/PS month-generation evidence (run 41263007401)
+
+**This section supersedes the earlier statement that HY monthly MWh had not been extracted.** The successfully completed [EIA-923 official intake run 41263007401](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41263007401) on commit `01898fa1c034b0d95a328851998eec34d5706653` published artifact `13065659112` (SHA-256 `6bdb4d084fa7034257c784b26816003e25757b757534624b8822310d9780edc6`). Inspection of its CSVs and manifests confirms 2,940 measured HY plant-month net-generation rows and 120 PS plant-month rows.
+
+| BA | HY observed months | HY 2024 net MWh | PS observed months | PS 2024 signed net MWh |
+|---|---:|---:|---:|---:|
+| AZPS | 0 | missing | 0 | missing |
+| BPAT | 12 | 60,869,517 | 12 | 1,691 |
+| CISO | 12 | 21,483,685 | 12 | -138,986 |
+| SRP | 12 | 217,124 | 12 | 82,975 |
+
+There are **72 observed BA/technology/month slots of 96** expected slots; the missing 24 are AZPS HY and PS and must **not** be interpreted as measured zero generation. Signed PS totals can be negative; this is not a storage discharge-only metric. These are reported-source totals, not proof of complete fleet coverage, reconciled BA mapping, independent weather availability or historical model calibration.
+
+A separate `hydro_ps_coverage_manifest.json` using the Page-4 prime-mover audit contains zero observed slots; that manifest reflects a **different source extraction path** and must not supersede the independently extracted Page-1 HY/PS records above.
+
+**Revised gate:** HY monthly MWh extraction is achieved for reported-source rows in BPAT/CISO/SRP. Next reconcile reported BA assignment and full-fleet completeness, compare actual complete-month model generation (not the existing 168-hour screen) with observed month totals, and carry out year-held-out validation. Historical calibration certified: **NO**.
