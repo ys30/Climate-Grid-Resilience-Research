@@ -89,3 +89,25 @@ Inspected the actual `eia923_generator_month_net_mwh.csv` from [official EIA-923
 No February–December rows for these generators occur **in the extracted Page-4 source**. Absence in an extracted source must not be translated into 11 months of observed zero generation. This narrow observation is consistent with the AES 2024-01-01 retirement statement and CAISO unit list. It does not imply all 2024 2024 plant output is independently certified, nor resolve full-BA source coverage.
 
 **Revised status:** The three 2024 unmatched identities now have a coherent historical retirement explanation *and* a checked January 2024 zero-generation source entry. Retain the measured January zero rows with a retired-source flag, and exclude these retired IDs from 2024 operable nameplate supply; do not silently discard or auto-impute missing later-month records. The 7 earlier RE rows may carry different month/energy behavior and still require separate reconciliation.
+
+
+## 2024 EIA-923 observed generation among seven RE-sheet generator identities
+
+**Source:** actual `eia923_generator_month_net_mwh.csv` from successful [EIA-923 intake run 41263007401](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41263007401), artifact `13065659112`. The seven IDs were confirmed in the 2024 EIA-860 Retired and Canceled sheet by [run 41395106441](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41395106441). Source CSV was filtered by **exact plant ID and generator ID**, retaining original period and signed MWh.
+
+| Reported BA | Plant / generator | 2024 reported months | Nonzero months | Reported 2024 net MWh |
+|---|---|---:|---:|---:|
+| BPAT | 58109 / TG1 | 12 | 0 | 0 |
+| CISO | 10446 / GEN1 | 11 (Jan–Nov) | 0 | 0 |
+| CISO | 10661 / GEN4 | 1 (Dec) | 1 | 10,252 |
+| CISO | 50632 / GEN1 | 12 | 12 | 61,886 |
+| CISO | 50837 / GEN1 | 5 (Jan–May) | 3 | 10,476 |
+| CISO | 54626 / TG01 | 12 | 9 | 179,693 |
+| CISO | 60100 / G-1 | 12 | 0 | 0 |
+| **Total** | **7 exact IDs** | **65 reported month rows** | **25 nonzero month rows** | **262,307** |
+
+Together with plant 356 units 5/6/8, the unmatched Page-4 set comprises 68 generator-month observations; the plant-356 entries each appear once in January at observed 0 MWh. The sum of unmatched 2024 EIA-923 generation remains **262,307 MWh**, originating from four RE-sheet generator IDs. This energy is measured under the source reporting conventions, but the precise retirement dates and whether retroactive adjustments contributed to individual entries have **not** been independently reviewed.
+
+**Modeling gate:** Preserve all measured generation values in an *observational reconciliation ledger*, with RE-sheet identity and source vintage flags. Do **not** add these generators into 2024 operable nameplate availability merely because reported generation is nonzero; equally, do **not** remove their measured MWh from an observed-energy reconciliation silently. Resolve retirement-effective dates, operation windows and EIA revision semantics before declaring a final 2024 active fleet and BA completeness.
+
+**Historical calibration certified: NO.** This audit does not imply that a full-month or held-out-year PyPSA dispatch comparison has been completed.
