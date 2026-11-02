@@ -12,6 +12,7 @@ on:
       - 'src/grid_resilience/eia923_generator_extract.py'
       - 'src/grid_resilience/eia923_page1_hy_ps.py'
       - 'src/grid_resilience/eia923_page1_all_fuels.py'
+      - 'tests/test_eia923_page1_all_fuels.py'
 jobs:
   status-audit:
     runs-on: ubuntu-24.04
@@ -21,7 +22,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -e . openpyxl pandas
+      - run: python -m pip install -e '.[dev]' openpyxl pandas
+      - name: Test Page1 provenance and missing-value handling
+        run: python -m pytest -q tests/test_eia923_page1_all_fuels.py
       - name: Download official 2024 archives
         run: |
           mkdir -p outputs/status_audit
