@@ -10,6 +10,7 @@ on:
       - 'src/grid_resilience/eia923_monthly_technology_coverage.py'
       - 'src/grid_resilience/eia860_generator_extract.py'
       - 'src/grid_resilience/eia923_generator_extract.py'
+      - 'src/grid_resilience/eia923_page1_hy_ps.py'
 jobs:
   status-audit:
     runs-on: ubuntu-24.04
@@ -78,6 +79,9 @@ jobs:
       - name: Audit observed monthly technology coverage and multifuel exclusions
         run: |
           python -m grid_resilience.eia923_monthly_technology_coverage --ledger outputs/status_audit/eia923_page4_full_observation_ledger.csv --operable outputs/status_audit/eia860_2024_operable_generators.csv --output outputs/status_audit
+      - name: Extract Page1 observed hydro and pumped storage
+        run: |
+          python -m grid_resilience.eia923_page1_hy_ps --archive outputs/status_audit/eia923.zip --ba SRP --output outputs/status_audit
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -93,3 +97,5 @@ jobs:
             outputs/status_audit/eia923_multifuel_exclusions.csv
             outputs/status_audit/generator_extraction_manifest.json
             outputs/status_audit/eia860_extraction_manifest.json
+            outputs/status_audit/page1_hy_ps_monthly_observations.csv
+            outputs/status_audit/page1_hy_ps_manifest.json
