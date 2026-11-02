@@ -7,6 +7,7 @@ on:
       - 'src/grid_resilience/srp_monthly_availability_sensitivity.py'
       - 'src/grid_resilience/fuel_specific_screen_assumptions.py'
       - 'src/grid_resilience/srp_source_scope_gap.py'
+      - 'src/grid_resilience/srp_net_exchange_pypsa_screen.py'
   workflow_dispatch:
 jobs:
   real-input-screen:
@@ -104,6 +105,18 @@ jobs:
       - name: Audit Page4 source and screened fleet overlap, fail closed on source discrepancy
         run: |
           python -m grid_resilience.srp_source_scope_gap --page4 outputs/srp_real_screen/eia923_generator_month_net_mwh.csv --inventory outputs/srp_real_screen/eia860_2024_operable_generators.csv --screen outputs/srp_real_screen/partial_ba_capacity_screen.csv --ba SRP --month 2024-01 --output outputs/srp_real_screen
+      - name: Audit EIA-930 interchange and solve with observed export sink
+        run: |
+          python -m grid_resilience.eia930_net_interchange_audit --csv outputs/srp_real_screen/source_combined.csv --ba SRP --year 2024 --month 1 --output outputs/srp_real_screen
+          python -m grid_resilience.srp_net_exchange_pypsa_screen --balance outputs/srp_real_screen/eia930_hourly_balance_audit.csv --capacity outputs/srp_real_screen/fuel_assumption_capacity_screen.csv --ba SRP --year 2024 --month 1 --output outputs/srp_real_screen/interchange_case
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('outputs/srp_real_screen/interchange_case/interchange_screen_manifest.json').read_text())
+          assert abs(m['exogenous_supply_requirement_mwh']-5098932.0)<1e-3
+          assert abs(m['modeled_supply_mwh']+m['modeled_unserved_mwh']-m['exogenous_supply_requirement_mwh'])<1e-3
+          assert m['historical_calibration_certified'] is False
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -126,3 +139,6 @@ jobs:
             outputs/srp_real_screen/page4_month_scope_rows.csv
             outputs/srp_real_screen/page4_month_scope_summary.csv
             outputs/srp_real_screen/page4_month_scope_manifest.json
+            outputs/srp_real_screen/eia930_balance_metrics.json
+            outputs/srp_real_screen/interchange_case/interchange_screen_manifest.json
+            outputs/srp_real_screen/interchange_case/modeled_generation_with_net_exchange.csv
