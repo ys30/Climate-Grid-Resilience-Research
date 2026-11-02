@@ -7,6 +7,7 @@ on:
       - 'src/grid_resilience/eia860_full_status_triage.py'
       - 'src/grid_resilience/retired_generator_observation_ledger.py'
       - 'src/grid_resilience/eia923_full_observation_ledger.py'
+      - 'src/grid_resilience/eia923_monthly_technology_coverage.py'
       - 'src/grid_resilience/eia860_generator_extract.py'
       - 'src/grid_resilience/eia923_generator_extract.py'
 jobs:
@@ -74,6 +75,9 @@ jobs:
       - name: Audit full extracted Page-4 source coverage without discarding unmatched energy
         run: |
           python -m grid_resilience.eia923_full_observation_ledger --page4 outputs/status_audit/eia923_generator_month_net_mwh.csv --operable outputs/status_audit/eia860_2024_operable_generators.csv --output outputs/status_audit
+      - name: Audit observed monthly technology coverage and multifuel exclusions
+        run: |
+          python -m grid_resilience.eia923_monthly_technology_coverage --ledger outputs/status_audit/eia923_page4_full_observation_ledger.csv --operable outputs/status_audit/eia860_2024_operable_generators.csv --output outputs/status_audit
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -84,5 +88,8 @@ jobs:
             outputs/status_audit/unmatched_observation_ledger.csv
             outputs/status_audit/eia923_page4_full_observation_ledger.csv
             outputs/status_audit/eia923_page4_coverage_summary.csv
+            outputs/status_audit/eia923_technology_classification_audit.csv
+            outputs/status_audit/eia923_month_technology_coverage.csv
+            outputs/status_audit/eia923_multifuel_exclusions.csv
             outputs/status_audit/generator_extraction_manifest.json
             outputs/status_audit/eia860_extraction_manifest.json
