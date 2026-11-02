@@ -35,13 +35,17 @@ jobs:
           assert abs(n.links.loc[mapping['storage_discharge_link'],'p_nom'] * n.links.loc[mapping['storage_discharge_link'],'efficiency']-154.1)<1e-8
           status,condition=n.optimize(solver_name='highs')
           assert condition=='optimal',(status,condition)
-          hy=n.links_t.p1[mapping['hydro_link']]
+          hy=-n.links_t.p1[mapping['hydro_link']]
           charge=n.links_t.p0[mapping['storage_charge_link']]
           discharge=-n.links_t.p1[mapping['storage_discharge_link']]
           soc=n.stores_t.e['SRP_ps_energy']
-          assert hy.sum()<=12.0001,hy.sum()
+          assert hy.min()>=-1e-5
+          assert 0<=hy.sum()<=12.0001,hy.sum()
+          assert abs(float(n.stores_t.e['SRP_hydro_budget'].iloc[-1])-(12.0-float(hy.sum())))<1e-4
           assert soc.between(-1e-5,settings['ps_energy_capacity_mwh_assumed']+1e-5).all()
           assert abs(soc.iloc[-1])<1e-4
+          assert discharge.max()<=154.10001
+          assert float(discharge.sum())<=float(charge.sum())*0.81+1e-4
           assert charge.min()>-1e-5 and discharge.min()>-1e-5
           print('HY dispatched',hy.sum(),'PS charging',charge.sum(),'PS discharging',discharge.sum())
           PY
