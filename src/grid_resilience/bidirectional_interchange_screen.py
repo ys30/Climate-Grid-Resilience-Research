@@ -7,7 +7,7 @@ import argparse,calendar,json
 from pathlib import Path
 import pandas as pd
 
-def solve(balance,capacity,year,month,ba):
+def solve(balance,capacity,year,month,ba,resource_settings=None):
     import pypsa
     needed={"timestamp","demand_mw","interchange_mw"}
     if not needed.issubset(balance) or not {"ba","technology","capacity_mw","marginal_cost"}.issubset(capacity):
@@ -40,6 +40,10 @@ def solve(balance,capacity,year,month,ba):
     for r in c.itertuples(index=False):
         n.add("Generator",str(r.technology),bus=ba,p_nom=float(r.capacity_mw),
               marginal_cost=float(r.marginal_cost))
+    resource_mapping=None
+    if resource_settings is not None:
+        from grid_resilience.hy_ps_pypsa_components import add_hy_ps
+        resource_mapping=add_hy_ps(n,ba,resource_settings,prefix=ba)
     status,condition=n.optimize(solver_name="highs")
     if condition!="optimal":raise RuntimeError(f"Optimization failed: {status}/{condition}")
     generation=n.generators_t.p
@@ -48,13 +52,21 @@ def solve(balance,capacity,year,month,ba):
     imported=float(generation.observed_imports.sum())
     spill=float(-generation.boundary_spill.sum())
     # This is irreversible same-hour surplus absorption, not a storage device.
+    hydro_mwh=0.0;ps_charge_mwh=0.0;ps_discharge_mwh=0.0
+    if resource_mapping is not None:
+        hydro_mwh=float(-n.links_t.p1[resource_mapping["hydro_link"]].sum())
+        ps_charge_mwh=float(n.links_t.p0[resource_mapping["storage_charge_link"]].sum())
+        ps_discharge_mwh=float(-n.links_t.p1[resource_mapping["storage_discharge_link"]].sum())
+        assert hydro_mwh<=resource_mapping["energy_budget_mwh"]+1e-5
     demand=float(d.demand_mw.sum());export=float(exports.sum())
-    if abs(actual+imported+short-demand-export-spill)>max(0.01,(demand+export)*1e-8):
+    if abs(actual+imported+short+hydro_mwh+ps_discharge_mwh-demand-export-spill-ps_charge_mwh)>max(0.01,(demand+export)*1e-8):
         raise ValueError("Boundary energy conservation failed")
     return {"year":year,"month":month,"ba":ba,"demand_mwh":demand,
             "observed_import_injection_mwh":imported,"observed_export_sink_mwh":export,
             "modeled_plant_generation_mwh":actual,"modeled_unserved_mwh":short,
             "modeled_import_surplus_disposal_mwh":spill,
+            "hydro_dispatch_mwh":hydro_mwh,"ps_charge_mwh":ps_charge_mwh,
+            "ps_discharge_mwh":ps_discharge_mwh,"hy_ps_counterfactual_enabled":resource_mapping is not None,
             "historical_calibration_certified":False,
             "boundary_import_export_fixed":True,
             "notes":"Single-bus fixed observed interchange, incomplete fleet, hypothetical capacities, spill is not historical curtailment."}
