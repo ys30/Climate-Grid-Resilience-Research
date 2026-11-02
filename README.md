@@ -41,7 +41,7 @@ The [historical input harmonizer](src/grid_resilience/historical_inputs.py) take
 
 ## EIA-923 2024 observed-source audit (not historical calibration)
 
-The [verified HY/PS audit](reports/EIA923_2024_HYDRO_PS_OBSERVATION_AUDIT.md) records 245 conventional hydro Page 1 plant/BA source rows and 120 pumped-storage measured plant-month net-generation rows. **HY monthly MWh are not yet established**, nor are full-fleet mapping, hourly availability or historical reliability calibration. These observations must not be interpreted as modeled outage validation.
+The [verified HY/PS audit](reports/EIA923_2024_HYDRO_PS_OBSERVATION_AUDIT.md) records 245 conventional hydro Page 1 plant/BA source rows and 120 pumped-storage measured plant-month net-generation rows. **HY monthly reported-source MWh are now extracted** for BPAT, CISO and SRP (12 months each) in [official intake run 41263007401](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41263007401); AZPS HY/PS source slots remain missing, not zero. Full-fleet mapping, hourly availability and historical reliability calibration remain unverified. These observations must not be interpreted as modeled outage validation.
 
 ## SRP hourly adequacy diagnostics (model-based, validation pending)
 
