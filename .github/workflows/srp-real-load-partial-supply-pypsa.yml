@@ -170,6 +170,8 @@ jobs:
           print('HY PS SCENARIO UNSERVED:',r['scenario']['modeled_unserved_mwh'])
           print('MODELED DELTA:',r['delta_unserved_mwh'])
           assert r['scenario']['hydro_dispatch_mwh']<=1015.00001
+          assert r['baseline']['max_hourly_bus_residual_mw']<1e-3
+          assert r['scenario']['max_hourly_bus_residual_mw']<1e-3
           assert r['historical_calibration_certified'] is False
           PY
       - uses: actions/upload-artifact@v4
