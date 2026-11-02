@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'src/grid_resilience/eia930_monthly_demand.py'
+      - 'tests/test_eia930_monthly_demand.py'
       - '.github/workflows/eia930-real-hourly-demand.yml'
   workflow_dispatch:
 jobs:
@@ -14,7 +15,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -e .
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q tests/test_eia930_monthly_demand.py
       - name: Retrieve official full January 2024 EIA-930 demand
         run: |
           python -m grid_resilience.eia930_monthly_demand --ba SRP --year 2024 --month 1 --output outputs/eia930_srp_2024_01
