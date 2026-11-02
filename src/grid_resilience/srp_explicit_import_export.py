@@ -35,17 +35,17 @@ def run(balance, capacity, ba, year, month):
     if peak>0:
         n.add("Generator","observed_import",bus=ba,p_nom=peak,p_min_pu=(imports/peak).to_numpy(),p_max_pu=(imports/peak).to_numpy(),marginal_cost=0)
     n.add("Generator","unserved",bus=ba,p_nom=float((b.demand_mw+exports).max())+1,marginal_cost=1e5)
-    n.add("Generator","spill",bus=ba,p_nom=1e7,p_min_pu=-1,p_max_pu=0,marginal_cost=-1)
+    # Oversupply cannot exceed must-take imports since local generation is dispatchable.\n    n.add("Generator","spill",bus=ba,p_nom=max(1.0,peak),p_min_pu=-1,p_max_pu=0,marginal_cost=-1)
     status,condition=n.optimize(solver_name="highs")
     if status!="ok" or condition!="optimal":
         raise RuntimeError(f"Nonoptimal exchange solve: {status}, {condition}")
     g=n.generators_t.p
     if g.empty:raise RuntimeError("No dispatch")
-    local=sum(float(g[f"local__{tech}"].sum()) for tech in c.technology)
+    if ((g["unserved"]>1e-6) & (g["spill"] < -1e-6)).any():\n        raise RuntimeError("Unserved energy and deliberate spillage simultaneously in one hour")\n    if (g["spill"]>1e-6).any() or (g["unserved"] < -1e-6).any():\n        raise RuntimeError("Unexpected spillage or unserved dispatch direction")\n    local=sum(float(g[f"local__{tech}"].sum()) for tech in c.technology)
     result={"solver_status":status,"solver_condition":condition,"local_generation_mwh":local,"scheduled_import_mwh":float(imports.sum()),
         "scheduled_export_mwh":float(exports.sum()),"local_demand_mwh":float(b.demand_mw.sum()),
         "unserved_mwh":float(g["unserved"].sum()),"spilled_mwh":-float(g["spill"].sum()),
-        "net_interchange_mwh":float(b.interchange_mw.sum()),
+        "net_interchange_mwh":float(b.interchange_mw.sum()),\n        "hours_with_unserved":int((g["unserved"]>1e-6).sum()),\n        "hours_with_spillage":int((g["spill"]< -1e-6).sum()),
         "historical_calibration_certified":False,"real_network_interchange_simulated":False}
     residual=result["local_generation_mwh"]+result["scheduled_import_mwh"]+result["unserved_mwh"]-result["local_demand_mwh"]-result["scheduled_export_mwh"]-result["spilled_mwh"]
     result["energy_balance_residual_mwh"]=residual
