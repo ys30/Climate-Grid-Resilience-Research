@@ -368,6 +368,23 @@ jobs:
           assert len(daily)==cases*24
           assert len(summary)==cases
           assert len(threshold)==cases
+          assert not threshold.duplicated(['scenario','coal_availability_pu','nuclear_availability_pu','gas_availability_pu']).any()
+          expected_cases={
+              f"{r.scenario}_c{int(round(r.coal_availability_pu*100))}_n{int(round(r.nuclear_availability_pu*100))}_g{int(round(r.gas_availability_pu*100))}"
+              for r in threshold.itertuples(index=False)
+          }
+          assert set(hourly['case'])==expected_cases, 'Threshold/hourly scenario keys differ'
+          assert set(daily['case'])==expected_cases, 'Threshold/diurnal scenario keys differ'
+          assert set(summary['case'])==expected_cases, 'Threshold/summary scenario keys differ'
+          assert not hourly.duplicated(['case','timestamp']).any(), 'Duplicate hourly records'
+          assert hourly.groupby('case').size().eq(168).all()
+          assert daily.groupby('case').size().eq(24).all()
+          threshold_totals={
+              f"{r.scenario}_c{int(round(r.coal_availability_pu*100))}_n{int(round(r.nuclear_availability_pu*100))}_g{int(round(r.gas_availability_pu*100))}": float(r.shortfall_mwh)
+              for r in threshold.itertuples(index=False)
+          }
+          for name, grp in hourly.groupby('case'):
+              assert abs(float(grp.shortfall_mw.sum())-threshold_totals[name])<1e-3, name
           assert len(pngs)==2*cases, f'Expected {2*cases} PNG files, got {len(pngs)}'
           assert all(p.stat().st_size>1000 for p in pngs)
           energy_hourly=hourly.groupby('case').shortfall_mw.sum().sort_index()
