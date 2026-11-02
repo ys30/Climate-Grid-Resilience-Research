@@ -56,7 +56,7 @@ def compare(observed: pd.DataFrame, modeled: pd.DataFrame, *, holdout_years: set
             "rmse_mwh":float(np.sqrt(group.squared_error_mwh2.mean())),
             "observed_total_mwh":float(group.net_generation_mwh.sum()),
             "modeled_total_mwh":float(group.modeled_generation_mwh.sum())})
-    metrics=merged.groupby(["period","ba","technology"],sort=True).apply(summarize,include_groups=False).reset_index()
+    metrics=merged.groupby(["period","ba","technology"],sort=True)[["net_generation_mwh","modeled_generation_mwh","error_mwh","absolute_error_mwh","squared_error_mwh2"]].apply(summarize).reset_index()
     return merged.sort_values(KEYS),metrics
 
 def main():
