@@ -8,6 +8,7 @@ on:
       - 'src/grid_resilience/fuel_specific_screen_assumptions.py'
       - 'src/grid_resilience/srp_source_scope_gap.py'
       - 'src/grid_resilience/srp_net_exchange_pypsa_screen.py'
+      - 'src/grid_resilience/bidirectional_interchange_screen.py'
   workflow_dispatch:
 jobs:
   real-input-screen:
@@ -117,6 +118,17 @@ jobs:
           assert abs(m['modeled_supply_mwh']+m['modeled_unserved_mwh']-m['exogenous_supply_requirement_mwh'])<1e-3
           assert m['historical_calibration_certified'] is False
           PY
+      - name: Solve actual 744-hour EIA-930 with explicit bidirectional boundary
+        run: |
+          python -m grid_resilience.bidirectional_interchange_screen --balance outputs/srp_real_screen/eia930_hourly_balance_audit.csv --capacity outputs/srp_real_screen/fuel_assumption_capacity_screen.csv --ba SRP --year 2024 --month 1 --output outputs/srp_real_screen/bidirectional_case
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path('outputs/srp_real_screen/bidirectional_case/bidirectional_boundary_screen.json').read_text())
+          assert abs(x['demand_mwh']-2455626)<1e-3
+          assert abs(x['observed_import_injection_mwh']+x['modeled_plant_generation_mwh']+x['modeled_unserved_mwh']-x['demand_mwh']-x['observed_export_sink_mwh']-x['modeled_import_surplus_disposal_mwh'])<1e-3
+          assert x['historical_calibration_certified'] is False
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -142,3 +154,4 @@ jobs:
             outputs/srp_real_screen/eia930_balance_metrics.json
             outputs/srp_real_screen/interchange_case/interchange_screen_manifest.json
             outputs/srp_real_screen/interchange_case/modeled_generation_with_net_exchange.csv
+            outputs/srp_real_screen/bidirectional_case/bidirectional_boundary_screen.json
