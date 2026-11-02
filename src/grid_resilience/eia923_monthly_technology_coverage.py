@@ -28,7 +28,8 @@ def coverage(ledger,operable):
                    on=["plant_id","generator_id"],how="left",validate="many_to_one",indicator=True)
     secondary=joined.energy_source_2.fillna("").astype(str).str.strip().str.upper()
     multifuel=joined.multiple_fuels.fillna("").astype(str).str.strip().str.upper()
-    ambiguous=(secondary.ne("")&~secondary.isin(["NA","NONE","."])) | multifuel.isin(["Y","YES","1","TRUE"])
+    primary=joined.energy_source_1.fillna("").astype(str).str.strip().str.upper()
+    ambiguous=(secondary.ne("")&~secondary.isin(["NA","NONE","."])) | multifuel.isin(["Y","YES","1","TRUE"]) | primary.isin(["","NA","NONE","."])
     joined["classification"]= "single_source_candidate"
     joined.loc[ambiguous,"classification"]="multifuel_ambiguous"
     joined.loc[joined["_merge"].ne("both"),"classification"]="not_in_operable_inventory"
