@@ -1,0 +1,49 @@
+name: EIA-930 offline archive to PyPSA integration smoke
+on:
+  push:
+    paths:
+      - 'src/grid_resilience/eia930_monthly_pypsa_pipeline.py'
+      - 'src/grid_resilience/eia930_balance_archive_import.py'
+      - '.github/workflows/eia930-pypsa-integration-smoke.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[model]'
+      - name: Generate explicitly synthetic 744-hour EIA Balance ZIP and capacity
+        run: |
+          mkdir -p outputs/integration
+          python - <<'PY'
+          import pandas as pd,zipfile
+          from pathlib import Path
+          p=Path('outputs/integration')
+          hours=pd.date_range('2024-01-01T01:00:00Z',periods=744,freq='h')
+          records=pd.DataFrame({'Balancing Authority':'SRP',
+             'UTC Time at End of Hour':hours.strftime('%m/%d/%Y %H:%M'),
+             'Demand (MW)':50.0})
+          with zipfile.ZipFile(p/'SYNTHETIC_balance.zip','w') as z:
+              z.writestr('synthetic_BALANCE.csv',records.to_csv(index=False))
+          pd.DataFrame([{'ba':'SRP','technology':'SYNTHETIC_GAS','capacity_mw':60.0,
+              'marginal_cost':50.0}]).to_csv(p/'synthetic_capacities.csv',index=False)
+          PY
+      - name: Exercise end-to-end offline importer and full-month PyPSA
+        run: |
+          python -m grid_resilience.eia930_monthly_pypsa_pipeline --archive outputs/integration/SYNTHETIC_balance.zip --capacity outputs/integration/synthetic_capacities.csv --ba SRP --year 2024 --month 1 --output outputs/integration/result
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path('outputs/integration/result')
+          x=pd.read_csv(p/'modeled_monthly_generation.csv')
+          assert abs(x.modeled_generation_mwh.sum()-37200)<1e-3
+          m=json.loads((p/'real_input_screen_manifest.json').read_text())
+          assert m['observed_hour_count']==744
+          assert m['calibrated'] is False
+          assert abs(m['unserved_mwh_by_ba']['SRP'])<1e-5
+          print('End-to-end SYNTHETIC input integration passed')
+          PY
