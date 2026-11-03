@@ -33,3 +33,23 @@ The implementation now validates the actual Plant workbook layout assumption wit
 Tests cover malformed official headers, target-BA nonnumeric capacities, unrelated missing plant joins, and unrelated nonnumeric capacities. These are source-contract checks, not evidence that the *real* new expanded census has finished successfully.
 
 Remaining critical acceptance criteria: execute the expanded census on the actual 2024 official ZIP; report the target Plant-BA count/installed nameplate; reconcile any target BA mismatches with Page4; classify renewable/hydro/storage and avoid treating those resources as unconditional hourly firm supply. Current CI success remains **unconfirmed**.
+
+## Independent archived Plant BA fuel reference (2024)
+
+An earlier successfully stored GitHub Actions artifact, `github-actions-artifact-13097269172.zip`, contains `eia860_plant_ba_capacity_candidates.csv` and `eia860_plant_ba_capacity_manifest.json` from an independently constructed EIA-860 Plant-to-Operable crosswalk. Its SRP **eligible single-fuel** aggregates are:
+
+| Fuel group | Operable generator identities | Nameplate MW |
+|---|---:|---:|
+| Gas | 53 | 7655.1 |
+| Coal | 2 | 821.8 |
+| Nuclear | 3 | 4209.6 |
+| Hydro | 8 | 94.1 |
+| Solar | 18 | 1674.9 |
+| Wind | 2 | 226.0 |
+| **Total eligible** | **86** | **14681.5** |
+
+The same artifact has `azps_srp_excluded_generator_capacity.csv` showing **22 excluded SRP generator rows** with **2,182.1 MW** positive nameplate: 11 secondary/multifuel NG (895.0 MW), 2 excluded pumped-storage WAT (154.1 MW), and 9 MWH (1,133.0 MW). This is **not** a claim that excluded capacity is firm, dispatchable, available, or additive without double-counting.
+
+New machine-readable reference: `references/srp_2024_eia860_plant_ba_eligible_aggregate.csv`, derived from the archived artifact. `src/grid_resilience/srp_plant_ba_technology_crosscheck.py` classifies the newly generated official SRP Plant BA roster into transparent fuel and exclusion categories, then writes per-fuel differences compared with the prior independent artifact. Mismatches remain visible and must be reviewed; the existing 37-screened-generator Page4 model is **not** automatically replaced. The new end-to-end CI has **not yet been verified as passing**.
+
+**Caution:** The EIA-860 Plant BA annual assignment and EIA-923 Page4 monthly reported BA do not necessarily define identical generator populations. The 86 eligible entries should not be interpreted as 86 fully available resources, and the prior model's hourly unmet requirement is not observed historical load shedding.
