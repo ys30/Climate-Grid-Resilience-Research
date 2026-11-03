@@ -39,6 +39,12 @@ The [historical input harmonizer](src/grid_resilience/historical_inputs.py) take
 
 [Source Portfolio C](https://github.com/ys30/Climate-Grid-Resilience-PyPSA) · [Technical summary of completed demonstration](https://github.com/ys30/Climate-Grid-Resilience-PyPSA/blob/main/reports/FINAL_TECHNICAL_SUMMARY.md)
 
+## Verified January 2024 SRP real-input screening workflow (2026-11-03)
+
+The [full SRP January 2024 GitHub Actions run 41718037295](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41718037295) completed **successfully** at commit `055b8a18b47ae98e39352453bbeb806999fe51f7`. Its 29 workflow steps include the 744-hour EIA-930 demand/boundary screen, EIA-860/923 generator-identity checks, PyPSA solves, source-scope sensitivity diagnostics, a firm-capacity frontier, and synthetic signed-import/export regression. GitHub uploaded the [run artifact](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41718037295/artifacts/13269759289) (`srp-jan2024-real-load-partial-supply-screen`). The [research methods CI](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41718037303) and [exchange boundary regression](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41718037235) also passed at the same commit.
+
+**Interpretation:** workflow completion verifies execution and artifact upload, not independent verification of every artifact value, full-fleet capacity assignment, transmission deliverability, out-of-year calibration, or observed outages. All January shortfalls and firm-capacity frontiers remain *conditional partial-fleet model screens*, not historical reliability estimates. Do not transfer numerical results into the paper without separately auditing artifact rows and their provenance.
+
 ## EIA-923 2024 observed-source audit (not historical calibration)
 
 The [verified HY/PS audit](reports/EIA923_2024_HYDRO_PS_OBSERVATION_AUDIT.md) records 245 conventional hydro Page 1 plant/BA source rows and 120 pumped-storage measured plant-month net-generation rows. **HY monthly reported-source MWh are now extracted** for BPAT, CISO and SRP (12 months each) in [official intake run 41263007401](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41263007401); AZPS HY/PS source slots remain missing, not zero. Full-fleet mapping, hourly availability and historical reliability calibration remain unverified. These observations must not be interpreted as modeled outage validation.
