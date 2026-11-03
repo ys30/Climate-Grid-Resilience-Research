@@ -121,3 +121,31 @@ def test_page4_generator_absent_from_operable_inventory_is_flagged():
         "reported_ba":["SRP"],"period":["2024-01"]})],ignore_index=True)
     _,report=census(a,b,c)
     assert report["page4_reported_ba_not_in_plant_assigned_roster_count"]==1
+
+def test_cli_preserves_numeric_looking_generator_ids_with_leading_zeros(tmp_path,monkeypatch):
+    """End-to-end CSV read must not collapse 001 into 1."""
+    import io,sys,zipfile,json
+    from openpyxl import Workbook
+    from grid_resilience.eia860_plant_ba_census import main
+    wb=Workbook();ws=wb.active;ws.title="Plant"
+    ws.append(["EIA-860 official schedule"])
+    header=[""]*15;header[3]="Plant Code";header[13]="Balancing Authority Code"
+    ws.append(header)
+    row=[""]*15;row[3]=123;row[13]="SRP";ws.append(row)
+    buff=io.BytesIO();wb.save(buff)
+    archive=tmp_path/"source.zip"
+    with zipfile.ZipFile(archive,"w") as z:
+        z.writestr("2___Plant_Y2024.xlsx",buff.getvalue())
+    operable=tmp_path/"operable.csv"
+    operable.write_text("plant_id,generator_id,nameplate_capacity_mw\\n123,001,10\\n123,002,20\\n")
+    page4=tmp_path/"page4.csv"
+    page4.write_text("plant_id,generator_id,reported_ba,period\\n123,001,SRP,2024-01\\n")
+    output=tmp_path/"out"
+    monkeypatch.setattr(sys,"argv",["eia860_plant_ba_census","--archive",str(archive),
+        "--operable",str(operable),"--page4",str(page4),"--output",str(output)])
+    main()
+    result=pd.read_csv(output/"plant_ba_operable_generator_census.csv",dtype={"generator_id":"string"})
+    manifest=json.loads((output/"plant_ba_generator_census_manifest.json").read_text())
+    assert result.generator_id.tolist()==["001","002"]
+    assert result.appears_in_page4_ba_month.tolist()==[True,False]
+    assert manifest["of_those_appearing_in_eia923_page4_ba_month"]==1
