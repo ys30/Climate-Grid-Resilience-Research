@@ -38,10 +38,16 @@ def test_overlap_and_signed_source_sums_are_kept_separate():
     assert rows.loc[rows.source.eq("page4"), "record_count"].sum() == 3
 
 
-def test_duplicate_page1_plant_fuel_month_fails_closed():
+def test_repeated_page1_plant_fuel_month_is_preserved_and_flagged():
     a, b = source_frames()
-    with pytest.raises(ValueError, match="Duplicate Page 1"):
-        bridge(pd.concat([a, a.iloc[[0]]], ignore_index=True), b)
+    a = pd.concat([a, a.iloc[[0]].assign(net_generation_mwh=7.)], ignore_index=True)
+    rows, overlap, result = bridge(a, b)
+    assert result["page1_source_rows"] == 4
+    assert result["page1_reported_mwh_source_only"] == 39.
+    assert result["page1_rows_with_repeated_coarse_keys"] == 2
+    assert result["page1_coarse_key_is_unique"] is False
+    assert rows.loc[rows.source.eq("page1"), "record_count"].sum() == 4
+    assert overlap.plant_id.tolist() == ["7"]
 
 
 def test_duplicate_page4_generator_month_fails_closed():
