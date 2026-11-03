@@ -35,3 +35,21 @@ def test_incomplete_source_join_fails():
     d,r,o,c=inputs()
     with pytest.raises(ValueError,match="Incomplete source identity"):
         scenario(d,r,o.iloc[:-1],c)
+
+def test_nameplate_mismatch_fails_closed():
+    d,r,o,c=inputs()
+    c.loc[0,"original_nameplate_mw"]=99.
+    with pytest.raises(ValueError,match="does not reconcile"):
+        scenario(d,r,o,c)
+
+def test_missing_model_fuel_fails_closed():
+    d,r,o,c=inputs()
+    r.loc[1,"energy_source_1"]="SUB"
+    with pytest.raises(ValueError,match="fuel populations differ"):
+        scenario(d,r,o,c)
+
+def test_incorrect_scope_fails_closed():
+    d,r,o,c=inputs()
+    o.loc[1,"identity_scope"]="reviewed_but_excluded"
+    with pytest.raises(ValueError,match="eligibility scope"):
+        scenario(d,r,o,c)
