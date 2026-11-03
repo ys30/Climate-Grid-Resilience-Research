@@ -53,3 +53,18 @@ The same artifact has `azps_srp_excluded_generator_capacity.csv` showing **22 ex
 New machine-readable reference: `references/srp_2024_eia860_plant_ba_eligible_aggregate.csv`, derived from the archived artifact. `src/grid_resilience/srp_plant_ba_technology_crosscheck.py` classifies the newly generated official SRP Plant BA roster into transparent fuel and exclusion categories, then writes per-fuel differences compared with the prior independent artifact. Mismatches remain visible and must be reviewed; the existing 37-screened-generator Page4 model is **not** automatically replaced. The new end-to-end CI has **not yet been verified as passing**.
 
 **Caution:** The EIA-860 Plant BA annual assignment and EIA-923 Page4 monthly reported BA do not necessarily define identical generator populations. The 86 eligible entries should not be interpreted as 86 fully available resources, and the prior model's hourly unmet requirement is not observed historical load shedding.
+
+## Source-level exclusion category correction (2026-11-03)
+
+The archived artifact `github-actions-artifact-13097269172.zip`, file `azps_srp_excluded_generator_capacity.csv`, identifies the following **SRP-only** source-attribution exclusions:
+
+| Category | Primary EIA fuel | Generator records | Nameplate MW |
+|---|---|---:|---:|
+| Multifuel / secondary-fuel | NG | 11 | 895.0 |
+| Pumped storage | WAT (PS mover) | 2 | 154.1 |
+| Unmapped primary energy source | MWH | 9 | 1,133.0 |
+| **Total exclusions** | | **22** | **2,182.1** |
+
+The initial new crosscheck grouped all `MWH` energy-source records under `storage_excluded` despite the archived classification calling them `unmapped_primary_energy_source`. This classification was fixed in `srp_plant_ba_technology_crosscheck.py`, with corresponding regression expectations updated. **The eligible single-fuel roster (86 identities, 14,681.5 MW) is unaffected**, but the reason codes now stay faithful to the previously verified source audit. This classification correction does not imply a conclusion about the actual operational technology or dispatchability of those nine MWH records; further source review is necessary.
+
+The public GitHub Actions API could not be read in this session, so new workflow execution remains **unconfirmed**, not passing by assertion.
