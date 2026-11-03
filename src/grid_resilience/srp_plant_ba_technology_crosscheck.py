@@ -28,7 +28,9 @@ def classify(roster,reference):
     for k in ("energy_source_1","energy_source_2","multiple_fuels","prime_mover"):
         d[k]=d[k].fillna("").astype(str).str.strip().str.upper()
     is_multi=d.multiple_fuels.isin(MULTI)|~d.energy_source_2.isin(EMPTY)
-    storage=d.prime_mover.eq("PS")|d.energy_source_1.eq("MWH")
+    # Keep attrition codes consistent with the archived 2024 official BA audit:
+    # PS pumped-hydro is storage; MWH remains an unmapped energy-source code.
+    storage=d.prime_mover.eq("PS")
     mapped=d.energy_source_1.map(FUEL)
     valid=d.nameplate_capacity_mw.gt(0)&~is_multi&~storage&mapped.notna()
     d["candidate_class"]=np.select(
