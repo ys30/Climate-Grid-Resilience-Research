@@ -5,29 +5,20 @@ This is a source-scheduled external boundary, NOT a transmission flow simulation
 import argparse,json,calendar,math
 from pathlib import Path
 import pandas as pd
+from grid_resilience.exchange_boundary_preflight import validate_boundary
 
 def run(balance, capacity, ba, year, month):
     import pypsa
-    b=balance.copy(); c=capacity.copy()
-    for k in ("timestamp","demand_mw","interchange_mw"):
-        if k not in b: raise ValueError("Missing "+k)
-    b["timestamp"]=pd.to_datetime(b.timestamp,utc=True,errors="raise")
-    for k in ("demand_mw","interchange_mw"):b[k]=pd.to_numeric(b[k],errors="raise")
-    if b[["timestamp","demand_mw","interchange_mw"]].isna().any().any():raise ValueError("Missing boundary data")
-    if not b[["demand_mw","interchange_mw"]].map(math.isfinite).all().all():raise ValueError("Nonfinite boundary data")
-    expected=pd.date_range(f"{year}-{month:02d}-01",periods=calendar.monthrange(year,month)[1]*24,freq="h",tz="UTC")
-    if len(b)!=len(expected) or b.timestamp.duplicated().any() or not pd.DatetimeIndex(b.timestamp.sort_values()).equals(expected):raise ValueError("Incomplete UTC month")
-    b=b.set_index("timestamp").reindex(expected)
-    if (b.demand_mw<0).any():raise ValueError("Negative demand")
-    if not {"ba","technology","capacity_mw","marginal_cost"}.issubset(c.columns):
-        raise ValueError("Missing capacity fields")
+    b=validate_boundary(balance,year,month)
+    c=capacity.copy()
+    expected=b.index
     c=c[c.ba.eq(ba)].copy()
     if c.empty or c.technology.duplicated().any():raise ValueError("Missing or duplicate capacity")
     for k in ("capacity_mw","marginal_cost"):c[k]=pd.to_numeric(c[k],errors="raise")
     if c[["capacity_mw","marginal_cost"]].isna().any().any() or (c.capacity_mw<0).any():raise ValueError("Invalid capacity")
     if not c[["capacity_mw","marginal_cost"]].map(math.isfinite).all().all():raise ValueError("Nonfinite capacity or costs")
-    imports=(-b.interchange_mw).clip(lower=0)
-    exports=b.interchange_mw.clip(lower=0)
+    imports=b.observed_import_mw
+    exports=b.observed_export_mw
     n=pypsa.Network();n.set_snapshots(expected.tz_localize(None));n.add("Bus",ba)
     n.add("Load","local_demand",bus=ba,p_set=b.demand_mw.to_numpy())
     n.add("Load","observed_export",bus=ba,p_set=exports.to_numpy())
