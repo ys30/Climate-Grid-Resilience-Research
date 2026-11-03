@@ -37,12 +37,14 @@ def test_unrelated_missing_plant_is_reported_but_does_not_block_target_ba():
 
 def test_invalid_unrelated_capacity_is_not_used_for_target_ba():
     a,b,c=samples()
+    b["nameplate_capacity_mw"]=b["nameplate_capacity_mw"].astype(object)
     b.loc[2,"nameplate_capacity_mw"]="not-reported"
     rows,manifest=census(a,b,c)
     assert manifest["eia860_plant_assigned_nameplate_mw"]==130.
 
 def test_invalid_target_ba_capacity_fails_closed():
     a,b,c=samples()
+    b["nameplate_capacity_mw"]=b["nameplate_capacity_mw"].astype(object)
     b.loc[1,"nameplate_capacity_mw"]="not-reported"
     with pytest.raises(ValueError,match="target BA generator nameplate"):
         census(a,b,c)
@@ -137,9 +139,9 @@ def test_cli_preserves_numeric_looking_generator_ids_with_leading_zeros(tmp_path
     with zipfile.ZipFile(archive,"w") as z:
         z.writestr("2___Plant_Y2024.xlsx",buff.getvalue())
     operable=tmp_path/"operable.csv"
-    operable.write_text("plant_id,generator_id,nameplate_capacity_mw\\n123,001,10\\n123,002,20\\n")
+    operable.write_text("plant_id,generator_id,nameplate_capacity_mw\n123,001,10\n123,002,20\n")
     page4=tmp_path/"page4.csv"
-    page4.write_text("plant_id,generator_id,reported_ba,period\\n123,001,SRP,2024-01\\n")
+    page4.write_text("plant_id,generator_id,reported_ba,period\n123,001,SRP,2024-01\n")
     output=tmp_path/"out"
     monkeypatch.setattr(sys,"argv",["eia860_plant_ba_census","--archive",str(archive),
         "--operable",str(operable),"--page4",str(page4),"--output",str(output)])
