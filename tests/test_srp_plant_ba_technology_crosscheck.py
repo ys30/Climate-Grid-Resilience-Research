@@ -47,3 +47,28 @@ def test_nonfinite_capacity_fails():
     a.loc[0,"nameplate_capacity_mw"]=float("inf")
     with pytest.raises(ValueError,match="Invalid source"):
         classify(a,b)
+
+def test_mixed_ba_roster_fails_before_aggregation():
+    a,b=fixture()
+    a.loc[1,"plant_reported_ba"]="AZPS"
+    with pytest.raises(ValueError,match="outside the requested BA"):
+        classify(a,b)
+
+def test_wrong_reference_ba_fails():
+    a,b=fixture()
+    b["ba"]="SRP"
+    b.loc[1,"ba"]="AZPS"
+    with pytest.raises(ValueError,match="another BA"):
+        classify(a,b)
+
+def test_normalized_duplicate_plant_identity_fails():
+    a,b=fixture()
+    a.loc[1,["plant_id","generator_id"]]=["0001","A"]
+    with pytest.raises(ValueError,match="Duplicate roster"):
+        classify(a,b)
+
+def test_missing_roster_ba_fails():
+    a,b=fixture()
+    a.loc[0,"plant_reported_ba"]=None
+    with pytest.raises(ValueError,match="Missing roster identity"):
+        classify(a,b)
