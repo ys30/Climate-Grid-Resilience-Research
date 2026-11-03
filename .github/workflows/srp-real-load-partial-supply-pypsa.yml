@@ -123,8 +123,19 @@ jobs:
           r=json.loads(p.read_text())
           assert r["eligible_selected_generator_count"]>=0
           assert r["historical_calibration_certified"] is False
-          if not r["matched_reference_counts_and_capacities"]:
-              print("WARNING: independent reference mismatch; inspect per-fuel rows before merging with model")
+          expected={"included":86,"multifuel_or_secondary_fuel":11,
+                    "storage_excluded":2,"unmapped_primary_energy_source":9}
+          counts=r["roster_class_counts"]
+          assert r["matched_reference_counts_and_capacities"], (
+              "Plant BA fuel count/capacity differs from independent archived EIA-860 reference; "
+              "inspect plant_ba_technology_reference_comparison.csv")
+          for category,n in expected.items():
+              assert counts.get(category,0)==n, (
+                  f"Plant BA exclusion mismatch: {category}: {counts.get(category,0)} vs {n}; "
+                  "inspect plant_ba_technology_scope_rows.csv")
+          assert r["input_roster_generator_count"]==108
+          assert abs(r["eligible_selected_nameplate_mw"]-14681.5)<1e-3
+          print("Independent official-source Plant BA roster and attrition validated.")
           PY
       - name: Solve real load with partial real nameplate and explicit screening assumptions
         run: |
