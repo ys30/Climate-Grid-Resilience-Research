@@ -72,3 +72,27 @@ def test_missing_roster_ba_fails():
     a.loc[0,"plant_reported_ba"]=None
     with pytest.raises(ValueError,match="Missing roster identity"):
         classify(a,b)
+
+@pytest.mark.parametrize("bad_value",[float("nan"),float("inf"),-1.0])
+def test_invalid_reference_capacity_fails(bad_value):
+    a,b=fixture()
+    b.loc[0,"nameplate_capacity_mw"]=bad_value
+    with pytest.raises(ValueError,match="independent reference"):
+        classify(a,b)
+
+def test_noninteger_reference_counts_fail():
+    a,b=fixture()
+    b.loc[0,"generator_count"]=1.5
+    with pytest.raises(ValueError,match="Noninteger reference"):
+        classify(a,b)
+
+def test_empty_reference_fails():
+    a,b=fixture()
+    with pytest.raises(ValueError,match="Empty independent reference"):
+        classify(a,b.iloc[:0])
+
+def test_valid_reference_still_matches_after_strict_checks():
+    a,b=fixture()
+    _,comparison,summary=classify(a,b)
+    assert summary["matched_reference_counts_and_capacities"] is True
+    assert comparison.nameplate_difference_mw.abs().max()<1e-8
