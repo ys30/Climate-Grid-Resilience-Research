@@ -9,7 +9,7 @@ import pandas as pd
 
 def audit(review, rows):
     keys=["plant_id","generator_id"]
-    required_review=set(keys+["screening_candidate","nameplate_capacity_mw"])
+    required_review=set(keys+["screening_candidate","nameplate_capacity_mw","energy_source_1"])
     required_rows=set(keys+["generation_mwh","identity_scope"])
     if not required_review.issubset(review.columns) or not required_rows.issubset(rows.columns):
         raise ValueError("Required generator audit columns missing")
@@ -17,6 +17,7 @@ def audit(review, rows):
     for d in [c,g]:
         for k in keys:
             d[k]=d[k].astype("string").str.strip()
+            if k=="plant_id":d[k]=d[k].str.replace(r"^0+(?=[0-9])","",regex=True)
             if d[k].isna().any() or d[k].eq("").any():
                 raise ValueError("Blank generator identity")
         if d.duplicated(keys).any():
@@ -30,7 +31,10 @@ def audit(review, rows):
         raise ValueError("Invalid capacities")
     if not np.isfinite(g.generation_mwh.to_numpy()).all():
         raise ValueError("Invalid generation")
-    joined=g.merge(c[keys+["eligible","nameplate_capacity_mw"]],on=keys,how="left",validate="one_to_one",indicator=True)
+    c["fuel"]=c.energy_source_1.astype("string").str.strip().str.upper()
+    if c.fuel.isna().any() or c.fuel.eq("").any():
+        raise ValueError("Missing screened fuel codes")
+    joined=g.merge(c[keys+["eligible","nameplate_capacity_mw","fuel"]],on=keys,how="left",validate="one_to_one",indicator=True)
     if not joined._merge.eq("both").all() or len(joined)!=len(c):
         raise ValueError("Source identity reconciliation incomplete")
     expected=joined.eligible.map({True:"exact_screened_generator",False:"reviewed_but_excluded"})
@@ -39,7 +43,16 @@ def audit(review, rows):
     negative=int((joined.generation_mwh<0).sum())
     screened=joined.loc[joined.eligible]
     excluded=joined.loc[~joined.eligible]
+    zero_screened=screened.loc[screened.generation_mwh.eq(0)]
+    source_fuel_counts=joined.groupby(["identity_scope","fuel"],dropna=False).agg(
+        generators=("generator_id","size"),
+        nameplate_mw=("nameplate_capacity_mw","sum"),
+        source_monthly_net_mwh=("generation_mwh","sum")
+    ).reset_index().to_dict("records")
     return {
+      "observed_zero_screened_nameplate_mw":float(zero_screened.nameplate_capacity_mw.sum()),
+      "observed_zero_screened_plant_count":int(zero_screened.plant_id.nunique()),
+      "source_scope_by_fuel":source_fuel_counts,
       "matched_generator_identities":len(joined),
       "screened_identities":len(screened),
       "excluded_identities":len(excluded),
