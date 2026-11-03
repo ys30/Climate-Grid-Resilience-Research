@@ -25,3 +25,11 @@ The earlier source-verified subset is 40 Page4 identities, 37 screened eligible,
 Next research steps: inspect the new crosswalk; reconcile year/BA codes and hydro/solar/storage fuels; identify independently supported BA-level energy accounting; verify hourly resource constraints and only then construct a more complete dispatchable fleet and constrained power network.
 
 **Calibration certified:** NO.
+
+## November 3, 2026 — source-shape and scope robustness
+
+The implementation now validates the actual Plant workbook layout assumption with a synthetic ZIP/XLSX fixture and explicitly records `nationwide_operable_records_without_plant_join`. Input capacity validity is checked **after selecting the target BA**; otherwise an unrelated nationwide row with blank capacity could invalidate the SRP-specific audit despite not being in its population. Invalid or missing target-BA capacities still fail closed.
+
+Tests cover malformed official headers, target-BA nonnumeric capacities, unrelated missing plant joins, and unrelated nonnumeric capacities. These are source-contract checks, not evidence that the *real* new expanded census has finished successfully.
+
+Remaining critical acceptance criteria: execute the expanded census on the actual 2024 official ZIP; report the target Plant-BA count/installed nameplate; reconcile any target BA mismatches with Page4; classify renewable/hydro/storage and avoid treating those resources as unconditional hourly firm supply. Current CI success remains **unconfirmed**.
