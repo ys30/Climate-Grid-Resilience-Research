@@ -13,6 +13,7 @@ on:
       - 'tests/test_exchange_boundary_preflight.py'
       - 'src/grid_resilience/srp_exchange_synthetic_regression.py'
       - 'src/grid_resilience/exchange_analytical_reference.py'
+      - 'src/grid_resilience/srp_hourly_oracle_audit.py'
       - 'src/grid_resilience/exchange_pypsa_solver_smoke.py'
       - 'tests/test_exchange_analytical_reference.py'
       - 'src/grid_resilience/bidirectional_interchange_screen.py'
@@ -189,6 +190,9 @@ jobs:
           assert r['scenario']['max_hourly_bus_residual_mw']<1e-3
           assert r['historical_calibration_certified'] is False
           PY
+      - name: Independently verify 744-hour PyPSA screening baseline with analytic oracle
+        run: |
+          python -m grid_resilience.srp_hourly_oracle_audit --hourly outputs/srp_real_screen/hy_ps_case/baseline_hourly_diagnostics.csv --capacity outputs/srp_real_screen/fuel_assumption_capacity_screen.csv --ba SRP --year 2024 --month 1 --output outputs/srp_real_screen/analytical_baseline_audit.json
       - name: Synthetic import-heavy and export regression
         run: |
           mkdir -p outputs/srp_real_screen/ci_diagnostics
@@ -234,3 +238,4 @@ jobs:
             outputs/srp_real_screen/hy_ps_case/hy_ps_paired_sensitivity.json
             outputs/srp_real_screen/hy_ps_case/baseline_hourly_diagnostics.csv
             outputs/srp_real_screen/hy_ps_case/hy_ps_hourly_diagnostics.csv
+            outputs/srp_real_screen/analytical_baseline_audit.json
