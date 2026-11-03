@@ -110,7 +110,8 @@ def main():
     for k in ("roster","reference","output"):p.add_argument("--"+k,required=True)
     p.add_argument("--ba",default="SRP")
     a=p.parse_args()
-    roster,groups,summary=classify(pd.read_csv(a.roster),pd.read_csv(a.reference),ba=a.ba)
+    roster,groups,summary=classify(pd.read_csv(a.roster,dtype={"plant_id":"string","generator_id":"string"}),
+                                   pd.read_csv(a.reference),ba=a.ba)
     out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
     roster.to_csv(out/"plant_ba_technology_scope_rows.csv",index=False)
     groups.to_csv(out/"plant_ba_technology_reference_comparison.csv",index=False)
