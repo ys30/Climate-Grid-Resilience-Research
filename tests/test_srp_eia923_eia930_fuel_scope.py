@@ -28,7 +28,7 @@ def test_blank_is_not_zero_and_coarse_page1_keys_are_preserved():
     assert m["eia930_total_reported_generation_mwh"]==70.
     assert m["page1_minus_eia930_source_scope_difference_mwh"]==-2.
     assert not m["eia930_all_fuels_hourly_complete"]
-    assert m["eia930_complete_fuel_sum_mwh"] is None
+    assert m["eia930_complete_fuel_sum_mwh"] is None\n    assert m["eia930_reported_categories_sum_mwh"]==70.\n    assert m["eia930_fuel_groups_with_missing_hours"]==8\n    assert not m["zero_reported_categories_residual_implies_complete_fuels"]
     assert not m["historical_calibration_certified"]
     nuclear=d.loc[d.eia930_fuel.eq("Nuclear")].iloc[0]
     coal=d.loc[d.eia930_fuel.eq("Coal")].iloc[0]
