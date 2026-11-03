@@ -14,13 +14,25 @@ FUEL={"NG":"gas","SUB":"coal","BIT":"coal","NUC":"nuclear",
 EMPTY={"","NA","NONE","."}
 MULTI={"Y","YES","1","TRUE"}
 
-def classify(roster,reference):
+def classify(roster,reference,*,ba="SRP"):
     fields={"plant_id","generator_id","nameplate_capacity_mw","energy_source_1",
             "energy_source_2","multiple_fuels","prime_mover","plant_reported_ba"}
     if not fields.issubset(roster.columns):raise ValueError("Missing EIA-860 source scope fields")
     if not {"technology","nameplate_capacity_mw","generator_count"}.issubset(reference.columns):
         raise ValueError("Reference fields missing")
     d=roster.copy()
+    if not isinstance(ba,str) or not ba.strip():
+        raise ValueError("Target BA must be nonempty")
+    for key in ("plant_id","generator_id","plant_reported_ba"):
+        d[key]=d[key].astype("string").str.strip()
+        if d[key].isna().any() or d[key].eq("").any():
+            raise ValueError("Missing roster identity or BA assignment")
+    d["plant_id"]=d.plant_id.str.replace(r"^0+(?=[0-9])","",regex=True)
+    if not d.plant_reported_ba.eq(ba).all():
+        raise ValueError("Plant BA roster contains records outside the requested BA")
+    if "ba" in reference.columns:
+        if not reference.ba.astype("string").str.strip().eq(ba).all():
+            raise ValueError("Independent reference contains another BA")
     if d[["plant_id","generator_id"]].duplicated().any():raise ValueError("Duplicate roster identity")
     d["nameplate_capacity_mw"]=pd.to_numeric(d.nameplate_capacity_mw,errors="raise")
     if not np.isfinite(d.nameplate_capacity_mw.to_numpy(dtype=float)).all() or (d.nameplate_capacity_mw<0).any():
@@ -68,8 +80,9 @@ def classify(roster,reference):
 def main():
     p=argparse.ArgumentParser()
     for k in ("roster","reference","output"):p.add_argument("--"+k,required=True)
+    p.add_argument("--ba",default="SRP")
     a=p.parse_args()
-    roster,groups,summary=classify(pd.read_csv(a.roster),pd.read_csv(a.reference))
+    roster,groups,summary=classify(pd.read_csv(a.roster),pd.read_csv(a.reference),ba=a.ba)
     out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
     roster.to_csv(out/"plant_ba_technology_scope_rows.csv",index=False)
     groups.to_csv(out/"plant_ba_technology_reference_comparison.csv",index=False)
