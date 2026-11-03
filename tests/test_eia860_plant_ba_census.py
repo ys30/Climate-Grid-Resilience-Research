@@ -62,10 +62,22 @@ def test_real_zip_shape_plant_header_extraction(tmp_path):
     wb=Workbook()
     ws=wb.active
     ws.title="Plant"
-    ws.append(["EIA-860 2024 Schedule 2",None,None])
-    ws.append(["Utility ID","Plant Code","Balancing Authority Code"])
-    ws.append([1,1234,"SRP"])
-    ws.append([1,5678,"PACE"])
+    # Match archived official 2024 workbook positional schema: row 2,
+    # Plant Code at zero-based column 3; BA Code at zero-based column 13.
+    ws.append(["EIA-860 2024 Schedule 2"]+[None]*14)
+    headers=[""]*15
+    headers[3]="Plant Code"
+    headers[13]="Balancing Authority Code"
+    headers[14]="Balancing Authority Name"
+    ws.append(headers)
+    row=[""]*15
+    row[3]=1234
+    row[13]="SRP"
+    ws.append(row)
+    row=[""]*15
+    row[3]=5678
+    row[13]="PACE"
+    ws.append(row)
     buf=io.BytesIO()
     wb.save(buf)
     archive=tmp_path/"sample_eia860.zip"
