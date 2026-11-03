@@ -43,6 +43,24 @@ def scenario(hourly, review, observed, capacity, *, ba="SRP",year=2024,month=1):
     c["original_nameplate_mw"]=pd.to_numeric(c.original_nameplate_mw,errors="raise")
     if (c.original_nameplate_mw<=0).any() or not np.isfinite(c[["capacity_mw","original_nameplate_mw"]]).all().all():
         raise ValueError("Invalid derating inputs")
+    if c.empty or c.technology.duplicated().any():
+        raise ValueError("Missing or duplicate fuel-level capacities")
+    if (r.nameplate_capacity_mw<0).any():
+        raise ValueError("Negative reviewed unit nameplate")
+    reviewed_fuel=r.loc[r.eligible].copy()
+    reviewed_fuel["technology"]=reviewed_fuel.energy_source_1.astype("string").str.strip().str.upper()
+    actual_nameplate=reviewed_fuel.groupby("technology").nameplate_capacity_mw.sum()
+    model_nameplate=c.set_index("technology").original_nameplate_mw
+    if set(actual_nameplate.index)!=set(model_nameplate.index):
+        raise ValueError("Capacity fuel populations differ from eligible generator inventory")
+    if not np.allclose(actual_nameplate.loc[model_nameplate.index].to_numpy(dtype=float),
+                       model_nameplate.to_numpy(dtype=float),atol=1e-5,rtol=0):
+        raise ValueError("Fuel-level model nameplate does not reconcile to screened identities")
+    expected_scopes=np.where(join.eligible,"exact_screened_generator","reviewed_but_excluded")
+    if not (join.identity_scope.to_numpy()==expected_scopes).all():
+        raise ValueError("Inconsistent generator eligibility scope")
+    if (c.capacity_mw<0).any() or (c.capacity_mw>c.original_nameplate_mw+1e-5).any():
+        raise ValueError("Invalid model derating assumptions")
     derating=dict(zip(c.technology.astype(str),c.capacity_mw/c.original_nameplate_mw))
     selected["technology"]=selected.energy_source_1.astype(str)
     if not selected.technology.isin(derating).all():raise ValueError("Unmapped zero-output fuel")
