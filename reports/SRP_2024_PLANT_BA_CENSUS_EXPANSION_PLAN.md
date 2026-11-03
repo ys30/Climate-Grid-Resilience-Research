@@ -96,3 +96,16 @@ The expanded EIA-860 Plant BA census previously checked only the share of plant-
 The census now reports `page4_reported_ba_generator_count`, `page4_reported_ba_not_in_plant_assigned_roster_count`, and the explicit unmatched plant+generator identities. The `ba_attribution_is_bidirectionally_identical` flag is intentionally **false when the annual Plant-assigned roster contains additional units absent from monthly Page4**. Tests cover both BA-attribution disagreement and Page4 generator IDs absent from the operable fleet.
 
 **A cross-source mismatch is a research finding to investigate, not necessarily a data-quality failure.** The new fields do not alter generator eligibility, installed capacity, historic dispatch or the model's partial-fleet shortfall. Full GitHub CI remains unverified.
+
+## Important correction — historical 108-unit reference is not a certified acceptance oracle
+
+While investigating repeated CI failures, the original saved independent 2024 EIA-860 workflow artifact was reopened and its `plant_ba_schema_probe.json` reviewed. Although the workbook schema is identified as `2___Plant_Y2024.xlsx`, sheet `Plant`, with `Plant Code` in column index 3 and `Balancing Authority Code` in column index 13, its explicit `plant_ba_extraction_verified` flag is **false**. The archived 108-unit SRP classification (86 eligible / 22 excluded) is therefore a **provisional comparison reference**, not a sufficient basis to certify or fail a new source extraction.
+
+The main SRP CI formerly asserted exact historic numbers (108, 86, 14,681.5 MW, and all excluded category counts and MW), which may create a false negative when source attribution or classification rules differ. This hard-coded acceptance gate was removed. It now requires:
+- Exactly one classification for each generator identity in the newly extracted source roster.
+- Sum of per-class generator counts equals the newly extracted roster count.
+- Eligible generator count and eligible nameplate reconcile to the reported `included` class.
+- Sum of all class nameplates reconciles to generator-level nameplate.
+- Historic-reference discrepancies remain visible via the per-fuel comparison CSV and warning text, without being disguised as an independently validated source failure.
+
+No comparison result has been silently accepted as scientifically calibrated; the baseline remains a partial-fleet hypothetical scenario. **Most recent GitHub CI passing status remains unverified.**
