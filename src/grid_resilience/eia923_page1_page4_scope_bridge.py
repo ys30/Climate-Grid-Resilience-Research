@@ -52,8 +52,12 @@ def bridge(page1, page4, *, ba="SRP", period="2024-01"):
          "generation_mwh"),
         "page4",
     )
-    if a.duplicated(["plant_id", "reported_ba", "period", "prime_mover", "reported_fuel"]).any():
-        raise ValueError("Duplicate Page 1 plant/fuel/mover/month")
+    # Page 1 legitimately permits multiple underlying records per plant/fuel/prime mover/month.
+    # A 2024 SRP nuclear plant has three rows for the same visible combination.
+    # Preserve source rows and report repeated coarse keys; never deduplicate or combine with Page 4.
+    repeated_page1_keys = int(a.duplicated(
+        ["plant_id", "reported_ba", "period", "prime_mover", "reported_fuel"],
+        keep=False).sum())
     if b.duplicated(["plant_id", "generator_id", "reported_ba", "period"]).any():
         raise ValueError("Duplicate Page 4 generator/BA/month")
     a = a.loc[a.reported_ba.eq(ba) & a.period.eq(period)].copy()
@@ -82,6 +86,10 @@ def bridge(page1, page4, *, ba="SRP", period="2024-01"):
     summary = {
         "ba": ba, "period": period,
         "page1_source_rows": len(a),
+        "page1_rows_with_repeated_coarse_keys": int(a.duplicated(
+            ["plant_id", "reported_ba", "period", "prime_mover", "reported_fuel"],
+            keep=False).sum()),
+        "page1_coarse_key_is_unique": bool(repeated_page1_keys == 0),
         "page4_source_rows": len(b),
         "page1_unique_plants": len(a_plants),
         "page4_unique_plants": len(b_plants),
