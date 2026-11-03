@@ -2,9 +2,10 @@
 
 This is a source-scheduled external boundary, NOT a transmission flow simulation.
 """
-import argparse,json,calendar,math
+import argparse,json,calendar
 from pathlib import Path
 import pandas as pd
+import numpy as np
 from grid_resilience.exchange_boundary_preflight import validate_boundary
 
 def run(balance, capacity, ba, year, month):
@@ -12,11 +13,13 @@ def run(balance, capacity, ba, year, month):
     b=validate_boundary(balance,year,month)
     c=capacity.copy()
     expected=b.index
+    if not {"ba","technology","capacity_mw","marginal_cost"}.issubset(c.columns):
+        raise ValueError("Missing capacity fields")
     c=c[c.ba.eq(ba)].copy()
     if c.empty or c.technology.duplicated().any():raise ValueError("Missing or duplicate capacity")
     for k in ("capacity_mw","marginal_cost"):c[k]=pd.to_numeric(c[k],errors="raise")
     if c[["capacity_mw","marginal_cost"]].isna().any().any() or (c.capacity_mw<0).any():raise ValueError("Invalid capacity")
-    if not c[["capacity_mw","marginal_cost"]].map(math.isfinite).all().all():raise ValueError("Nonfinite capacity or costs")
+    if not np.isfinite(c[["capacity_mw","marginal_cost"]].to_numpy(dtype=float)).all():raise ValueError("Nonfinite capacity or costs")
     imports=b.observed_import_mw
     exports=b.observed_export_mw
     n=pypsa.Network();n.set_snapshots(expected.tz_localize(None));n.add("Bus",ba)
