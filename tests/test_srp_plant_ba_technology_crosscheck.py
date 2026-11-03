@@ -103,3 +103,20 @@ def test_valid_reference_still_matches_after_strict_checks():
     _,comparison,summary=classify(a,b)
     assert summary["matched_reference_counts_and_capacities"] is True
     assert comparison.nameplate_difference_mw.abs().max()<1e-8
+
+def test_source_roster_capacity_conserves_across_all_classes():
+    a,b=fixture()
+    rows,comparison,summary=classify(a,b)
+    assert sum(summary["roster_class_counts"].values())==len(rows)
+    assert abs(sum(summary["roster_class_capacity_mw"].values())-
+               rows.nameplate_capacity_mw.sum())<1e-8
+    assert summary["roster_class_details"]["included"]["generator_count"]==3
+
+def test_reference_mismatch_does_not_change_source_conservation():
+    a,b=fixture()
+    b.loc[0,"nameplate_capacity_mw"]=999.
+    rows,_,summary=classify(a,b)
+    assert summary["matched_reference_counts_and_capacities"] is False
+    assert sum(summary["roster_class_counts"].values())==len(rows)
+    assert abs(sum(summary["roster_class_capacity_mw"].values())-
+               rows.nameplate_capacity_mw.sum())<1e-8
