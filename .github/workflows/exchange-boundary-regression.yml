@@ -45,3 +45,26 @@ jobs:
           name: exchange-boundary-test-logs
           path: outputs/exchange_test/
           if-no-files-found: warn
+
+  pandas-20-compat:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install declared minimum pandas series
+        run: |
+          python -m pip install 'numpy==1.26.4' 'pandas==2.0.3' 'pytest>=8' 'setuptools>=68'
+          python -m pip install --no-deps -e .
+          python -m pip check
+      - name: Compile and run independent source boundary tests
+        run: |
+          python -m py_compile src/grid_resilience/exchange_boundary_preflight.py src/grid_resilience/srp_explicit_import_export.py
+          python - <<'PY'
+          import pandas
+          print('Pinned pandas:',pandas.__version__)
+          assert pandas.__version__.startswith('2.0.')
+          PY
+          python -m pytest -q tests/test_exchange_boundary_preflight.py
