@@ -55,14 +55,19 @@ jobs:
       - name: Preflight compile and test HY PS components before EIA downloads
         run: |
           python -m py_compile src/grid_resilience/bidirectional_interchange_screen.py src/grid_resilience/srp_hy_ps_paired_sensitivity.py src/grid_resilience/hy_ps_pypsa_components.py
-          python -m pytest -q tests/test_exchange_boundary_preflight.py tests/test_exchange_analytical_reference.py tests/test_srp_hourly_oracle_audit.py tests/test_srp_shortfall_duration_audit.py tests/test_srp_firm_capacity_frontier.py tests/test_srp_generator_monthly_identity_audit.py tests/test_srp_zero_observed_capacity_sensitivity.py tests/test_eia860_plant_ba_census.py tests/test_srp_plant_ba_technology_crosscheck.py tests/test_exact_generator_scope_audit.py tests/test_hy_ps_budget_scenario.py tests/test_hy_ps_pypsa_components.py tests/test_hy_ps_physical_invariants.py
+          mkdir -p outputs/srp_real_screen/ci_diagnostics
+          set -o pipefail
+          python -m pytest -vv --tb=short tests/test_exchange_boundary_preflight.py tests/test_exchange_analytical_reference.py tests/test_srp_hourly_oracle_audit.py tests/test_srp_shortfall_duration_audit.py tests/test_srp_firm_capacity_frontier.py tests/test_srp_generator_monthly_identity_audit.py tests/test_srp_zero_observed_capacity_sensitivity.py tests/test_eia860_plant_ba_census.py tests/test_srp_plant_ba_technology_crosscheck.py tests/test_exact_generator_scope_audit.py tests/test_hy_ps_budget_scenario.py tests/test_hy_ps_pypsa_components.py tests/test_hy_ps_physical_invariants.py 2>&1 | tee outputs/srp_real_screen/ci_diagnostics/preflight_pytest.log
       - name: Short PyPSA solver and signed spillage smoke before EIA downloads
-        run: python -u -m grid_resilience.exchange_pypsa_solver_smoke
+        run: |
+          mkdir -p outputs/srp_real_screen/ci_diagnostics
+          set -o pipefail
+          python -u -m grid_resilience.exchange_pypsa_solver_smoke 2>&1 | tee outputs/srp_real_screen/ci_diagnostics/pypsa_smoke.log
       - name: Download actual EIA-930, EIA-860 and EIA-923 source archives
         run: |
           mkdir -p outputs/srp_real_screen
           python - <<'PY'
-          import urllib.request,hashlib,json
+          import urllib.request,hashlib,json,sys
           from pathlib import Path
           root=Path('outputs/srp_real_screen')
           sources={
@@ -72,6 +77,7 @@ jobs:
              'eia923_2024':'https://www.eia.gov/electricity/data/eia923/archive/xls/f923_2024.zip'}
           manifest={}
           for key,url in sources.items():
+              print(f"Fetching {key}: {url}",flush=True)
               with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'}),timeout=120) as response:
                   data=response.read(150_000_001)
               if not data or len(data)>150_000_000:raise ValueError('Invalid source length')
@@ -318,6 +324,8 @@ jobs:
             outputs/srp_real_screen/interchange_case/modeled_generation_with_net_exchange.csv
             outputs/srp_real_screen/explicit_exchange/explicit_import_export_manifest.json
             outputs/srp_real_screen/ci_diagnostics/synthetic_exchange_test.log
+            outputs/srp_real_screen/ci_diagnostics/preflight_pytest.log
+            outputs/srp_real_screen/ci_diagnostics/pypsa_smoke.log
             outputs/srp_real_screen/bidirectional_case/bidirectional_boundary_screen.json
             outputs/srp_real_screen/exact_generator_scope_rows.csv
             outputs/srp_real_screen/exact_generator_scope_summary.csv
