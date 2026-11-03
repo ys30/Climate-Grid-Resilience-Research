@@ -89,6 +89,14 @@ def census(plant,operable,page4,*,ba="SRP"):
     candidates["appears_in_page4_ba_month"]=candidates.set_index(["plant_id","generator_id"]).index.isin(
         f.set_index(["plant_id","generator_id"]).index)
     unseen=candidates.loc[~candidates.appears_in_page4_ba_month]
+    # A second, reverse comparison is required: source-reported Page4 BA
+    # can disagree with annual EIA-860 Plant BA assignment.
+    candidate_keys=candidates[["plant_id","generator_id"]]
+    page4_reverse=f[["plant_id","generator_id"]].merge(
+        candidate_keys,on=["plant_id","generator_id"],how="left",
+        indicator=True,validate="one_to_one"
+    )
+    page4_outside=page4_reverse.loc[page4_reverse["_merge"].eq("left_only")]
     report={
       "target_ba":ba,"source_year":2024,"month":"2024-01",
       "nationwide_operable_records_without_plant_join":nationwide_missing_plant,
@@ -97,6 +105,11 @@ def census(plant,operable,page4,*,ba="SRP"):
       "of_those_appearing_in_eia923_page4_ba_month":int(candidates.appears_in_page4_ba_month.sum()),
       "plant_assigned_operable_not_in_page4_month":len(unseen),
       "plant_assigned_nameplate_not_in_page4_month_mw":float(unseen.nameplate_capacity_mw.sum()),
+      "page4_reported_ba_generator_count":len(f),
+      "page4_reported_ba_not_in_plant_assigned_roster_count":len(page4_outside),
+      "ba_attribution_is_bidirectionally_identical":bool(len(page4_outside)==0 and len(unseen)==0),
+      "page4_reported_ba_missing_plant_roster_identities":page4_outside[
+          ["plant_id","generator_id"]].to_dict("records"),
       "note":"Plant BA association can differ from generator dispatch ownership and external supply. Not a full physical network capacity census.",
       "historical_calibration_certified":False
     }
