@@ -59,6 +59,7 @@ def main():
     print("capacity_limited",shortage_case)
     for field in ("demand_mw","interchange_mw"):
         bad=mixed.copy()
+        bad[field]=bad[field].astype(float)
         bad.loc[0,field]=math.inf
         try:
             run(bad,cap,"SRP",2024,1)
@@ -67,6 +68,7 @@ def main():
         else:
             raise AssertionError(f"Nonfinite {field} was accepted")
     bad_cap=cap.copy()
+    bad_cap["capacity_mw"]=bad_cap["capacity_mw"].astype(float)
     bad_cap.loc[0,"capacity_mw"]=math.inf
     try:
         run(mixed,bad_cap,"SRP",2024,1)
