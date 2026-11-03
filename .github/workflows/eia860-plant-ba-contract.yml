@@ -1,0 +1,39 @@
+name: EIA860 Plant BA source contract
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/eia860-plant-ba-contract.yml'
+      - 'src/grid_resilience/eia860_plant_ba_census.py'
+      - 'src/grid_resilience/srp_plant_ba_technology_crosscheck.py'
+      - 'tests/test_eia860_plant_ba_census.py'
+      - 'tests/test_srp_plant_ba_technology_crosscheck.py'
+      - 'references/srp_2024_eia860_plant_ba_eligible_aggregate.csv'
+jobs:
+  source-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only needed dependencies
+        run: |
+          python -m pip install -e '.[dev]' numpy openpyxl
+          python -m pip check
+      - name: Compile source and regression tests
+        run: |
+          python -m py_compile src/grid_resilience/eia860_plant_ba_census.py src/grid_resilience/srp_plant_ba_technology_crosscheck.py tests/test_eia860_plant_ba_census.py tests/test_srp_plant_ba_technology_crosscheck.py
+      - name: Exercise Plant BA ZIP parsing and independent technology mapping
+        run: |
+          mkdir -p outputs/plant_ba_ci
+          set -o pipefail
+          python -m pytest -vv --tb=long tests/test_eia860_plant_ba_census.py tests/test_srp_plant_ba_technology_crosscheck.py 2>&1 | tee outputs/plant_ba_ci/pytest.log
+      - name: Upload diagnostic logs even if tests fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eia860-plant-ba-source-contract-log
+          path: outputs/plant_ba_ci/
+          if-no-files-found: warn
