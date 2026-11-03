@@ -73,12 +73,17 @@ def audit(page1, balance, *, ba="SRP", month="2024-01", expected_hours=None):
     monthly_total=float(b["Net Generation (MW)"].sum())
     page1_total=float(a.net_generation_mwh.sum())
     all_hours_complete=bool(detail.monthly_sum_complete.all())
-    available_fuel_sum=float(detail.signed_reported_mwh.sum())\n    complete_fuel_sum=available_fuel_sum if all_hours_complete else None
+    available_fuel_sum=float(detail.signed_reported_mwh.sum())
+    complete_fuel_sum=available_fuel_sum if all_hours_complete else None
     summary={"ba":ba,"period":month,"hours":hours,
              "eia930_total_reported_generation_mwh":monthly_total,
              "eia923_page1_reported_generation_mwh":page1_total,
              "page1_minus_eia930_source_scope_difference_mwh":page1_total-monthly_total,
-             "eia930_all_fuels_hourly_complete":all_hours_complete,\n             "eia930_fuel_groups_with_missing_hours":int((detail.blank_hours>0).sum()),\n             "eia930_reported_categories_sum_mwh":available_fuel_sum,\n             "eia930_total_minus_reported_categories_sum_mwh":monthly_total-available_fuel_sum,\n             "zero_reported_categories_residual_implies_complete_fuels":False,
+             "eia930_all_fuels_hourly_complete":all_hours_complete,
+             "eia930_fuel_groups_with_missing_hours":int((detail.blank_hours>0).sum()),
+             "eia930_reported_categories_sum_mwh":available_fuel_sum,
+             "eia930_total_minus_reported_categories_sum_mwh":monthly_total-available_fuel_sum,
+             "zero_reported_categories_residual_implies_complete_fuels":False,
              "eia930_complete_fuel_sum_mwh":complete_fuel_sum,
              "eia930_total_minus_complete_fuel_sum_mwh":(
                  monthly_total-complete_fuel_sum if all_hours_complete else None),
