@@ -89,6 +89,7 @@ def test_invalid_reference_capacity_fails(bad_value):
 
 def test_noninteger_reference_counts_fail():
     a,b=fixture()
+    b["generator_count"]=b["generator_count"].astype(float)
     b.loc[0,"generator_count"]=1.5
     with pytest.raises(ValueError,match="Noninteger reference"):
         classify(a,b)
