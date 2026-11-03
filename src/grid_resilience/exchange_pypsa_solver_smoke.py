@@ -5,10 +5,11 @@ from source-file loading and month-long optimization.
 """
 import json
 import pypsa
+import pandas as pd
 
 def main():
     n=pypsa.Network()
-    n.set_snapshots(["2024-01-01 00:00","2024-01-01 01:00"])
+    n.set_snapshots(pd.date_range("2024-01-01",periods=2,freq="h"))
     n.add("Bus","test")
     n.add("Load","demand",bus="test",p_set=[50.0,70.0])
     n.add("Generator","fixed_import",bus="test",p_nom=70.0,
