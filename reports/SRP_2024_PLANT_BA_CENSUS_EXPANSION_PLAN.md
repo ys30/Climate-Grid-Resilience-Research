@@ -88,3 +88,11 @@ The earlier Plant BA gate checked 86 eligible and 22 excluded SRP generator rows
 The `srp_plant_ba_technology_crosscheck.py` summary now emits `roster_class_capacity_mw` and `roster_class_details`. The full SRP CI checks the independent archived reference **simultaneously** at the generator-count and nameplate level: eligible 86 / 14,681.5 MW, multifuel/secondary 11 / 895.0 MW, pumped-storage 2 / 154.1 MW, and unmapped MWH 9 / 1,133.0 MW. Combined reference total is **108 generator identities and 16,863.6 MW**. These are *annual plant-assigned nameplates*, **not** a calculation of 24×7 reliable available output or EIA-930 generation.
 
 The newly edited CI has not yet been observed passing. An independent archived artifact substantiates the reference totals; the newly built census and classification must actually match them before any new physically constrained supply model is accepted.
+
+## November 3 — two-way BA identity crosswalk
+
+The expanded EIA-860 Plant BA census previously checked only the share of plant-assigned SRP generators also present in monthly EIA-923 Page4 SRP records. That is an incomplete overlap measure: some Page4 generators may report SRP even when their EIA-860 2024 Plant BA assignment is elsewhere, or a generator may not be present in the EIA-860 Operable sheet at all.
+
+The census now reports `page4_reported_ba_generator_count`, `page4_reported_ba_not_in_plant_assigned_roster_count`, and the explicit unmatched plant+generator identities. The `ba_attribution_is_bidirectionally_identical` flag is intentionally **false when the annual Plant-assigned roster contains additional units absent from monthly Page4**. Tests cover both BA-attribution disagreement and Page4 generator IDs absent from the operable fleet.
+
+**A cross-source mismatch is a research finding to investigate, not necessarily a data-quality failure.** The new fields do not alter generator eligibility, installed capacity, historic dispatch or the model's partial-fleet shortfall. Full GitHub CI remains unverified.
