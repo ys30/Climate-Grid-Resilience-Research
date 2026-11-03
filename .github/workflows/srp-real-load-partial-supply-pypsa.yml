@@ -12,6 +12,7 @@ on:
       - 'src/grid_resilience/exchange_boundary_preflight.py'
       - 'tests/test_exchange_boundary_preflight.py'
       - 'src/grid_resilience/srp_exchange_synthetic_regression.py'
+      - 'src/grid_resilience/exchange_analytical_reference.py'
       - 'src/grid_resilience/bidirectional_interchange_screen.py'
       - 'src/grid_resilience/exact_generator_scope_audit.py'
       - 'src/grid_resilience/excluded_capacity_upper_bound.py'
