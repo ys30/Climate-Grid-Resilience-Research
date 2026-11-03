@@ -26,10 +26,29 @@ def test_duplicate_plants_fail():
     with pytest.raises(ValueError,match="Duplicate EIA-860 plant"):
         census(pd.concat([a,a.iloc[:1]]),b,c)
 
-def test_missing_plant_join_fails():
+def test_unrelated_missing_plant_is_reported_but_does_not_block_target_ba():
     a,b,c=samples()
-    with pytest.raises(ValueError,match="no corresponding plant"):
-        census(a.iloc[:2],b,c)
+    rows,manifest=census(a.iloc[:2],b,c)
+    assert len(rows)==2
+    assert manifest["nationwide_operable_records_without_plant_join"]==1
+
+def test_invalid_unrelated_capacity_is_not_used_for_target_ba():
+    a,b,c=samples()
+    b.loc[2,"nameplate_capacity_mw"]="not-reported"
+    rows,manifest=census(a,b,c)
+    assert manifest["eia860_plant_assigned_nameplate_mw"]==130.
+
+def test_invalid_target_ba_capacity_fails_closed():
+    a,b,c=samples()
+    b.loc[1,"nameplate_capacity_mw"]="not-reported"
+    with pytest.raises(ValueError,match="target BA generator nameplate"):
+        census(a,b,c)
+
+def test_no_target_ba_plant_is_rejected():
+    a,b,c=samples()
+    a["plant_reported_ba"]="OTHER"
+    with pytest.raises(ValueError,match="No EIA-860 operable"):
+        census(a,b,c)
 
 def test_duplicate_page4_id_fails():
     a,b,c=samples()
