@@ -32,6 +32,6 @@ This does **not** mean the excluded generators are eligible, were running, or co
 
 ### Reproducibility
 
-`src/grid_resilience/srp_firm_capacity_frontier.py` now computes the frontier directly from complete verified hourly baseline diagnostics and fails on malformed timestamps, nonfinite values or nonconservation. `tests/test_srp_firm_capacity_frontier.py` tests its numerical contracts. Both dedicated and full SRP GitHub workflows now include it; **new CI has not yet been confirmed successful**. Source-artifact scenario numbers above were independently calculated in the working session.
+`src/grid_resilience/srp_firm_capacity_frontier.py` now computes the frontier directly from complete verified hourly baseline diagnostics and fails on malformed timestamps, nonfinite values or nonconservation. `tests/test_srp_firm_capacity_frontier.py` tests its numerical contracts. Both dedicated and full SRP GitHub workflows now include it. The full SRP January 2024 [workflow run 41718037295](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41718037295) passed at commit `055b8a18b47ae98e39352453bbeb806999fe51f7`, including the firm-capacity frontier step, and uploaded [artifact 13269759289](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41718037295/artifacts/13269759289). The table above was sourced from the earlier verified artifact and should not be described as independently rechecked against every row of the newer artifact.
 
 **Historical calibration certified: NO. Historical outages inferred: NO.**
