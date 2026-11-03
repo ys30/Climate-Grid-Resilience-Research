@@ -55,10 +55,24 @@ def classify(roster,reference,*,ba="SRP"):
       observed_candidate_generator_count=("generator_id","size"),
       observed_candidate_nameplate_mw=("nameplate_capacity_mw","sum")).reset_index()
     ref=reference.copy()
-    ref["nameplate_capacity_mw"]=pd.to_numeric(ref.nameplate_capacity_mw,errors="raise")
-    ref["generator_count"]=pd.to_numeric(ref.generator_count,errors="raise")
-    if ref.technology.duplicated().any():raise ValueError("Duplicate reference fuel categories")
+    if ref.empty:
+        raise ValueError("Empty independent reference")
+    ref["technology"]=ref.technology.astype("string").str.strip()
+    if ref.technology.isna().any() or ref.technology.eq("").any():
+        raise ValueError("Missing reference technology category")
+    if ref.technology.duplicated().any():
+        raise ValueError("Duplicate reference fuel categories")
+    for key in ("nameplate_capacity_mw","generator_count"):
+        ref[key]=pd.to_numeric(ref[key],errors="raise")
+    if not np.isfinite(ref[["nameplate_capacity_mw","generator_count"]].to_numpy(dtype=float)).all():
+        raise ValueError("Nonfinite independent reference")
+    if (ref[["nameplate_capacity_mw","generator_count"]]<0).any().any():
+        raise ValueError("Negative independent reference totals")
+    if not np.allclose(ref.generator_count,np.round(ref.generator_count)):
+        raise ValueError("Noninteger reference generator count")
     merged=groups.merge(ref,left_on="technology_group",right_on="technology",how="outer")
+    # Fill only fields absent due to a legitimate outer join. Malformed
+    # source reference values are rejected above rather than imputed to zero.
     for k in ("observed_candidate_generator_count","observed_candidate_nameplate_mw","generator_count","nameplate_capacity_mw"):
         merged[k]=merged[k].fillna(0)
     merged["generator_count_difference"]=merged.observed_candidate_generator_count-merged.generator_count
