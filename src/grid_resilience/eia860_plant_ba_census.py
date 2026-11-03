@@ -122,7 +122,9 @@ def main():
     p.add_argument("--ba",default="SRP")
     a=p.parse_args()
     plants=read_plant_ba(a.archive)
-    census_rows,report=census(plants,pd.read_csv(a.operable),pd.read_csv(a.page4),ba=a.ba)
+    identity_dtype={"plant_id":"string","generator_id":"string"}
+    census_rows,report=census(plants,pd.read_csv(a.operable,dtype=identity_dtype),
+                              pd.read_csv(a.page4,dtype=identity_dtype),ba=a.ba)
     o=Path(a.output);o.mkdir(parents=True,exist_ok=True)
     census_rows.to_csv(o/"plant_ba_operable_generator_census.csv",index=False)
     (o/"plant_ba_generator_census_manifest.json").write_text(json.dumps(report,indent=2)+"\n")
