@@ -68,3 +68,11 @@ The archived artifact `github-actions-artifact-13097269172.zip`, file `azps_srp_
 The initial new crosscheck grouped all `MWH` energy-source records under `storage_excluded` despite the archived classification calling them `unmapped_primary_energy_source`. This classification was fixed in `srp_plant_ba_technology_crosscheck.py`, with corresponding regression expectations updated. **The eligible single-fuel roster (86 identities, 14,681.5 MW) is unaffected**, but the reason codes now stay faithful to the previously verified source audit. This classification correction does not imply a conclusion about the actual operational technology or dispatchability of those nine MWH records; further source review is necessary.
 
 The public GitHub Actions API could not be read in this session, so new workflow execution remains **unconfirmed**, not passing by assertion.
+
+## Source-verified acceptance gate for expanded SRP Plant BA roster
+
+The prior 2024 EIA-860 artifact was inspected again at the original CSV level. Its source manifest reports 16,132 plants with BA assignments, 26,855 US operable generator rows, and one nationwide unmatched generator-plant identity. The six SRP eligible single-fuel categories sum to **86 units and 14,681.5 MW**; the detailed SRP attrition table shows **11 secondary/multifuel + 2 pumped-storage + 9 unmapped = 22 excluded**, totaling **2,182.1 MW**. These are counts from an independently archived source-data pipeline and are not observed dispatch.
+
+The complete SRP GitHub workflow now checks the new Plant BA census against the independently archived **108-unit source roster**, including generator counts and MW for the six eligible fuel categories and the three exclusion category counts. A mismatch **fails CI with a specific reason**, rather than silently returning a successful run. Diagnostic CSVs are included in the workflow's always-uploaded artifacts. The large workflow's latest execution remains unverified; this defines an acceptance criterion, not a claim it has passed.
+
+The isolated fast contract workflow `.github/workflows/eia860-plant-ba-contract.yml` tests ZIP parsing and roster classification without downloading large government archives or running PyPSA.
