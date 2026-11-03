@@ -12,6 +12,8 @@ on:
       - 'tests/test_eia923_shared_plant_difference.py'
       - 'src/grid_resilience/srp_eia923_eia930_fuel_scope.py'
       - 'tests/test_srp_eia923_eia930_fuel_scope.py'
+      - 'src/grid_resilience/srp_page1_eia860_fuel_crosswalk.py'
+      - 'tests/test_srp_page1_eia860_fuel_crosswalk.py'
 jobs:
   audit:
     runs-on: ubuntu-24.04
@@ -24,7 +26,7 @@ jobs:
       - name: Install and test source-scope code
         run: |
           python -m pip install -e '.[dev]' openpyxl
-          python -m pytest -q tests/test_eia923_page1_all_fuels.py tests/test_eia923_page1_page4_scope_bridge.py tests/test_eia923_shared_plant_difference.py tests/test_srp_eia923_eia930_fuel_scope.py
+          python -m pytest -q tests/test_eia923_page1_all_fuels.py tests/test_eia923_page1_page4_scope_bridge.py tests/test_eia923_shared_plant_difference.py tests/test_srp_eia923_eia930_fuel_scope.py tests/test_srp_page1_eia860_fuel_crosswalk.py
       - name: Fetch official EIA-923 2024 source archive and record provenance
         run: |
           mkdir -p outputs/srp_page1_page4
@@ -141,6 +143,50 @@ jobs:
           assert not m["category_crosswalk_certified"]
           print("Source-scope audit without calibration:",m)
           PY
+      - name: Retrieve independent official EIA860 2024 annual plant and generator inventory
+        run: |
+          python - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+          root=Path("outputs/srp_page1_page4")
+          url="https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip"
+          req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+          with urllib.request.urlopen(req,timeout=120) as response:
+              data=response.read(150_000_001)
+          if not data or len(data)>150_000_000:
+              raise ValueError("Invalid EIA860 archive length")
+          (root/"eia860_2024.zip").write_bytes(data)
+          (root/"eia860_source_provenance.json").write_text(
+              json.dumps({"url":url,"sha256":hashlib.sha256(data).hexdigest(),
+                          "bytes":len(data),"historical_calibration_certified":False},
+                         indent=2)+"\\n")
+          PY
+          python -m grid_resilience.eia860_generator_extract \
+            --archive outputs/srp_page1_page4/eia860_2024.zip \
+            --output outputs/srp_page1_page4
+          python -m grid_resilience.eia860_plant_ba_census \
+            --archive outputs/srp_page1_page4/eia860_2024.zip \
+            --operable outputs/srp_page1_page4/eia860_2024_operable_generators.csv \
+            --page4 outputs/srp_page1_page4/eia923_generator_month_net_mwh.csv \
+            --ba SRP --output outputs/srp_page1_page4
+      - name: Audit real Page1 plant prime mover fuel candidates against EIA860
+        run: |
+          python -m grid_resilience.srp_page1_eia860_fuel_crosswalk \
+            --page1 outputs/srp_page1_page4/page1_all_fuels_reported_ba.csv \
+            --roster outputs/srp_page1_page4/plant_ba_operable_generator_census.csv \
+            --ba SRP --period 2024-01 --output outputs/srp_page1_page4
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("outputs/srp_page1_page4")
+          a=json.loads((root/"page1_eia860_fuel_candidate_manifest.json").read_text())
+          b=json.loads((root/"plant_ba_generator_census_manifest.json").read_text())
+          assert a["page1_source_rows"]>0
+          assert a["eia860_plant_ba_generator_count"]==b["eia860_plant_assigned_operable_generators"]
+          assert not a["historical_calibration_certified"]
+          assert not a["unique_generator_assignment_certified"]
+          print("Real EIA-923/EIA-860 fuel candidate audit:",a)
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -162,4 +208,9 @@ jobs:
             outputs/srp_page1_page4/eia930_monthly_fuel_reporting_coverage.csv
             outputs/srp_page1_page4/eia923_page1_prime_mover_fuel_comparison.csv
             outputs/srp_page1_page4/eia923_eia930_fuel_scope_manifest.json
+            outputs/srp_page1_page4/eia860_source_provenance.json
+            outputs/srp_page1_page4/plant_ba_generator_census_manifest.json
+            outputs/srp_page1_page4/page1_eia860_fuel_candidate_rows.csv
+            outputs/srp_page1_page4/page1_eia860_fuel_candidate_classes.csv
+            outputs/srp_page1_page4/page1_eia860_fuel_candidate_manifest.json
           if-no-files-found: warn
