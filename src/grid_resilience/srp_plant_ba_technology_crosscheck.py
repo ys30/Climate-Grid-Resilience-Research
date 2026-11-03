@@ -77,7 +77,21 @@ def classify(roster,reference,*,ba="SRP"):
         merged[k]=merged[k].fillna(0)
     merged["generator_count_difference"]=merged.observed_candidate_generator_count-merged.generator_count
     merged["nameplate_difference_mw"]=merged.observed_candidate_nameplate_mw-merged.nameplate_capacity_mw
+    class_agg=d.groupby("candidate_class").agg(
+        generator_count=("generator_id","size"),
+        nameplate_mw=("nameplate_capacity_mw","sum"))
+    class_details={
+        str(key):{
+            "generator_count":int(values.generator_count),
+            "nameplate_mw":float(values.nameplate_mw)
+        }
+        for key,values in class_agg.iterrows()
+    }
     summary={
+       "roster_class_capacity_mw":{
+          str(key):float(values.nameplate_mw) for key,values in class_agg.iterrows()
+       },
+       "roster_class_details":class_details,
        "input_roster_generator_count":len(d),
        "eligible_selected_generator_count":len(selected),
        "eligible_selected_nameplate_mw":float(selected.nameplate_capacity_mw.sum()),
