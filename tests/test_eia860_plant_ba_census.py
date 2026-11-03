@@ -1,7 +1,7 @@
 """Plant-based BA assignment must reveal units absent from Page4 monthly scope."""
 import pandas as pd
 import pytest
-from grid_resilience.eia860_plant_ba_census import census
+from grid_resilience.eia860_plant_ba_census import census,read_plant_ba
 
 def samples():
     plants=pd.DataFrame({"plant_id":["001","2","3"],"plant_reported_ba":["SRP","SRP","OTHER"]})
@@ -54,3 +54,36 @@ def test_duplicate_page4_id_fails():
     a,b,c=samples()
     with pytest.raises(ValueError,match="Duplicate EIA-923"):
         census(a,b,pd.concat([c,c]))
+
+def test_real_zip_shape_plant_header_extraction(tmp_path):
+    import io
+    import zipfile
+    from openpyxl import Workbook
+    wb=Workbook()
+    ws=wb.active
+    ws.title="Plant"
+    ws.append(["EIA-860 2024 Schedule 2",None,None])
+    ws.append(["Utility ID","Plant Code","Balancing Authority Code"])
+    ws.append([1,1234,"SRP"])
+    ws.append([1,5678,"PACE"])
+    buf=io.BytesIO()
+    wb.save(buf)
+    archive=tmp_path/"sample_eia860.zip"
+    with zipfile.ZipFile(archive,"w") as z:
+        z.writestr("2___Plant_Y2024.xlsx",buf.getvalue())
+    out=read_plant_ba(archive)
+    assert out.plant_id.tolist()==["1234","5678"]
+    assert out.plant_reported_ba.tolist()==["SRP","PACE"]
+
+def test_malformed_plant_workbook_rejected(tmp_path):
+    import io
+    import zipfile
+    from openpyxl import Workbook
+    wb=Workbook();wb.active.title="Plant"
+    wb.active.append(["Plant Code","Not a BA header"])
+    buf=io.BytesIO();wb.save(buf)
+    archive=tmp_path/"invalid_eia860.zip"
+    with zipfile.ZipFile(archive,"w") as z:
+        z.writestr("2___Plant_Y2024.xlsx",buf.getvalue())
+    with pytest.raises(ValueError,match="header not found"):
+        read_plant_ba(archive)
