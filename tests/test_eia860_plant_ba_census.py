@@ -19,6 +19,9 @@ def test_missing_monthly_page4_units_visible_without_zero_imputation():
     assert m["of_those_appearing_in_eia923_page4_ba_month"]==1
     assert m["plant_assigned_operable_not_in_page4_month"]==1
     assert m["plant_assigned_nameplate_not_in_page4_month_mw"]==30
+    assert m["page4_reported_ba_generator_count"]==1
+    assert m["page4_reported_ba_not_in_plant_assigned_roster_count"]==0
+    assert m["ba_attribution_is_bidirectionally_identical"] is False
     assert m["historical_calibration_certified"] is False
 
 def test_duplicate_plants_fail():
@@ -99,3 +102,22 @@ def test_malformed_plant_workbook_rejected(tmp_path):
         z.writestr("2___Plant_Y2024.xlsx",buf.getvalue())
     with pytest.raises(ValueError,match="header not found"):
         read_plant_ba(archive)
+
+def test_page4_ba_attribution_disagrees_with_plant_ba():
+    a,b,c=samples()
+    # EIA-923 monthly reported SRP, annual EIA-860 Plant assignment OTHER
+    c=pd.concat([c,pd.DataFrame({"plant_id":["3"],"generator_id":["C"],
+        "reported_ba":["SRP"],"period":["2024-01"]})],ignore_index=True)
+    rows,report=census(a,b,c)
+    assert len(rows)==2
+    assert report["page4_reported_ba_generator_count"]==2
+    assert report["page4_reported_ba_not_in_plant_assigned_roster_count"]==1
+    assert report["page4_reported_ba_missing_plant_roster_identities"]==[
+        {"plant_id":"3","generator_id":"C"}]
+
+def test_page4_generator_absent_from_operable_inventory_is_flagged():
+    a,b,c=samples()
+    c=pd.concat([c,pd.DataFrame({"plant_id":["999"],"generator_id":["X"],
+        "reported_ba":["SRP"],"period":["2024-01"]})],ignore_index=True)
+    _,report=census(a,b,c)
+    assert report["page4_reported_ba_not_in_plant_assigned_roster_count"]==1
