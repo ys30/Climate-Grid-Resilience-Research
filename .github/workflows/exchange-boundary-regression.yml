@@ -6,6 +6,7 @@ on:
       - '.github/workflows/exchange-boundary-regression.yml'
       - 'src/grid_resilience/srp_explicit_import_export.py'
       - 'src/grid_resilience/srp_exchange_synthetic_regression.py'
+      - 'src/grid_resilience/exchange_analytical_reference.py'
       - 'src/grid_resilience/exchange_boundary_preflight.py'
       - 'tests/test_exchange_boundary_preflight.py'
 jobs:
