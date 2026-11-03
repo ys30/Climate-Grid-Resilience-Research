@@ -17,11 +17,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -e '.[model,dev]'
+      - name: Install lightweight preflight dependencies
+        run: python -m pip install -e '.[dev]' numpy
       - name: Preflight source compile
         run: python -m py_compile src/grid_resilience/srp_explicit_import_export.py src/grid_resilience/srp_exchange_synthetic_regression.py src/grid_resilience/exchange_boundary_preflight.py
       - name: Validate real-month boundary invariants with fast unit tests
         run: python -m pytest -q tests/test_exchange_boundary_preflight.py
+      - name: Install solver dependencies after preflight tests
+        run: |
+          python -m pip install 'pypsa>=0.34' 'highspy>=1.7'
+          python -m pip check
+          python - <<'PY'
+          import pypsa, highspy, pandas, numpy
+          print('pypsa version:',pypsa.__version__)
+          print('pandas version:',pandas.__version__)
+          print('numpy version:',numpy.__version__)
+          print('HiGHS import:',highspy.__file__)
+          PY
       - name: Run synthetic imports, exports and mixed hourly exchange
         run: |
           mkdir -p outputs/exchange_test
