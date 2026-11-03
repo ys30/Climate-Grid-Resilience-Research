@@ -7,6 +7,7 @@ on:
       - 'src/grid_resilience/srp_explicit_import_export.py'
       - 'src/grid_resilience/srp_exchange_synthetic_regression.py'
       - 'src/grid_resilience/exchange_analytical_reference.py'
+      - 'src/grid_resilience/exchange_pypsa_solver_smoke.py'
       - 'tests/test_exchange_analytical_reference.py'
       - 'src/grid_resilience/exchange_boundary_preflight.py'
       - 'tests/test_exchange_boundary_preflight.py'
@@ -36,6 +37,11 @@ jobs:
           print('numpy version:',numpy.__version__)
           print('HiGHS import:',highspy.__file__)
           PY
+      - name: Two-hour PyPSA HiGHS smoke (fixed import and signed spill)
+        run: |
+          mkdir -p outputs/exchange_test
+          set -o pipefail
+          python -u -m grid_resilience.exchange_pypsa_solver_smoke 2>&1 | tee outputs/exchange_test/solver_smoke.log
       - name: Run synthetic imports, exports and mixed hourly exchange
         run: |
           mkdir -p outputs/exchange_test
