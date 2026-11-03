@@ -80,3 +80,11 @@ The isolated fast contract workflow `.github/workflows/eia860-plant-ba-contract.
 ## November 3 — strict BA provenance control
 
 The new `srp_plant_ba_technology_crosscheck.py` originally aggregated any input roster without independently enforcing `plant_reported_ba == SRP`. That could contaminate SRP totals if an upstream CSV accidentally mixed records from multiple balancing authorities. Commit `536c579` requires explicit target-BA identity checks on every input generator and on the archived reference CSV, and normalizes leading zeros in plant IDs before detecting duplicates. Commit `db5efaa` adds tests for cross-BA contamination, wrong-reference BA, normalized duplicate IDs and blank BA identity. A small pandas 2.2.3 smoke check of those Boolean/normalization contracts passed locally; complete GitHub CI and 2024 source ZIP execution remain unverified. No supply capacities or original model outputs were changed by this guard.
+
+## November 3 — audit excluded capacity, not just row counts
+
+The earlier Plant BA gate checked 86 eligible and 22 excluded SRP generator rows, but did not assert excluded **nameplate MW by exclusion class**. This could overlook a wrong scope allocation that preserved generator counts.
+
+The `srp_plant_ba_technology_crosscheck.py` summary now emits `roster_class_capacity_mw` and `roster_class_details`. The full SRP CI checks the independent archived reference **simultaneously** at the generator-count and nameplate level: eligible 86 / 14,681.5 MW, multifuel/secondary 11 / 895.0 MW, pumped-storage 2 / 154.1 MW, and unmapped MWH 9 / 1,133.0 MW. Combined reference total is **108 generator identities and 16,863.6 MW**. These are *annual plant-assigned nameplates*, **not** a calculation of 24×7 reliable available output or EIA-930 generation.
+
+The newly edited CI has not yet been observed passing. An independent archived artifact substantiates the reference totals; the newly built census and classification must actually match them before any new physically constrained supply model is accepted.
