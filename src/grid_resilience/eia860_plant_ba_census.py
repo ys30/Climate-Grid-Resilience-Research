@@ -10,6 +10,7 @@ import zipfile
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 
 
 def read_plant_ba(archive):
@@ -68,9 +69,6 @@ def census(plant,operable,page4,*,ba="SRP"):
     if g[["plant_id","generator_id"]].duplicated().any():
         raise ValueError("Duplicate EIA-860 operable generator IDs")
     if "nameplate_capacity_mw" not in g:raise ValueError("Missing generator capacity")
-    g["nameplate_capacity_mw"]=pd.to_numeric(g.nameplate_capacity_mw,errors="raise")
-    if g.nameplate_capacity_mw.isna().any() or not (g.nameplate_capacity_mw>=0).all():
-        raise ValueError("Invalid operable nameplate")
     f=normalize(page4,["plant_id","generator_id"])
     if "reported_ba" not in f or "period" not in f:
         raise ValueError("Missing EIA-923 source scope fields")
@@ -78,14 +76,22 @@ def census(plant,operable,page4,*,ba="SRP"):
     if f[["plant_id","generator_id"]].duplicated().any():
         raise ValueError("Duplicate EIA-923 BA/month generator identities")
     all_g=g.merge(p[["plant_id","plant_reported_ba"]],on="plant_id",how="left",validate="many_to_one")
-    if all_g.plant_reported_ba.isna().any():
-        raise ValueError("EIA-860 operable generator has no corresponding plant")
+    nationwide_missing_plant=int(all_g.plant_reported_ba.isna().sum())
+    # Do not let a missing/invalid *unrelated national* capacity block a
+    # source-scoped SRP census. Retain a quality metric for missing plant joins.
     candidates=all_g[all_g.plant_reported_ba.eq(ba)].copy()
+    if candidates.empty:
+        raise ValueError("No EIA-860 operable generators assigned to target BA")
+    candidates["nameplate_capacity_mw"]=pd.to_numeric(candidates.nameplate_capacity_mw,errors="coerce")
+    bad=candidates.nameplate_capacity_mw.isna() | ~candidates.nameplate_capacity_mw.ge(0)
+    if bad.any() or not np.isfinite(candidates.nameplate_capacity_mw.to_numpy(dtype=float)).all():
+        raise ValueError("Missing, negative or nonfinite target BA generator nameplate")
     candidates["appears_in_page4_ba_month"]=candidates.set_index(["plant_id","generator_id"]).index.isin(
         f.set_index(["plant_id","generator_id"]).index)
     unseen=candidates.loc[~candidates.appears_in_page4_ba_month]
     report={
       "target_ba":ba,"source_year":2024,"month":"2024-01",
+      "nationwide_operable_records_without_plant_join":nationwide_missing_plant,
       "eia860_plant_assigned_operable_generators":len(candidates),
       "eia860_plant_assigned_nameplate_mw":float(candidates.nameplate_capacity_mw.sum()),
       "of_those_appearing_in_eia923_page4_ba_month":int(candidates.appears_in_page4_ba_month.sum()),
