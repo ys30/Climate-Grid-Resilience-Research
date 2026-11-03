@@ -25,7 +25,8 @@ def test_matches_independent_reference_without_storage_or_multi_fuel():
     assert summary["matched_reference_counts_and_capacities"] is True
     assert summary["eligible_selected_generator_count"]==3
     assert summary["eligible_selected_nameplate_mw"]==170
-    assert summary["roster_class_counts"]["storage_excluded"]==2
+    assert summary["roster_class_counts"]["storage_excluded"]==1
+    assert summary["roster_class_counts"]["unmapped_primary_energy_source"]==1
     assert summary["roster_class_counts"]["multifuel_or_secondary_fuel"]==1
 
 def test_reference_mismatch_is_observable_not_hidden():
