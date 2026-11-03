@@ -28,6 +28,13 @@ def test_matches_independent_reference_without_storage_or_multi_fuel():
     assert summary["roster_class_counts"]["storage_excluded"]==1
     assert summary["roster_class_counts"]["unmapped_primary_energy_source"]==1
     assert summary["roster_class_counts"]["multifuel_or_secondary_fuel"]==1
+    assert summary["roster_class_capacity_mw"]["included"]==170.
+    assert summary["roster_class_capacity_mw"]["storage_excluded"]==40.
+    assert summary["roster_class_capacity_mw"]["unmapped_primary_energy_source"]==10.
+    assert summary["roster_class_capacity_mw"]["multifuel_or_secondary_fuel"]==30.
+    assert sum(x["generator_count"] for x in summary["roster_class_details"].values())==6
+    assert sum(x["nameplate_mw"] for x in summary["roster_class_details"].values())==250.
+
 
 def test_reference_mismatch_is_observable_not_hidden():
     a,b=fixture()
