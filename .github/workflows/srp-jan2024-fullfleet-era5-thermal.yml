@@ -1,0 +1,94 @@
+name: SRP January 2024 full-fleet thermal ERA5 plant temperature
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-jan2024-fullfleet-era5-thermal.yml'
+      - 'src/grid_resilience/srp_thermal_era5_temperature_intake.py'
+      - 'src/grid_resilience/srp_thermal_plant_weather_sites.py'
+      - 'tests/test_srp_thermal_era5_temperature_intake.py'
+jobs:
+  full-fleet-summer-weather:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and test source/calendar validators
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_thermal_plant_weather_sites.py tests/test_srp_thermal_era5_temperature_intake.py
+      - name: Acquire official EIA860 2024 and retain archive checksum
+        run: |
+          mkdir -p outputs/srp_jan_thermal
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,urllib.request
+          out=Path("outputs/srp_jan_thermal")
+          url="https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip"
+          request=urllib.request.Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"})
+          with urllib.request.urlopen(request,timeout=120) as response:
+              payload=response.read(80_000_001)
+          if not payload or len(payload)>80_000_000:raise ValueError("Invalid official EIA860 archive bytes")
+          (out/"eia8602024.zip").write_bytes(payload)
+          (out/"eia860_source_provenance.json").write_text(json.dumps({
+              "url":url,"size_bytes":len(payload),
+              "sha256":hashlib.sha256(payload).hexdigest()},indent=2)+"\n")
+          PY
+          python -m grid_resilience.eia860_generator_extract \
+            --archive outputs/srp_jan_thermal/eia8602024.zip \
+            --output outputs/srp_jan_thermal
+      - name: Select ALL eligible SRP gas and coal plants; fail if incomplete
+        run: |
+          python -m grid_resilience.srp_thermal_plant_weather_sites \
+            --archive outputs/srp_jan_thermal/eia8602024.zip \
+            --generators outputs/srp_jan_thermal/eia860_2024_operable_generators.csv \
+            --max-plants 100 --output outputs/srp_jan_thermal
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/srp_jan_thermal")
+          m=json.loads((p/"srp_thermal_site_coverage_manifest.json").read_text())
+          for tech in ("gas","coal"):
+              x=m["coverage_by_technology"][tech]
+              if x["selected_plant_count"] != x["source_plant_count"]:
+                  raise ValueError(f"Incomplete {tech} plant geography or selection")
+              if abs(x["sampled_share_of_source_capacity"]-1)>1e-9:
+                  raise ValueError(f"Noncomplete {tech} source capacity coverage")
+          print(json.dumps(m["coverage_by_technology"],indent=2))
+          PY
+      - name: Download all plant-point ERA5 January 2024 temperatures
+        run: |
+          python -m grid_resilience.srp_thermal_era5_temperature_intake \
+            --sites outputs/srp_jan_thermal/srp_thermal_era5_site_selection.csv \
+            --year 2024 --month 1 --output outputs/srp_jan_thermal
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_jan_thermal")
+          m=json.loads((p/"srp_thermal_era5_manifest.json").read_text())
+          x=pd.read_csv(p/"srp_thermal_era5_plant_hourly.csv")
+          y=pd.read_csv(p/"srp_thermal_era5_technology_hourly.csv")
+          assert m["period"]=="2024-01"
+          assert len(x)==744*m["selected_site_count"]
+          assert len(y)==744*2
+          assert x.technology.nunique()==2
+          assert not m["weather_to_generator_derating_calibrated"]
+          assert all(len(z["sha256"])==64 for z in m["plant_provenance"])
+          print(y.groupby("technology").capacity_weighted_temperature_c.describe().to_string())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-jan2024-fullfleet-thermal-era5
+          path: |
+            outputs/srp_jan_thermal/eia860_source_provenance.json
+            outputs/srp_jan_thermal/srp_thermal_site_coverage_manifest.json
+            outputs/srp_jan_thermal/srp_thermal_coordinate_population.csv
+            outputs/srp_jan_thermal/srp_thermal_era5_site_selection.csv
+            outputs/srp_jan_thermal/srp_thermal_era5_plant_hourly.csv
+            outputs/srp_jan_thermal/srp_thermal_era5_technology_hourly.csv
+            outputs/srp_jan_thermal/srp_thermal_era5_manifest.json
+          if-no-files-found: warn
