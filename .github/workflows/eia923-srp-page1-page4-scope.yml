@@ -20,6 +20,8 @@ on:
       - 'tests/test_srp_eia860_full_fuel_field_probe.py'
       - 'src/grid_resilience/srp_eia923_plant_fuel_row_probe.py'
       - 'tests/test_srp_eia923_plant_fuel_row_probe.py'
+      - 'src/grid_resilience/srp_ng_generator_identifiability.py'
+      - 'tests/test_srp_ng_generator_identifiability.py'
 jobs:
   audit:
     runs-on: ubuntu-24.04
@@ -32,7 +34,7 @@ jobs:
       - name: Install and test source-scope code
         run: |
           python -m pip install -e '.[dev]' openpyxl
-          python -m pytest -q tests/test_eia923_page1_all_fuels.py tests/test_eia923_page1_page4_scope_bridge.py tests/test_eia923_shared_plant_difference.py tests/test_srp_eia923_eia930_fuel_scope.py tests/test_srp_page1_eia860_fuel_crosswalk.py tests/test_srp_fuel_gap_plant_attribution.py tests/test_srp_eia860_full_fuel_field_probe.py tests/test_srp_eia923_plant_fuel_row_probe.py
+          python -m pytest -q tests/test_eia923_page1_all_fuels.py tests/test_eia923_page1_page4_scope_bridge.py tests/test_eia923_shared_plant_difference.py tests/test_srp_eia923_eia930_fuel_scope.py tests/test_srp_page1_eia860_fuel_crosswalk.py tests/test_srp_fuel_gap_plant_attribution.py tests/test_srp_eia860_full_fuel_field_probe.py tests/test_srp_eia923_plant_fuel_row_probe.py tests/test_srp_ng_generator_identifiability.py
       - name: Fetch official EIA-923 2024 source archive and record provenance
         run: |
           mkdir -p outputs/srp_page1_page4
@@ -239,6 +241,24 @@ jobs:
           assert not x["fuel_consumption_interpretation_certified"]
           print("Source row count and fuel codes:",x["source_row_count"],sorted(fuels))
           PY
+      - name: Validate NG generator identity ambiguity without arbitrary allocation
+        run: |
+          python -m grid_resilience.srp_ng_generator_identifiability \
+            --candidates outputs/srp_page1_page4/page1_eia860_fuel_candidate_rows.csv \
+            --fuel NG --output outputs/srp_page1_page4
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          root=Path("outputs/srp_page1_page4")
+          m=json.loads((root/"ng_identifiability_manifest.json").read_text())
+          a=pd.read_csv(root/"page1_eia860_fuel_candidate_rows.csv")
+          selected=a[a.reported_fuel.eq("NG")]
+          assert m["source_rows"]==len(selected)
+          assert abs(m["total_page1_signed_mwh"]-selected.page1_signed_net_mwh.sum())<1e-6
+          assert not m["candidate_identity_is_generator_dispatch_attribution"]
+          assert not m["historical_calibration_certified"]
+          print("Official gas generator identity coverage:",m)
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -272,4 +292,8 @@ jobs:
             outputs/srp_page1_page4/eia923_selected_plant_fuel_rows.csv
             outputs/srp_page1_page4/eia860_full_fuel_field_probe.json
             outputs/srp_page1_page4/eia923_selected_plant_full_source_rows.json
+            outputs/srp_page1_page4/ng_identifiability_source_rows.csv
+            outputs/srp_page1_page4/ng_identifiability_buckets.csv
+            outputs/srp_page1_page4/ng_identifiability_plant_buckets.csv
+            outputs/srp_page1_page4/ng_identifiability_manifest.json
           if-no-files-found: warn
