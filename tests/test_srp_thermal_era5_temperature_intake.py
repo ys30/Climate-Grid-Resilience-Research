@@ -55,3 +55,21 @@ def test_bad_source_units_rejected():
     x["hourly_units"]["temperature_2m"]="F"
     with pytest.raises(ValueError,match="units"):
         validate_response(json.dumps(x).encode())
+
+
+def test_july_2024_hour_boundaries_and_weighted_output(tmp_path):
+    times=pd.date_range("2024-07-01",periods=744,freq="h",tz="UTC")
+    raw=json.dumps({"utc_offset_seconds":0,
+        "hourly_units":{"temperature_2m":"°C"},
+        "hourly":{"time":times.strftime("%Y-%m-%dT%H:%M").tolist(),
+                  "temperature_2m":[35.]*744}}).encode()
+    m=sample(sites(),tmp_path,year=2024,month=7,fetch=lambda _:raw)
+    assert m["period"]=="2024-07"
+    assert m["selected_site_hours"]==1488
+    x=pd.read_csv(tmp_path/"srp_thermal_era5_technology_hourly.csv")
+    assert x.capacity_weighted_temperature_c.eq(35).all()
+
+
+def test_invalid_month_rejected_before_download(tmp_path):
+    with pytest.raises(ValueError,match="month"):
+        sample(sites(),tmp_path,year=2024,month=13,fetch=lambda _:response())
