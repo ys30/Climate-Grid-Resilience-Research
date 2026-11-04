@@ -32,33 +32,47 @@ def _column(columns,aliases,label):
 
 def audit_csv(path):
     fields=pd.read_csv(path,nrows=0).columns
-    facility=_column(fields,("facilityId","orisCode","orisplCode",
-                             "facilityID","ORISPL_CODE","orisPl"),"facility identifier")
-    unit=_column(fields,("unitId","unitID","unit_id","unit"),"EPA unit identifier")
-    # Retain the original rows, but disallow silently fabricated 2024 time
-    # coverage when timestamps or period year cannot be identified.
-    year=_column(fields,("year","calendarYear","reportingYear"),"calendar year")
-    columns=[facility,unit,year]
+    facility=_column(fields,("facilityId","orisCode","orisplCode"),"facility identifier")
+    unit=_column(fields,("unitId","unit_id"),"EPA unit identifier")
+    date=_column(fields,("Date","operatingDate","date"),"operating date")
+    hour=_column(fields,("Hour","operatingHour","hour"),"operating hour")
+    columns=[facility,unit,date,hour]
+    optional={}
     for name,aliases in {
-        "gross_load":("grossLoad","grossLoadMwh","grossLoadMWh","grossLoadMW"),
-        "heat_input":("heatInput","heatInputMmbtu","heatInputMMBtu"),
-        "operating_time":("operatingTime","opTime","operatingTimeHours")
+        "gross_load":("Gross Load (MW)","grossLoad"),
+        "heat_input":("Heat Input (mmBtu)","heatInput"),
+        "operating_time":("Operating Time","operatingTime")
     }.items():
-        try:columns.append(_column(fields,aliases,name))
-        except ValueError:pass
-    columns=list(dict.fromkeys(columns))
+        try:
+            optional[name]=_column(fields,aliases,name)
+            columns.append(optional[name])
+        except ValueError:
+            pass
     rows=[]
     total_selected=0
-    for chunk in pd.read_csv(path, chunksize=120000,dtype="string",usecols=columns):
+    seen=set()
+    for chunk in pd.read_csv(path,chunksize=120000,dtype="string",usecols=columns):
         idseries=chunk[facility].astype("string").str.strip().str.replace(
             r"^0+(?=[0-9])","",regex=True)
         selected=chunk.loc[idseries.isin(FACILITIES)].copy()
         if selected.empty:continue
-        if not selected[year].astype("string").str.strip().eq("2024").all():
-            raise ValueError("Target facility snapshot contains non-2024 record")
+        when=pd.to_datetime(selected[date],errors="coerce")
+        if when.isna().any() or not when.dt.year.eq(2024).all():
+            raise ValueError("Target facility snapshot contains invalid or non-2024 date")
+        hours=pd.to_numeric(selected[hour],errors="coerce")
+        if hours.isna().any() or not hours.between(0,23).all() or not hours.mod(1).eq(0).all():
+            raise ValueError("Invalid EPA hourly source hour")
         if selected[unit].isna().any() or selected[unit].astype("string").str.strip().eq("").any():
             raise ValueError("Target EPA unit ID is missing")
         selected["normalized_oris"]=idseries.loc[selected.index]
+        # Detect duplicate source unit/date/hour rows even across CSV chunks;
+        # do not assume that 'Date' is UTC without source documentation.
+        for fac,u,dt,h in zip(selected.normalized_oris,selected[unit],
+                            when.dt.strftime("%Y-%m-%d"),hours.astype(int)):
+            key=(str(fac),str(u).strip(),str(dt),int(h))
+            if key in seen:
+                raise ValueError("Duplicate EPA unit date/hour source observation")
+            seen.add(key)
         total_selected+=len(selected)
         for fac,frame in selected.groupby("normalized_oris"):
             counts=frame[unit].value_counts(dropna=False)
@@ -76,11 +90,16 @@ def audit_csv(path):
     counts=population.merge(counts,on="oris",how="left")
     counts[["distinct_epa_unit_ids","source_hourly_rows"]]=counts[
         ["distinct_epa_unit_ids","source_hourly_rows"]].fillna(0).astype(int)
-    meta={"source":"Zenodo v1 independently archived CAMPD 2024 Arizona hourly emissions",
+    meta={"source":"Zenodo v1 archived CAMPD 2024 Arizona hourly emissions",
           "source_url":SNAPSHOT_URL,"expected_md5":EXPECTED_MD5,
           "rows_at_target_facilities":total_selected,
           "target_facility_oris":list(FACILITIES),
           "recognized_source_columns":columns,
+          "calendar_time_source_fields":[date,hour],
+          "time_zone_verified":False,
+          "unique_facility_unit_date_hour_verified":True,
+          "gross_load_column_present":"gross_load" in optional,
+          "heat_input_column_present":"heat_input" in optional,
           "record_is_source_emissions_or_operations_not_net_power":True,
           "target_eia860_gt_generators_automatically_matched":False,
           "unit_level_hourly_net_mw_verified":False,
