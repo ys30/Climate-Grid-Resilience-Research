@@ -1,0 +1,74 @@
+name: SRP Jan-Jul 2024 identity-matched ERA5 thermal exposure
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-jan-jul2024-matched-thermal-exposure.yml'
+      - 'src/grid_resilience/srp_matched_thermal_seasonal_exposure.py'
+      - 'tests/test_srp_matched_thermal_seasonal_exposure.py'
+jobs:
+  same-plant-seasonal-weather:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test matched-source calculations
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_matched_thermal_seasonal_exposure.py
+      - name: Retrieve immutable previously successful January and July source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/seasonal/january outputs/seasonal/july
+          gh run download 41772449116 --repo ys30/Climate-Grid-Resilience-Research --name srp-jan2024-real-era5-thermal-plant-points --dir outputs/seasonal/january
+          gh run download 41773763147 --repo ys30/Climate-Grid-Resilience-Research --name srp-july2024-fullfleet-thermal-era5 --dir outputs/seasonal/july
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          root=Path("outputs/seasonal")
+          for month,path,n in (("2024-01","january",9),("2024-07","july",13)):
+              m=json.loads((root/path/"srp_thermal_era5_manifest.json").read_text())
+              p=json.loads((root/path/"srp_thermal_site_coverage_manifest.json").read_text())
+              x=pd.read_csv(root/path/"srp_thermal_era5_plant_hourly.csv")
+              assert m["period"]==month and m["selected_site_count"]==n
+              assert len(x)==744*n
+              assert not m["weather_to_generator_derating_calibrated"]
+              assert p["coverage_by_technology"]["coal"]["selected_plant_count"]==1
+          print("Both source provenance archives and UTC month-hour counts verified")
+          PY
+      - name: Compute fully matched plant-level January-to-July ERA5 exposure
+        run: |
+          python -m grid_resilience.srp_matched_thermal_seasonal_exposure \
+            --january outputs/seasonal/january/srp_thermal_era5_plant_hourly.csv \
+            --july outputs/seasonal/july/srp_thermal_era5_plant_hourly.csv \
+            --output outputs/seasonal/matched
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          root=Path("outputs/seasonal/matched")
+          m=json.loads((root/"matched_seasonal_manifest.json").read_text())
+          a=pd.read_csv(root/"matched_seasonal_technology_summary.csv")
+          assert m["matched_gas_plants"]==8 and m["matched_coal_plants"]==1
+          assert m["july_only_gas_plants"]==4
+          assert len(a)==4 and a.hours.eq(744).all()
+          assert not m["historical_reliability_calibrated"]
+          print(a.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-jan-jul-2024-matched-thermal-era5
+          path: |
+            outputs/seasonal/matched/matched_seasonal_technology_summary.csv
+            outputs/seasonal/matched/matched_seasonal_technology_hourly.csv
+            outputs/seasonal/matched/matched_seasonal_plant_summary.csv
+            outputs/seasonal/matched/matched_seasonal_mean_differences.csv
+            outputs/seasonal/matched/matched_seasonal_manifest.json
+          if-no-files-found: warn
