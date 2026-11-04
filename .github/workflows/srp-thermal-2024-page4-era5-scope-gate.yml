@@ -1,0 +1,92 @@
+name: SRP EIA923 monthly thermal generation vs ERA5 site reporting scope
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-thermal-2024-page4-era5-scope-gate.yml'
+      - 'src/grid_resilience/srp_thermal_weather_monthly_generation_scope.py'
+      - 'tests/test_srp_thermal_weather_monthly_generation_scope.py'
+jobs:
+  source-coverage-before-thermal-performance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate source-grain and missing-report assertions
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_thermal_weather_monthly_generation_scope.py
+      - name: Retrieve immutable official-source EIA860 and July ERA5 plant evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_monthly_weather_scope/eia860
+          gh run download 41773763147 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-july2024-fullfleet-thermal-era5 \
+            --dir outputs/srp_monthly_weather_scope/eia860
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_monthly_weather_scope/eia860")
+          m=json.loads((p/"srp_thermal_site_coverage_manifest.json").read_text())
+          for tech,count in (("gas",12),("coal",1)):
+              x=m["coverage_by_technology"][tech]
+              assert x["selected_plant_count"]==count
+              assert abs(x["sampled_share_of_source_capacity"]-1)<1e-9
+          assert len(pd.read_csv(p/"srp_thermal_era5_plant_hourly.csv"))==13*744
+          PY
+      - name: Download official EIA923 2024 archive with provenance and extract signed Page4
+        run: |
+          python - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+          p=Path("outputs/srp_monthly_weather_scope")
+          url="https://www.eia.gov/electricity/data/eia923/archive/xls/f923_2024.zip"
+          with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"}),timeout=120) as r:
+              data=r.read(150_000_001)
+          if not data or len(data)>150_000_000:raise ValueError("Unexpected EIA923 archive")
+          (p/"eia923_2024.zip").write_bytes(data)
+          (p/"eia923_official_provenance.json").write_text(json.dumps({
+              "url":url,"sha256":hashlib.sha256(data).hexdigest(),
+              "bytes":len(data)},indent=2)+"\n")
+          PY
+          python -m grid_resilience.eia923_generator_extract \
+            --archive outputs/srp_monthly_weather_scope/eia923_2024.zip \
+            --output outputs/srp_monthly_weather_scope
+      - name: Audit January and July EIA923 reporting vs weather source population
+        run: |
+          python -m grid_resilience.srp_thermal_weather_monthly_generation_scope \
+            --sites outputs/srp_monthly_weather_scope/eia860/srp_thermal_era5_site_selection.csv \
+            --page4 outputs/srp_monthly_weather_scope/eia923_generator_month_net_mwh.csv \
+            --weather outputs/srp_monthly_weather_scope/eia860/srp_thermal_era5_plant_hourly.csv \
+            --output outputs/srp_monthly_weather_scope
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_monthly_weather_scope")
+          x=pd.read_csv(p/"page4_era5_reporting_coverage.csv")
+          m=json.loads((p/"page4_era5_scope_manifest.json").read_text())
+          assert len(x)==4 and set(x.period)=={"2024-01","2024-07"}
+          assert x.annual_source_plants.sum()==26
+          assert (x.page4_reported_plant_count<=x.annual_source_plants).all()
+          assert not m["monthly_data_can_estimate_hourly_temperature_derating"]
+          assert not m["historical_reliability_calibrated"]
+          print(x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-page4-era5-thermal-reporting-gate
+          path: |
+            outputs/srp_monthly_weather_scope/eia923_official_provenance.json
+            outputs/srp_monthly_weather_scope/generator_extraction_manifest.json
+            outputs/srp_monthly_weather_scope/page4_era5_matched_plant_month_rows.csv
+            outputs/srp_monthly_weather_scope/page4_era5_reporting_coverage.csv
+            outputs/srp_monthly_weather_scope/page4_era5_scope_manifest.json
+          if-no-files-found: warn
