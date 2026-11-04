@@ -39,6 +39,9 @@ def test_extracts_original_fuel_mover_and_generator_rows(tmp_path):
     assert detail.loc[detail.period.eq("2024-07"),"p1_minus_p4_mwh"].eq(200).all()
     assert detail.page4_generators.eq("A").all()
     assert len(one)==6 and len(four)==6
+    assert detail.difference_exactly_page1_only_gt.all()
+    assert detail.non_gt_source_difference_mwh.eq(0).all()
+    assert m["all_selected_differences_accounted_for_by_ng_gt_rows"]
     assert not m["monthly_difference_is_weather_derating"]
 
 
