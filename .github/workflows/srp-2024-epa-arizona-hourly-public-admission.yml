@@ -31,6 +31,8 @@ jobs:
           p=Path("outputs/srp_epa_2024_az_admission")
           m=json.loads((p/"target_camd_2024_hourly_admission.json").read_text())
           assert m["observed_md5"]==m["expected_md5"]
+          assert m["source_operating_and_gross_load_profile_extracted"]
+          assert m["gross_load_is_not_net_generator_mw"]
           assert not m["unit_level_hourly_net_mw_verified"]
           assert not m["weather_derating_calibrated"]
           assert not m["target_eia860_gt_generators_automatically_matched"]
@@ -41,6 +43,7 @@ jobs:
         with:
           name: srp-epa-2024-az-hourly-identity-and-reporting-gate
           path: |
+            outputs/srp_epa_2024_az_admission/target_camd_2024_unit_operation_profile.csv
             outputs/srp_epa_2024_az_admission/target_camd_2024_hourly_unit_ids.csv
             outputs/srp_epa_2024_az_admission/target_camd_2024_hourly_facility_coverage.csv
             outputs/srp_epa_2024_az_admission/target_camd_2024_hourly_admission.json
