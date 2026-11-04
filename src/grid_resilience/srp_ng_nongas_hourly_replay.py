@@ -143,13 +143,15 @@ def solve(boundary,raw,plant_envelope,*,year=2024,month=1,budget_scale=None):
 
 def compare(boundary,raw,plants,*,year=2024,month=1):
     results=[];hourly={};category=None;replay=None
-    for scale in (None,1.,0.75):
+    for scale in (None,1.,0.75,0.5):
         h,r,source,fuels=solve(boundary,raw,plants,year=year,month=month,budget_scale=scale)
         results.append(r);hourly[r["scenario"]]=h
         category=fuels;replay=source
     result=pd.DataFrame(results)
     gaps=result.set_index("scenario").artificial_portfolio_gap_mwh
-    if not (gaps["unlimited"]<=gaps["1x_page1"]+1e-2<=gaps["0.75x_page1"]+2e-2):
+    if not (gaps["unlimited"]<=gaps["1x_page1"]+1e-2 and
+            gaps["1x_page1"]<=gaps["0.75x_page1"]+1e-2 and
+            gaps["0.75x_page1"]<=gaps["0.5x_page1"]+1e-2):
         raise AssertionError("Tightening NG energy budget improved artificial gap")
     if not (result.max_hourly_bus_residual_mw<1e-3).all():
         raise AssertionError("Failed monthly comparison conservation")
