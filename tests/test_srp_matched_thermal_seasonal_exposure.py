@@ -49,3 +49,26 @@ def test_nonfinite_temperature_fails():
     j=example(1);j.loc[0,"temperature_2m_c"]=float("nan")
     with pytest.raises(ValueError,match="nonfinite"):
         compare(j,example(7))
+
+
+def test_site_level_capacity_hours_not_fleet_mean_temperature_hours():
+    # Two 50 MW gas sites: 30C and 40C. Fleet mean is 35C for all 744h,
+    # but only half the installed site capacity actually exceeds 40C.
+    t=pd.date_range("2024-01-01",periods=744,freq="h",tz="UTC")
+    u=pd.date_range("2024-07-01",periods=744,freq="h",tz="UTC")
+    def raw(times,month):
+        rows=[]
+        for tech,plant,mw,temp in (("gas","1",50.,30. if month==1 else 30.),
+                                   ("gas","3",50.,40. if month==1 else 42.),
+                                   ("coal","2",30.,25. if month==1 else 36.)):
+            rows.append(pd.DataFrame({"timestamp_utc":times,"technology":tech,
+                "plant_id":plant,"selected_nameplate_mw":mw,"temperature_2m_c":temp}))
+        return pd.concat(rows,ignore_index=True)
+    result,_,plant,_,manifest=compare(raw(t,1),raw(u,7))
+    gas=result[(result.month=="January")&(result.technology=="gas")].iloc[0]
+    assert gas.weighted_fleet_hours_ge_35_c==744
+    assert gas.site_exposed_nameplate_mwh_ge_35_c==50*744
+    assert gas.site_exposed_nameplate_mwh_ge_40_c==50*744
+    assert gas.site_capacity_hour_fraction_ge_35_c==.5
+    assert gas.site_nameplate_weighted_degree_hours_above_35_c==2.5*744
+    assert manifest["plant_level_exposure_not_unit_outage_or_energy_loss"]
