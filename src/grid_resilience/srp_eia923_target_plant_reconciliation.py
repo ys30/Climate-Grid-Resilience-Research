@@ -78,6 +78,12 @@ def inspect(archive, *, plants=TARGETS):
             if a.empty or b.empty:raise ValueError(f"Target source missing {pid} {period}")
             amwh=float(a.reported_signed_net_mwh.sum())
             bmwh=float(b.reported_signed_net_mwh.sum())
+            p1_by_mover=a.groupby("prime_mover").reported_signed_net_mwh.sum()
+            p4_by_mover=b.groupby("prime_mover").reported_signed_net_mwh.sum()
+            # Report exact original-row GT contribution separately; never
+            # assume its absence from Page4 means the generator was idle.
+            p1_gt=float(p1_by_mover.get("GT",0.0))
+            p4_gt=float(p4_by_mover.get("GT",0.0))
             details.append({
                 "plant_id":pid,"period":period,
                 "page1_all_rows":len(one),
@@ -92,7 +98,14 @@ def inspect(archive, *, plants=TARGETS):
                 "page4_prime_movers":",".join(sorted(b.prime_mover.astype(str).unique())),
                 "page1_ng_signed_net_mwh":amwh,
                 "page4_all_generator_signed_net_mwh":bmwh,
-                "p1_minus_p4_mwh":amwh-bmwh
+                "p1_minus_p4_mwh":amwh-bmwh,
+                "page1_ng_gt_mwh":p1_gt,
+                "page4_gt_mwh":p4_gt,
+                "non_gt_page1_mwh":amwh-p1_gt,
+                "non_gt_page4_mwh":bmwh-p4_gt,
+                "non_gt_source_difference_mwh":(amwh-p1_gt)-(bmwh-p4_gt),
+                "difference_exactly_page1_only_gt":abs(
+                    (amwh-bmwh)-(p1_gt-p4_gt))<1e-6
             })
     result=pd.DataFrame(details)
     manifest={"source":"Official EIA923 2024 Schedules_2_3_4_5",
@@ -101,6 +114,8 @@ def inspect(archive, *, plants=TARGETS):
       "page1_only_ng_compatible_fuel_mover":True,
       "page4_all_movers_in_plant":True,
       "source_reconciliation_not_generator_allocation":True,
+      "all_selected_differences_accounted_for_by_ng_gt_rows":bool(
+          result.difference_exactly_page1_only_gt.all()),
       "monthly_difference_is_weather_derating":False,
       "historical_reliability_calibrated":False}
     return aa,bb,result,manifest
