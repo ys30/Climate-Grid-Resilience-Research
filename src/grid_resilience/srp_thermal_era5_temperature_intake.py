@@ -51,6 +51,8 @@ def sample(sites,output,*,year=2024,month=1,fetch=None):
     if not s.latitude.between(20,55).all() or not s.longitude.between(-130,-95).all():
         raise ValueError("Invalid plant coordinate")
     if (s.nameplate_mw<=0).any():raise ValueError("Nonpositive site capacity")
+    if not (2000<=year<=2100 and 1<=month<=12):
+        raise ValueError("Invalid ERA5 requested month")
     root=Path(output);root.mkdir(parents=True,exist_ok=True)
     records=[];provenance=[]
     for site in s.sort_values(["technology","plant_id"]).itertuples(index=False):
@@ -104,9 +106,11 @@ def sample(sites,output,*,year=2024,month=1,fetch=None):
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--sites",required=True);p.add_argument("--output",required=True)
+    p.add_argument("--year",type=int,default=2024)
+    p.add_argument("--month",type=int,default=1)
     args=p.parse_args()
     print(json.dumps(sample(pd.read_csv(args.sites,dtype={"plant_id":"string"}),
-                            args.output),indent=2))
+                            args.output,year=args.year,month=args.month),indent=2))
 
 
 if __name__=="__main__":
