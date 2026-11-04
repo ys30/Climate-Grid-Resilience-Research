@@ -7,6 +7,8 @@ on:
       - 'src/grid_resilience/srp_ng_plant_budget_pypsa.py'
       - 'src/grid_resilience/srp_ng_nongas_hourly_replay.py'
       - 'tests/test_srp_ng_nongas_hourly_replay.py'
+      - 'src/grid_resilience/srp_assumed_multitech_factorial.py'
+      - 'tests/test_srp_assumed_multitech_factorial.py'
       - 'tests/test_srp_ng_plant_budget_pypsa.py'
       - 'tests/test_srp_ng_plant_budget_pypsa_solver.py'
       - 'src/grid_resilience/srp_ng_plant_nameplate_envelope.py'
@@ -24,7 +26,7 @@ jobs:
       - name: Install full scientific optimizer and test both input and real solver
         run: |
           python -m pip install -e '.[dev,model]'
-          python -m pytest -q tests/test_srp_ng_plant_budget_pypsa.py tests/test_srp_ng_plant_budget_pypsa_solver.py tests/test_srp_ng_plant_nameplate_envelope.py tests/test_srp_ng_nongas_hourly_replay.py
+          python -m pytest -q tests/test_srp_ng_plant_budget_pypsa.py tests/test_srp_ng_plant_budget_pypsa_solver.py tests/test_srp_ng_plant_nameplate_envelope.py tests/test_srp_ng_nongas_hourly_replay.py tests/test_srp_assumed_multitech_factorial.py
       - name: Download official EIA source tables and track SHA256
         run: |
           mkdir -p outputs/ng_budget
@@ -125,6 +127,28 @@ jobs:
           assert not x.historical_calibration_certified.any()
           print(x[["modeled_ng_generation_mwh","fixed_non_gas_replay_mwh","artificial_portfolio_gap_mwh"]])
           PY
+      - name: Solve matched 744h multi-technology factorial with source-independent synthetic availability
+        run: |
+          python -m grid_resilience.srp_assumed_multitech_factorial \
+            --boundary outputs/ng_budget/eia930_hourly_balance_audit.csv \
+            --roster outputs/ng_budget/plant_ba_operable_generator_census.csv \
+            --output outputs/ng_budget/synthetic_multitech
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          folder=Path("outputs/ng_budget/synthetic_multitech")
+          x=pd.read_csv(folder/"assumed_multitech_four_case_results.csv").set_index("scenario")
+          m=json.loads((folder/"assumed_multitech_manifest.json").read_text())
+          assert set(x.index)=={"baseline","thermal_derating","wind_derating","compound"}
+          assert x.loc["baseline","modeled_gap_mwh"]<=x.loc["thermal_derating","modeled_gap_mwh"]+0.01
+          assert x.loc["baseline","modeled_gap_mwh"]<=x.loc["wind_derating","modeled_gap_mwh"]+0.01
+          assert x.loc["thermal_derating","modeled_gap_mwh"]<=x.loc["compound","modeled_gap_mwh"]+0.01
+          assert x.loc["wind_derating","modeled_gap_mwh"]<=x.loc["compound","modeled_gap_mwh"]+0.01
+          assert m["independent_of_eia930_fuel_generation_replay"]
+          assert m["technology_availability_is_synthetic_not_meteorology"]
+          assert not m["historical_calibration_certified"]
+          print(x)
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -147,4 +171,11 @@ jobs:
             outputs/ng_budget/ng_nongas_replay_1x_page1_hourly.csv
             outputs/ng_budget/ng_nongas_replay_0.75x_page1_hourly.csv
             outputs/ng_budget/ng_nongas_replay_0.5x_page1_hourly.csv
+            outputs/ng_budget/synthetic_multitech/assumed_multitech_manifest.json
+            outputs/ng_budget/synthetic_multitech/assumed_multitech_capacity.csv
+            outputs/ng_budget/synthetic_multitech/assumed_multitech_four_case_results.csv
+            outputs/ng_budget/synthetic_multitech/baseline/shortfall_hourly_mw.csv
+            outputs/ng_budget/synthetic_multitech/thermal_derating/shortfall_hourly_mw.csv
+            outputs/ng_budget/synthetic_multitech/wind_derating/shortfall_hourly_mw.csv
+            outputs/ng_budget/synthetic_multitech/compound/shortfall_hourly_mw.csv
           if-no-files-found: warn
