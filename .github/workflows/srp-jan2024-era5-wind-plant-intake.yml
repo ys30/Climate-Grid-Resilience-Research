@@ -8,6 +8,8 @@ on:
       - 'tests/test_srp_era5_wind_plant_intake.py'
       - 'src/grid_resilience/srp_era5_wind_curve_sensitivity.py'
       - 'tests/test_srp_era5_wind_curve_sensitivity.py'
+      - 'src/grid_resilience/srp_era5_wind_pypsa_matched.py'
+      - 'tests/test_srp_era5_wind_pypsa_matched.py'
       - 'src/grid_resilience/eia860_wind_plant_locations.py'
 jobs:
   srp-independent-point-weather:
@@ -20,8 +22,8 @@ jobs:
           python-version: '3.11'
       - name: Install scientific parsers and validate weather intake
         run: |
-          python -m pip install -e '.[dev]'
-          python -m pytest -q tests/test_srp_era5_wind_plant_intake.py tests/test_srp_era5_wind_curve_sensitivity.py
+          python -m pip install -e '.[dev,model]'
+          python -m pytest -q tests/test_srp_era5_wind_plant_intake.py tests/test_srp_era5_wind_curve_sensitivity.py tests/test_srp_era5_wind_pypsa_matched.py
       - name: Download source EIA-860 2024 and record SHA256
         run: |
           mkdir -p outputs/srp_era5
@@ -96,6 +98,72 @@ jobs:
           assert not m["estimated_actual_wind_generation"]
           print(x.to_string(index=False))
           PY
+      - name: Build EIA860 Plant BA scope and exact EIA930 January demand boundary
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from grid_resilience.eia860_plant_ba_census import read_plant_ba
+          root=Path("outputs/srp_era5")
+          p=read_plant_ba(root/"eia860_2024.zip")
+          g=pd.read_csv(root/"eia860_2024_operable_generators.csv",
+                        dtype={"plant_id":"string","generator_id":"string"})
+          p["plant_id"]=p.plant_id.astype("string").str.strip()
+          g["plant_id"]=g.plant_id.astype("string").str.strip()
+          p["plant_id"]=p.plant_id.str.replace(r"^0+(?=[0-9])","",regex=True)
+          g["plant_id"]=g.plant_id.str.replace(r"^0+(?=[0-9])","",regex=True)
+          if p.plant_id.duplicated().any() or g.duplicated(["plant_id","generator_id"]).any():
+              raise ValueError("Duplicate official Plant BA or generator identity")
+          census=g.merge(p,on="plant_id",validate="many_to_one",how="left")
+          census=census.loc[census.plant_reported_ba.eq("SRP")]
+          if len(census)!=108:raise ValueError("Unexpected annual SRP Plant BA source census")
+          census.to_csv(root/"srp_plant_ba_operable_generator_census.csv",index=False)
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          import urllib.request,hashlib,json
+          import pandas as pd
+          root=Path("outputs/srp_era5")
+          urls=[
+            "https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2023_Jul_Dec.csv",
+            "https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv"]
+          pieces=[];source=[]
+          for url in urls:
+              with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"}),timeout=120) as h:
+                  payload=h.read(100_000_001)
+              if not payload or len(payload)>100_000_000:raise ValueError("Invalid source bytes")
+              name=url.rsplit("/",1)[-1]
+              (root/name).write_bytes(payload)
+              source.append({"url":url,"sha256":hashlib.sha256(payload).hexdigest(),"bytes":len(payload)})
+              x=pd.read_csv(root/name,low_memory=False)
+              x=x.loc[x["Balancing Authority"].astype(str).str.strip().eq("SRP")].copy()
+              t=pd.to_datetime(x["UTC Time at End of Hour"],utc=True)
+              pieces.append(x.loc[t.ge(pd.Timestamp("2024-01-01T01:00Z"))&
+                                  t.le(pd.Timestamp("2024-02-01T00:00Z"))])
+          pd.concat(pieces,ignore_index=True).to_csv(root/"january_srp_eia930.csv",index=False)
+          (root/"eia930_source_provenance.json").write_text(json.dumps(source,indent=2)+"\\n")
+          PY
+          python -m grid_resilience.eia930_net_interchange_audit \
+            --csv outputs/srp_era5/january_srp_eia930.csv \
+            --ba SRP --year 2024 --month 1 --output outputs/srp_era5
+      - name: Solve 4 matched synthetic wind vs ERA5 wind proxy SRP PyPSA cases
+        run: |
+          python -m grid_resilience.srp_era5_wind_pypsa_matched \
+            --boundary outputs/srp_era5/eia930_hourly_balance_audit.csv \
+            --roster outputs/srp_era5/srp_plant_ba_operable_generator_census.csv \
+            --curves outputs/srp_era5/srp_era5_wind_curve_fleet_hourly.csv \
+            --output outputs/srp_era5/pypsa_wind_matched
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          p=Path("outputs/srp_era5/pypsa_wind_matched")
+          x=pd.read_csv(p/"wind_proxy_matched_pypsa_comparison.csv")
+          m=json.loads((p/"wind_proxy_matched_pypsa_manifest.json").read_text())
+          assert len(x)==4 and x.positive_gap_hours.between(0,744).all()
+          assert not m["weather_climate_causal_effect_identified"]
+          assert not m["historical_reliability_calibrated"]
+          print(x.to_string(index=False))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -112,4 +180,13 @@ jobs:
             outputs/srp_era5/srp_era5_wind_curve_fleet_hourly.csv
             outputs/srp_era5/srp_era5_wind_curve_sensitivity_summary.csv
             outputs/srp_era5/srp_era5_wind_curve_manifest.json
+            outputs/srp_era5/eia930_source_provenance.json
+            outputs/srp_era5/eia930_balance_metrics.json
+            outputs/srp_era5/pypsa_wind_matched/wind_proxy_matched_pypsa_comparison.csv
+            outputs/srp_era5/pypsa_wind_matched/wind_proxy_matched_pypsa_manifest.json
+            outputs/srp_era5/pypsa_wind_matched/matched_eia860_technology_capacity.csv
+            outputs/srp_era5/pypsa_wind_matched/fixed_wind_0p35/shortfall_hourly_mw.csv
+            outputs/srp_era5/pypsa_wind_matched/era5_reference/shortfall_hourly_mw.csv
+            outputs/srp_era5/pypsa_wind_matched/era5_low_cut_in/shortfall_hourly_mw.csv
+            outputs/srp_era5/pypsa_wind_matched/era5_high_cut_in/shortfall_hourly_mw.csv
           if-no-files-found: warn
