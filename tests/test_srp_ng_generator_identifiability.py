@@ -34,6 +34,7 @@ def test_invalid_candidate_counts_fail_closed():
     with pytest.raises(ValueError,match="Invalid"):
         audit(d)
     d=candidates()
+    d["fuel_candidate_units"]=d["fuel_candidate_units"].astype(float)
     d.loc[0,"fuel_candidate_units"]=1.5
     with pytest.raises(ValueError,match="Invalid"):
         audit(d)
