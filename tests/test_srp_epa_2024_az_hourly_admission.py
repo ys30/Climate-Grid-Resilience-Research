@@ -7,10 +7,10 @@ def csv_data(tmp_path):
     p=tmp_path/"2024_az_hourly.csv"
     pd.DataFrame([
         {"facilityId":"141","unitId":"A","Date":"2024-07-01","Gross Load (MW)":10,"Heat Input (mmBtu)":12},
-        {"facilityId":"141","unitId":"B","Date":"2024-07-01","grossLoad":11,"heatInput":13},
-        {"facilityId":"141","unitId":"A","Date":"2024-07-01","grossLoad":15,"heatInput":14},
-        {"facilityId":"55129","unitId":"C","Date":"2024-07-01","grossLoad":20,"heatInput":24},
-        {"facilityId":"888","unitId":"X","Date":"2024-07-01","grossLoad":21,"heatInput":29}
+        {"facilityId":"141","unitId":"B","Date":"2024-07-01","Gross Load (MW)":11,"Heat Input (mmBtu)":13},
+        {"facilityId":"141","unitId":"A","Date":"2024-07-01","Gross Load (MW)":15,"Heat Input (mmBtu)":14},
+        {"facilityId":"55129","unitId":"C","Date":"2024-07-01","Gross Load (MW)":20,"Heat Input (mmBtu)":24},
+        {"facilityId":"888","unitId":"X","Date":"2024-07-01","Gross Load (MW)":21,"Heat Input (mmBtu)":29}
     ]).assign(Hour=[0,1,2,3,4]).to_csv(p,index=False)
     return p
 
