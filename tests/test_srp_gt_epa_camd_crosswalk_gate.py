@@ -21,6 +21,7 @@ def test_camd_mapping_is_not_operational_output_certification():
     t,s,rel,m=analyze(inventory,cw)
     assert len(t)==3 and s.candidates_with_epa_unit_relationship.eq(1).all()
     assert t.epa_mapping_one_to_one_proven.eq(False).all()
+    assert s.crosswalk_eia_plant_rows.eq(1).all()
     assert not m["hourly_operational_data_downloaded"]
     assert not m["temperature_derating_calibrated"]
 
@@ -42,6 +43,7 @@ def test_missing_crosswalk_row_is_not_an_outage():
     t,s,_,m=analyze(inv,cw)
     assert not t.loc[t.plant_id.eq("147"),"epa_mapping_exists"].iloc[0]
     assert m["unmapped_eia_gt_generator_is_not_outage_or_nonreporting_evidence"]
+    assert s.loc[s.plant_id.eq("147"),"crosswalk_eia_plant_rows"].iloc[0]==0
 
 
 def test_duplicate_annual_generator_ids_rejected():
