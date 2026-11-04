@@ -15,10 +15,43 @@ The reproducible [alignment script](../src/grid_resilience/srp_epa_era5_july_loc
 4. Exactly 737 matched / 7 unmatched source hours per EPA unit as a calendar invariant, and separate source fields for `Operating Time`, `Gross Load (MW)` and `Heat Input`.
 5. Explicit rejection of generator net MW, observed forced outage, generator temperature derating, lost power or EENS inference. A correlation between EPA source gross load and ERA5 ambient temperature is **not** a physical generator availability curve without a dispatch/commitment basis.
 
-## Status and acceptance gate
+## CI-verified hourly alignment and preliminary descriptive experiment
 
-The controlled [GitHub Actions 41926491544](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41926491544) is the mandatory data-execution gate. A proven **737/744 calendar-hour intersection** is a methodological expectation; until an actual successful CI artifact is checked, it must **not** be described as empirically matched source rows.
+**Confirmed, not merely expected:** [GitHub Actions run 41926491544](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41926491544) **SUCCESS**, accompanied by [Research Methods CI 41926491476](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41926491476) **SUCCESS**. Archived [artifact 13370145959](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41926491544/artifacts/13370145959) includes `epa_source_july_lstd_era5_utc_hourly.csv`, `epa_era5_july_hourly_alignment_summary.csv`, MD5 source provenance and the strict source-admission manifest.
 
-Once successful, the artifact will contain `epa_source_july_lstd_era5_utc_hourly.csv` with strictly aligned original July EPA unit-hour observations and site ERA5 weather, `epa_era5_july_hourly_alignment_summary.csv` and `epa_era5_july_alignment_manifest.json`. These are source-level descriptive exposure join data and do not establish calibrated thermal derating.
+The complete genuine EPA original Arizona 2024 source was re-downloaded, passed MD5, and cross-matched with the independently verified July 2024 ERA5 plant source. **All 10 EPA source Unit IDs each had 744 July LST hour records and 737 true July UTC ERA5 source-hour matches; 7 genuinely unobserved August UTC boundary hours remain unfilled.** This yields **7,370 matched EPA unit-hour observations** across three distinct plant sites (not 7,370 independent weather events). Every target unit passed unique hour and month validation.
 
-**Next:** extend weather extraction through 2024-08-01 06:00 UTC for a full local July 744/744 match; inspect source hour/temperature and observed operating-time subsets, checking independent-unit weather-grid dependence and dispatch selection. No automatic hourly EIA electrical-generator allocation.
+| EPA Plant / Unit | July source calendar hours | July ERA5 matched UTC hours | Positive operating-time hours within matched source |
+|---|---:|---:|---:|
+| 141 / 1 | 744 | 737 | 329 |
+| 141 / 2 | 744 | 737 | 330 |
+| 141 / 3 | 744 | 737 | 383 |
+| 141 / 7 | 744 | 737 | 111 |
+| 141 / 8 | 744 | 737 | 99 |
+| 55129 / DBG1 | 744 | 737 | 722 |
+| 55129 / DBG2 | 744 | 737 | 730 |
+| 55129 / DBG4 | 744 | 737 | 18 |
+| 55129 / DBG5 | 744 | 737 | 19 |
+| 147 / K-7 | 744 | 737 | 612 |
+
+### Same-plant meteorological exposures — not replicated by number of EPA units
+
+A separate [descriptive heat-bin CI 41927445294](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41927445294) **SUCCESS** with [Research Methods CI 41927445598](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41927445598) and [artifact 13369667121](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41927445294/artifacts/13369667121). At each site, count ERA5 temperature **once per unique UTC weather hour**, even though all colocated source EPA units use the same weather measurement.
+
+| Plant | Below 35°C | 35°C–below 40°C | At least 40°C | Site-weather hours |
+|---|---:|---:|---:|---:|
+| 141 | 262 | 237 | **238** | **737** |
+| 55129 | 312 | 239 | **186** | **737** |
+| 147 | 279 | 225 | **233** | **737** |
+
+The completed heat-bin artifact separately summarizes each EPA Unit's observed operating-hour fraction and gross load when an operating observation is present. As an illustration of the severe **dispatch/operation selection** issue, EPA Unit **141/1** has positive operating-time indicator in **47/262 = 17.9%** of source-hours below 35°C, versus **173/238 = 72.7%** of source-hours at least 40°C. This **does not establish that heat increases available power**, just as a negative gross-load association would **not** establish derating. Demand, dispatch, equipment, unit starts and site weather co-vary.
+
+The 7 unmatched local-July hours per EPA unit correspond to actual **2024-08-01 00:00–06:00 UTC**, requiring independently measured August ERA5. The July-only weather file must not be extended by fill, interpolation, repeated readings or a false local/UTC timestamp alignment.
+
+**Accepted:** documented local-standard timezone conversion; real byte-verified archive, exact plant-hour ERA5 alignment and three-plant weather deduplication; descriptive EPA source operating-hour/gross-load stratification. **Not accepted:** an EPA unit equals a specific EIA860 GT generator, EPA gross load equals EIA net MW, observed plant derating, dispatcher-held capacity, heat-induced forced outages, or EENS.
+
+## Immediate next empirical gates
+
+1. Obtain **2024-08-01 00:00–06:00 UTC** actual ERA5 source observations to complete a fully local-July-matched 744-hour panel with no imputation.
+2. Establish site-specific monitored-unit/electrical-generator relationships via original ECMPS monitoring plans rather than static name similarities.
+3. Develop control-rich within-unit source operation studies with demand and commitment context, multi-year validation and noncausal reporting until equipment availability/temperature output curves are independently calibrated.
