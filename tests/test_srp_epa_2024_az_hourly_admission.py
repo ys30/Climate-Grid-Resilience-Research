@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from grid_resilience.srp_epa_2024_az_hourly_admission import audit_csv
+from grid_resilience.srp_epa_2024_az_hourly_admission import audit_csv,operation_profile_csv
 
 
 def csv_data(tmp_path):
@@ -78,3 +78,31 @@ def test_invalid_operating_hour_rejected(tmp_path):
     d.to_csv(p,index=False)
     with pytest.raises(ValueError,match="Invalid EPA hourly"):
         audit_csv(p)
+
+
+def test_operating_time_and_gross_load_distinguish_missing_zero_positive(tmp_path):
+    p=csv_data(tmp_path)
+    d=pd.read_csv(p)
+    d["Operating Time"]=[0.,1.,0.5,0.,None]
+    d.loc[0,"Gross Load (MW)"]=0.
+    d.loc[2,"Gross Load (MW)"]=None
+    d.to_csv(p,index=False)
+    result=operation_profile_csv(p)
+    a=result[(result.oris=="141")&(result.epa_unit_id=="A")].iloc[0]
+    assert a.source_calendar_hour_rows==2
+    assert a.operating_time_reported_rows==2
+    assert a.reported_operating_hours_sum==.5
+    assert a.positive_operating_time_rows==1
+    assert a.zero_operating_time_rows==1
+    assert a.gross_load_reported_rows==1
+    assert a.gross_load_missing_rows==1
+    assert a.zero_gross_load_rows==1
+
+
+def test_impossible_operating_fraction_rejected(tmp_path):
+    p=csv_data(tmp_path)
+    d=pd.read_csv(p)
+    d["Operating Time"]=[1.2,0.,0.,0.,0.]
+    d.to_csv(p,index=False)
+    with pytest.raises(ValueError,match="Operating Time"):
+        operation_profile_csv(p)
