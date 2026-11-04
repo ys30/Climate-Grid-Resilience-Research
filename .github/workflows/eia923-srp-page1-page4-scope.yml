@@ -16,6 +16,8 @@ on:
       - 'tests/test_srp_page1_eia860_fuel_crosswalk.py'
       - 'src/grid_resilience/srp_fuel_gap_plant_attribution.py'
       - 'tests/test_srp_fuel_gap_plant_attribution.py'
+      - 'src/grid_resilience/srp_eia860_full_fuel_field_probe.py'
+      - 'tests/test_srp_eia860_full_fuel_field_probe.py'
 jobs:
   audit:
     runs-on: ubuntu-24.04
@@ -28,7 +30,7 @@ jobs:
       - name: Install and test source-scope code
         run: |
           python -m pip install -e '.[dev]' openpyxl
-          python -m pytest -q tests/test_eia923_page1_all_fuels.py tests/test_eia923_page1_page4_scope_bridge.py tests/test_eia923_shared_plant_difference.py tests/test_srp_eia923_eia930_fuel_scope.py tests/test_srp_page1_eia860_fuel_crosswalk.py tests/test_srp_fuel_gap_plant_attribution.py
+          python -m pytest -q tests/test_eia923_page1_all_fuels.py tests/test_eia923_page1_page4_scope_bridge.py tests/test_eia923_shared_plant_difference.py tests/test_srp_eia923_eia930_fuel_scope.py tests/test_srp_page1_eia860_fuel_crosswalk.py tests/test_srp_fuel_gap_plant_attribution.py tests/test_srp_eia860_full_fuel_field_probe.py
       - name: Fetch official EIA-923 2024 source archive and record provenance
         run: |
           mkdir -p outputs/srp_page1_page4
@@ -205,6 +207,21 @@ jobs:
           assert not m["historical_calibration_certified"]
           print(m)
           PY
+      - name: Check all official EIA860 Energy Source fields for Plant 6177 DFO
+        run: |
+          python -m grid_resilience.srp_eia860_full_fuel_field_probe \
+            --archive outputs/srp_page1_page4/eia860_2024.zip \
+            --page1 outputs/srp_page1_page4/page1_all_fuels_reported_ba.csv \
+            --plant 6177 --fuel DFO --output outputs/srp_page1_page4
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path("outputs/srp_page1_page4/eia860_full_fuel_field_probe.json").read_text())
+          assert m["eia923_source_rows"]>0
+          assert m["operable_plant_generators"]>0
+          assert m["generator_fuel_identity_certified"] is False
+          print("All source code columns and candidate generator IDs:",m)
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -234,4 +251,7 @@ jobs:
             outputs/srp_page1_page4/page1_ng_sub_plant_attribution.csv
             outputs/srp_page1_page4/ng_coal_cross_source_differences.csv
             outputs/srp_page1_page4/ng_coal_source_diagnostic_manifest.json
+            outputs/srp_page1_page4/eia860_full_source_fields_plant.csv
+            outputs/srp_page1_page4/eia923_selected_plant_fuel_rows.csv
+            outputs/srp_page1_page4/eia860_full_fuel_field_probe.json
           if-no-files-found: warn
