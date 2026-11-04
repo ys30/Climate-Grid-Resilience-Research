@@ -1,0 +1,86 @@
+name: SRP January 2024 EIA860 thermal plant ERA5 temperature intake
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-jan2024-era5-thermal-plant-intake.yml'
+      - 'src/grid_resilience/srp_thermal_plant_weather_sites.py'
+      - 'src/grid_resilience/srp_thermal_era5_temperature_intake.py'
+      - 'tests/test_srp_thermal_plant_weather_sites.py'
+      - 'tests/test_srp_thermal_era5_temperature_intake.py'
+jobs:
+  independent-thermal-site-weather:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and validate source coverage checks
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_thermal_plant_weather_sites.py tests/test_srp_thermal_era5_temperature_intake.py
+      - name: Download official EIA860 operable generator roster and Plant workbook
+        run: |
+          mkdir -p outputs/srp_thermal_era5
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,urllib.request
+          root=Path("outputs/srp_thermal_era5")
+          url="https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip"
+          req=urllib.request.Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"})
+          with urllib.request.urlopen(req,timeout=120) as h:payload=h.read(80_000_001)
+          if not payload or len(payload)>80_000_000:raise ValueError("Bad source bytes")
+          (root/"eia8602024.zip").write_bytes(payload)
+          (root/"official_eia860_sha256.json").write_text(json.dumps({
+              "url":url,"sha256":hashlib.sha256(payload).hexdigest(),"bytes":len(payload)
+          },indent=2)+"\n")
+          PY
+          python -m grid_resilience.eia860_generator_extract \
+            --archive outputs/srp_thermal_era5/eia8602024.zip \
+            --output outputs/srp_thermal_era5
+      - name: Select capacity-ranked gas and coal plant sites with explicit source coverage
+        run: |
+          python -m grid_resilience.srp_thermal_plant_weather_sites \
+            --archive outputs/srp_thermal_era5/eia8602024.zip \
+            --generators outputs/srp_thermal_era5/eia860_2024_operable_generators.csv \
+            --max-plants 8 --output outputs/srp_thermal_era5
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/srp_thermal_era5/srp_thermal_site_coverage_manifest.json")
+          m=json.loads(p.read_text())
+          assert "gas" in m["coverage_by_technology"]
+          assert "coal" in m["coverage_by_technology"]
+          assert not m["annual_plant_ba_is_dispatch_right"]
+          print(json.dumps(m["coverage_by_technology"],indent=2))
+          PY
+      - name: Download real ERA5 744h thermal-site temperature exposure
+        run: |
+          python -m grid_resilience.srp_thermal_era5_temperature_intake \
+            --sites outputs/srp_thermal_era5/srp_thermal_era5_site_selection.csv \
+            --output outputs/srp_thermal_era5
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          root=Path("outputs/srp_thermal_era5")
+          m=json.loads((root/"srp_thermal_era5_manifest.json").read_text())
+          x=pd.read_csv(root/"srp_thermal_era5_plant_hourly.csv")
+          assert len(x)==744*m["selected_site_count"]
+          assert not m["weather_to_generator_derating_calibrated"]
+          print(x.groupby("technology").temperature_2m_c.describe().to_string())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-jan2024-real-era5-thermal-plant-points
+          path: |
+            outputs/srp_thermal_era5/official_eia860_sha256.json
+            outputs/srp_thermal_era5/srp_thermal_site_coverage_manifest.json
+            outputs/srp_thermal_era5/srp_thermal_coordinate_population.csv
+            outputs/srp_thermal_era5/srp_thermal_era5_site_selection.csv
+            outputs/srp_thermal_era5/srp_thermal_era5_plant_hourly.csv
+            outputs/srp_thermal_era5/srp_thermal_era5_technology_hourly.csv
+            outputs/srp_thermal_era5/srp_thermal_era5_manifest.json
+          if-no-files-found: warn
