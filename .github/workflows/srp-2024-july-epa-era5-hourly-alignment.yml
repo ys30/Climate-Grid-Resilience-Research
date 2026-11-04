@@ -1,0 +1,101 @@
+name: SRP July 2024 EPA Part75 MST to ERA5 UTC hourly alignment
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-2024-july-epa-era5-hourly-alignment.yml'
+      - 'src/grid_resilience/srp_epa_era5_july_local_standard_alignment.py'
+      - 'tests/test_srp_epa_era5_july_local_standard_alignment.py'
+jobs:
+  source-verified-hour-matching:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify local-standard hour alignment and timezone boundary tests
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_era5_july_local_standard_alignment.py
+      - name: Retrieve immutable verified July ERA5 weather and original checksum metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/epa_era5_align/era5 outputs/epa_era5_align/provenance
+          gh run download 41773763147 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-july2024-fullfleet-thermal-era5 \
+            --dir outputs/epa_era5_align/era5
+          gh run download 41887521083 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-2024-az-hourly-identity-and-reporting-gate \
+            --dir outputs/epa_era5_align/provenance
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/epa_era5_align")
+          e=json.loads((p/"provenance/target_camd_2024_hourly_admission.json").read_text())
+          assert e["observed_md5"]==e["expected_md5"]
+          assert e["rows_at_target_facilities"]==87840
+          a=pd.read_csv(p/"era5/srp_thermal_era5_plant_hourly.csv")
+          assert len(a)==13*744
+          assert set(a.technology)=={"gas","coal"}
+          PY
+      - name: Retrieve independent preserved source EPA Arizona 2024 hourly file and validate byte MD5
+        run: |
+          python - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+          out=Path("outputs/epa_era5_align")
+          url="https://zenodo.org/records/15059567/files/emissions-hourly-2024-az.csv?download=1"
+          check="7123a5070f652890f46e819dcc890ec0"
+          h=hashlib.md5()
+          with urllib.request.urlopen(urllib.request.Request(url,headers={
+                 "User-Agent":"ClimateGridResilienceResearch/1.0"}),timeout=150) as stream, \
+               (out/"epa_hourly_2024_az.csv").open("wb") as target:
+              while True:
+                  block=stream.read(1024*1024)
+                  if not block:break
+                  h.update(block);target.write(block)
+                  if target.tell()>250_000_000:
+                      raise ValueError("Oversize original EPA archive")
+          if h.hexdigest()!=check:raise ValueError("EPA archive md5 mismatch")
+          (out/"source_retrieval_provenance.json").write_text(json.dumps({
+              "original_url":url,"md5":h.hexdigest(),
+              "original_bytes":(out/"epa_hourly_2024_az.csv").stat().st_size,
+              "EPA_hour_basis":"Part75 local standard time",
+              "target_site_standard_timezone":"MST UTC-07:00"},indent=2)+"\n")
+          PY
+      - name: Join documented local standard EPA hours to actual ERA5 UTC weather
+        run: |
+          python -m grid_resilience.srp_epa_era5_july_local_standard_alignment \
+            --epa-source outputs/epa_era5_align/epa_hourly_2024_az.csv \
+            --era5 outputs/epa_era5_align/era5/srp_thermal_era5_plant_hourly.csv \
+            --output outputs/epa_era5_align
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/epa_era5_align")
+          s=pd.read_csv(p/"epa_era5_july_hourly_alignment_summary.csv")
+          m=json.loads((p/"epa_era5_july_alignment_manifest.json").read_text())
+          assert len(s)==10 and s.epa_local_july_rows.eq(744).all()
+          assert s.matched_utc_july_weather_rows.eq(737).all()
+          assert m["missing_weather_requires_august_source"]
+          assert not m["gross_load_is_eia_net_mw"]
+          assert not m["causal_weather_derating_calibrated"]
+          print(s.to_string(index=False))
+          PY
+          rm outputs/epa_era5_align/epa_hourly_2024_az.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-era5-july-mst-utc-source-alignment
+          path: |
+            outputs/epa_era5_align/source_retrieval_provenance.json
+            outputs/epa_era5_align/epa_source_july_lstd_era5_utc_hourly.csv
+            outputs/epa_era5_align/epa_era5_july_hourly_alignment_summary.csv
+            outputs/epa_era5_align/epa_era5_july_alignment_manifest.json
+          if-no-files-found: warn
