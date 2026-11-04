@@ -9,6 +9,8 @@ on:
       - 'tests/test_srp_ng_nongas_hourly_replay.py'
       - 'src/grid_resilience/srp_assumed_multitech_factorial.py'
       - 'tests/test_srp_assumed_multitech_factorial.py'
+      - 'src/grid_resilience/srp_assumed_multitech_threshold_grid.py'
+      - 'tests/test_srp_assumed_multitech_threshold_grid.py'
       - 'tests/test_srp_ng_plant_budget_pypsa.py'
       - 'tests/test_srp_ng_plant_budget_pypsa_solver.py'
       - 'src/grid_resilience/srp_ng_plant_nameplate_envelope.py'
@@ -26,7 +28,7 @@ jobs:
       - name: Install full scientific optimizer and test both input and real solver
         run: |
           python -m pip install -e '.[dev,model]'
-          python -m pytest -q tests/test_srp_ng_plant_budget_pypsa.py tests/test_srp_ng_plant_budget_pypsa_solver.py tests/test_srp_ng_plant_nameplate_envelope.py tests/test_srp_ng_nongas_hourly_replay.py tests/test_srp_assumed_multitech_factorial.py
+          python -m pytest -q tests/test_srp_ng_plant_budget_pypsa.py tests/test_srp_ng_plant_budget_pypsa_solver.py tests/test_srp_ng_plant_nameplate_envelope.py tests/test_srp_ng_nongas_hourly_replay.py tests/test_srp_assumed_multitech_factorial.py tests/test_srp_assumed_multitech_threshold_grid.py
       - name: Download official EIA source tables and track SHA256
         run: |
           mkdir -p outputs/ng_budget
@@ -149,6 +151,27 @@ jobs:
           assert not m["historical_calibration_certified"]
           print(x)
           PY
+      - name: Run 16-case thermal-wind availability threshold grid (synthetic, noncausal)
+        run: |
+          python -m grid_resilience.srp_assumed_multitech_threshold_grid \
+            --boundary outputs/ng_budget/eia930_hourly_balance_audit.csv \
+            --roster outputs/ng_budget/plant_ba_operable_generator_census.csv \
+            --thermal-factors 0 0.25 0.5 1 \
+            --wind-factors 0 0.5 0.75 1 \
+            --output outputs/ng_budget/assumed_threshold_grid
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/ng_budget/assumed_threshold_grid")
+          x=pd.read_csv(p/"thermal_wind_threshold_grid.csv")
+          m=json.loads((p/"threshold_grid_manifest.json").read_text())
+          assert len(x)==16 and m["grid_points"]==16
+          assert m["uses_observed_generation_as_availability"] is False
+          assert m["uses_independent_meteorology_as_availability"] is False
+          assert m["climate_attribution_certified"] is False
+          assert m["historical_calibration_certified"] is False
+          print(x.to_string(index=False))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -178,4 +201,9 @@ jobs:
             outputs/ng_budget/synthetic_multitech/thermal_derating/shortfall_hourly_mw.csv
             outputs/ng_budget/synthetic_multitech/wind_derating/shortfall_hourly_mw.csv
             outputs/ng_budget/synthetic_multitech/compound/shortfall_hourly_mw.csv
+            outputs/ng_budget/assumed_threshold_grid/threshold_grid_manifest.json
+            outputs/ng_budget/assumed_threshold_grid/thermal_wind_threshold_grid.csv
+            outputs/ng_budget/assumed_threshold_grid/thermal_no_gap_grid_boundary.csv
+            outputs/ng_budget/assumed_threshold_grid/thermal_wind_discrete_interactions.csv
+            outputs/ng_budget/assumed_threshold_grid/nonoverlapping_technology_nameplates.csv
           if-no-files-found: warn
