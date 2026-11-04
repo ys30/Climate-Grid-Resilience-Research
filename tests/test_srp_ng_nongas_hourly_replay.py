@@ -39,7 +39,7 @@ def test_replay_fails_if_required_category_blank():
 
 def test_oil_present_must_not_be_silently_dropped():
     _,_,raw,hours=inputs()
-    raw.loc[0,"Net Generation (MW) from All Petroleum Products"]=1.
+    raw.loc[0,"Net Generation (MW) from All Petroleum Products"]="1"
     with pytest.raises(ValueError,match="Unexpected"):
         prepare_fuel_replay(raw,hours)
 
