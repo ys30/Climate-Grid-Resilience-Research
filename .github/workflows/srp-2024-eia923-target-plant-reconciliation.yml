@@ -1,0 +1,72 @@
+name: SRP EIA923 targeted gas discrepancy original-row inspection
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-2024-eia923-target-plant-reconciliation.yml'
+      - 'src/grid_resilience/srp_eia923_target_plant_reconciliation.py'
+      - 'tests/test_srp_eia923_target_plant_reconciliation.py'
+jobs:
+  inspect-original-eia923:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and validate targeted source code
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_eia923_target_plant_reconciliation.py
+      - name: Download official 2024 EIA923 archive with SHA256 provenance
+        run: |
+          mkdir -p outputs/srp_target
+          python - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+          root=Path("outputs/srp_target")
+          url="https://www.eia.gov/electricity/data/eia923/archive/xls/f923_2024.zip"
+          with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"}),timeout=120) as h:
+              blob=h.read(150_000_001)
+          if not blob or len(blob)>150_000_000:raise ValueError("Invalid original archive")
+          (root/"f923_2024.zip").write_bytes(blob)
+          (root/"source_sha256.json").write_text(json.dumps({
+              "url":url,"sha256":hashlib.sha256(blob).hexdigest(),"bytes":len(blob)
+          },indent=2)+"\n")
+          PY
+      - name: Audit exact Page1 fuel rows vs Page4 generator identities for source discrepancy plants
+        run: |
+          python -m grid_resilience.srp_eia923_target_plant_reconciliation \
+            --archive outputs/srp_target/f923_2024.zip \
+            --output outputs/srp_target
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/srp_target")
+          x=pd.read_csv(p/"target_plant_reconciliation.csv",dtype={"plant_id":"string"})
+          m=json.loads((p/"target_plant_reconciliation_manifest.json").read_text())
+          assert len(x)==6 and set(x.plant_id)=={"141","55129","147"}
+          expected={
+             ("141","2024-07"):22050.0,
+             ("55129","2024-07"):1323.0,
+             ("147","2024-07"):40.474,
+             ("141","2024-01"):374.0,
+             ("55129","2024-01"):504.0,
+             ("147","2024-01"):184.304}
+          for r in x.itertuples(index=False):
+              assert abs(r.p1_minus_p4_mwh-expected[(r.plant_id,r.period)])<.01
+          assert not m["monthly_difference_is_weather_derating"]
+          print(x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-target-plant-eia923-original-rows
+          path: |
+            outputs/srp_target/source_sha256.json
+            outputs/srp_target/target_page1_source_rows.csv
+            outputs/srp_target/target_page4_source_rows.csv
+            outputs/srp_target/target_plant_reconciliation.csv
+            outputs/srp_target/target_plant_reconciliation_manifest.json
+          if-no-files-found: warn
