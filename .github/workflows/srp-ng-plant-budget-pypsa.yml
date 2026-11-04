@@ -101,6 +101,7 @@ jobs:
           assert (x.max_hourly_bus_residual_mw<1e-3).all()
           assert x.loc["unlimited_nameplate","modeled_portfolio_gap_mwh"] <= x.loc["1x_page1","modeled_portfolio_gap_mwh"]+1e-2
           assert x.loc["1x_page1","modeled_portfolio_gap_mwh"] <= x.loc["0.75x_page1","modeled_portfolio_gap_mwh"]+1e-2
+          assert x.loc["0.75x_page1","artificial_portfolio_gap_mwh"]<=x.loc["0.5x_page1","artificial_portfolio_gap_mwh"]+0.01
           assert not x.historical_calibration_certified.any()
           assert not x.portfolio_gap_is_real_unserved_energy.any()
           print(x[["scenario_gas_dispatch_mwh","modeled_portfolio_gap_mwh","max_hourly_bus_residual_mw"]])
@@ -117,7 +118,7 @@ jobs:
           from pathlib import Path
           root=Path("outputs/ng_budget")
           x=pd.read_csv(root/"ng_budget_nongas_replay_comparison.csv").set_index("scenario")
-          assert set(x.index)=={"unlimited","1x_page1","0.75x_page1"}
+          assert set(x.index)=={"unlimited","1x_page1","0.75x_page1","0.5x_page1"}
           assert (x.max_hourly_bus_residual_mw<1e-3).all()
           assert x.loc["unlimited","artificial_portfolio_gap_mwh"]<=x.loc["1x_page1","artificial_portfolio_gap_mwh"]+0.01
           assert x.loc["1x_page1","artificial_portfolio_gap_mwh"]<=x.loc["0.75x_page1","artificial_portfolio_gap_mwh"]+0.01
@@ -145,4 +146,5 @@ jobs:
             outputs/ng_budget/ng_nongas_replay_unlimited_hourly.csv
             outputs/ng_budget/ng_nongas_replay_1x_page1_hourly.csv
             outputs/ng_budget/ng_nongas_replay_0.75x_page1_hourly.csv
+            outputs/ng_budget/ng_nongas_replay_0.5x_page1_hourly.csv
           if-no-files-found: warn
