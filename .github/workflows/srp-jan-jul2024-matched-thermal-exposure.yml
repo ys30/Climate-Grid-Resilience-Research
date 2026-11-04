@@ -8,6 +8,8 @@ on:
       - 'tests/test_srp_matched_thermal_seasonal_exposure.py'
       - 'src/grid_resilience/srp_thermal_heat_episode_audit.py'
       - 'tests/test_srp_thermal_heat_episode_audit.py'
+      - 'src/grid_resilience/srp_thermal_coincident_site_heat.py'
+      - 'tests/test_srp_thermal_coincident_site_heat.py'
 jobs:
   same-plant-seasonal-weather:
     runs-on: ubuntu-24.04
@@ -23,7 +25,7 @@ jobs:
       - name: Test matched-source calculations
         run: |
           python -m pip install -e '.[dev]'
-          python -m pytest -q tests/test_srp_matched_thermal_seasonal_exposure.py tests/test_srp_thermal_heat_episode_audit.py
+          python -m pytest -q tests/test_srp_matched_thermal_seasonal_exposure.py tests/test_srp_thermal_heat_episode_audit.py tests/test_srp_thermal_coincident_site_heat.py
       - name: Retrieve immutable previously successful January and July source artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -87,6 +89,25 @@ jobs:
               assert row.hot_hours==expected
           print(x.to_string(index=False))
           PY
+      - name: Measure coincident site-level thermal temperature exposure
+        run: |
+          python -m grid_resilience.srp_thermal_coincident_site_heat \
+            --plant-hours outputs/seasonal/july/srp_thermal_era5_plant_hourly.csv \
+            --output outputs/seasonal/matched
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          root=Path("outputs/seasonal/matched")
+          s=pd.read_csv(root/"site_coincident_heat_summary.csv")
+          m=json.loads((root/"site_coincident_heat_manifest.json").read_text())
+          assert len(s)==8
+          assert s.total_month_hours.eq(744).all()
+          assert abs(m["technology_source_nameplate_mw"]["gas"]-8550.1)<1e-6
+          assert abs(m["technology_source_nameplate_mw"]["coal"]-821.8)<1e-6
+          assert not m["generator_heat_derating_calibrated"]
+          assert not m["actual_outage_or_eens_inferred"]
+          print(s.to_string(index=False))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -100,4 +121,8 @@ jobs:
             outputs/seasonal/matched/heat_exposure_episodes.csv
             outputs/seasonal/matched/heat_exposure_episode_summary.csv
             outputs/seasonal/matched/heat_exposure_episode_manifest.json
+            outputs/seasonal/matched/site_coincident_heat_hourly.csv
+            outputs/seasonal/matched/site_coincident_heat_episodes.csv
+            outputs/seasonal/matched/site_coincident_heat_summary.csv
+            outputs/seasonal/matched/site_coincident_heat_manifest.json
           if-no-files-found: warn
