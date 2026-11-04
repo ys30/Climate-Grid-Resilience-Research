@@ -6,6 +6,8 @@ on:
       - '.github/workflows/srp-jan-jul2024-matched-thermal-exposure.yml'
       - 'src/grid_resilience/srp_matched_thermal_seasonal_exposure.py'
       - 'tests/test_srp_matched_thermal_seasonal_exposure.py'
+      - 'src/grid_resilience/srp_thermal_heat_episode_audit.py'
+      - 'tests/test_srp_thermal_heat_episode_audit.py'
 jobs:
   same-plant-seasonal-weather:
     runs-on: ubuntu-24.04
@@ -21,7 +23,7 @@ jobs:
       - name: Test matched-source calculations
         run: |
           python -m pip install -e '.[dev]'
-          python -m pytest -q tests/test_srp_matched_thermal_seasonal_exposure.py
+          python -m pytest -q tests/test_srp_matched_thermal_seasonal_exposure.py tests/test_srp_thermal_heat_episode_audit.py
       - name: Retrieve immutable previously successful January and July source artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -64,6 +66,27 @@ jobs:
           assert not m["historical_reliability_calibrated"]
           print(a.to_string(index=False))
           PY
+      - name: Quantify contiguous ERA5 heat exposure episodes, never outages
+        run: |
+          python -m grid_resilience.srp_thermal_heat_episode_audit \
+            --hourly outputs/seasonal/matched/matched_seasonal_technology_hourly.csv \
+            --output outputs/seasonal/matched
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          p=Path("outputs/seasonal/matched")
+          x=pd.read_csv(p/"heat_exposure_episode_summary.csv")
+          manifest=json.loads((p/"heat_exposure_episode_manifest.json").read_text())
+          assert len(x)==8
+          assert x.coverage_hours.eq(744).all()
+          assert not manifest["generator_derating_or_outage_inferred"]
+          summary=pd.read_csv(p/"matched_seasonal_technology_summary.csv")
+          for row in x.itertuples(index=False):
+              m=summary.loc[(summary.month==row.month)&(summary.technology==row.technology)].iloc[0]
+              expected=m.weighted_fleet_hours_ge_35_c if row.threshold_c==35 else m.weighted_fleet_hours_ge_40_c
+              assert row.hot_hours==expected
+          print(x.to_string(index=False))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -74,4 +97,7 @@ jobs:
             outputs/seasonal/matched/matched_seasonal_plant_summary.csv
             outputs/seasonal/matched/matched_seasonal_mean_differences.csv
             outputs/seasonal/matched/matched_seasonal_manifest.json
+            outputs/seasonal/matched/heat_exposure_episodes.csv
+            outputs/seasonal/matched/heat_exposure_episode_summary.csv
+            outputs/seasonal/matched/heat_exposure_episode_manifest.json
           if-no-files-found: warn
