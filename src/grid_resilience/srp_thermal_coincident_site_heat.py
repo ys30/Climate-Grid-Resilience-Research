@@ -36,7 +36,7 @@ def analyze(plant_hours,temperature_thresholds=TEMP_THRESHOLDS,
         raise ValueError("Invalid source plant weather range")
     if x.duplicated(["timestamp_utc","technology","plant_id"]).any():
         raise ValueError("Duplicate site-hour")
-    months={pd.Timestamp(t).strftime("%Y-%m") for t in x.timestamp_utc.dt.to_period("M")}
+    months=set(x.timestamp_utc.dt.strftime("%Y-%m").unique().tolist())
     if len(months)!=1:
         raise ValueError("Expected precisely one complete source month")
     ym=next(iter(months))
