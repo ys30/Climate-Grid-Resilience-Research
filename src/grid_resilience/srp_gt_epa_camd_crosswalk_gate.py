@@ -106,6 +106,32 @@ def analyze(inventory,crosswalk):
     return table,counts,all_eia,manifest
 
 
+
+def site_level_context(crosswalk):
+    """Preserve all source plant-row CAMD mapping including non-target EIA units."""
+    needed={"EIA_PLANT_ID","EIA_GENERATOR_ID","CAMD_PLANT_ID",
+            "CAMD_UNIT_ID","EIA_UNIT_TYPE","MATCH_TYPE_GEN","MATCH_TYPE_BOILER"}
+    if not needed.issubset(crosswalk):
+        raise ValueError("Missing EPA site-level source relationship columns")
+    c=crosswalk.copy()
+    c["EIA_PLANT_ID"]=normalize_ids(c.EIA_PLANT_ID)
+    c=c.loc[c.EIA_PLANT_ID.isin(TARGETS)].copy()
+    if c.empty:
+        raise ValueError("No site-level crosswalk records")
+    keys=["EIA_PLANT_ID","EIA_GENERATOR_ID","EIA_UNIT_TYPE",
+          "CAMD_PLANT_ID","CAMD_UNIT_ID","CAMD_GENERATOR_ID",
+          "MATCH_TYPE_GEN","MATCH_TYPE_BOILER"]
+    if "CAMD_GENERATOR_ID" not in c:
+        raise ValueError("Missing source CAMD generator identity")
+    out=c[keys].copy()
+    for key in keys:
+        out[key]=out[key].astype("string").str.strip()
+    out["has_camd_unit_id"]=out.CAMD_UNIT_ID.notna()&out.CAMD_UNIT_ID.ne("")
+    out["has_eia_generator_id"]=out.EIA_GENERATOR_ID.notna()&out.EIA_GENERATOR_ID.ne("")
+    out=out.sort_values(["EIA_PLANT_ID","EIA_GENERATOR_ID","CAMD_UNIT_ID"])
+    return out
+
+
 def main():
     p=argparse.ArgumentParser()
     for key in ("inventory","crosswalk","output"):
@@ -115,6 +141,9 @@ def main():
     table,counts,relationships,manifest=analyze(
         pd.read_csv(a.inventory,dtype={"plant_id":"string","generator_id":"string"}),
         pd.read_csv(a.crosswalk,dtype="string",low_memory=False))
+    original_crosswalk=pd.read_csv(a.crosswalk,dtype="string",low_memory=False)
+    site_level_context(original_crosswalk).to_csv(
+        root/"target_plant_epa_all_source_relationships.csv",index=False)
     table.to_csv(root/"gt_candidate_epa_unit_relationships.csv",index=False)
     counts.to_csv(root/"gt_candidate_epa_coverage_summary.csv",index=False)
     relationships.to_csv(root/"gt_candidate_epa_raw_relationship_rows.csv",index=False)
