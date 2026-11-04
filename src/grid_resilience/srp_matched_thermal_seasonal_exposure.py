@@ -65,7 +65,11 @@ def compare(january,july):
                                "nameplate_mw":float(f.selected_nameplate_mw.iloc[0]),
                                "mean_temperature_c":float(f.temperature_2m_c.mean()),
                                "hours_ge_35_c":int((f.temperature_2m_c>=35).sum()),
-                               "hours_ge_40_c":int((f.temperature_2m_c>=40).sum())})
+                               "hours_ge_40_c":int((f.temperature_2m_c>=40).sum()),
+                               "degree_hours_above_35_c":float(
+                                   (f.temperature_2m_c-35).clip(lower=0).sum()),
+                               "degree_hours_above_40_c":float(
+                                   (f.temperature_2m_c-40).clip(lower=0).sum())})
         weighted=d.assign(weighted_c=d.temperature_2m_c*d.selected_nameplate_mw)
         agg=weighted.groupby(["technology","timestamp_utc"],as_index=False).agg(
             weighted_c=("weighted_c","sum"),nameplate_mw=("selected_nameplate_mw","sum"))
@@ -84,7 +88,30 @@ def compare(january,july):
             "capacity_weighted_min_hourly_temp_c":float(temps.min()),
             "weighted_fleet_hours_ge_35_c":int((temps>=35).sum()),
             "weighted_fleet_hours_ge_40_c":int((temps>=40).sum())})
-    table=pd.DataFrame(summary).sort_values(["technology","month"])
+    # Site-level exposed nameplate-MW-hours and temperature degree-hours are
+    # weather *exposure denominators*, never assumed lost MW or energy.
+    plant_table=pd.DataFrame(plant_rows)
+    exposures=[]
+    for (month,tech),plants in plant_table.groupby(["month","technology"]):
+        hours=744
+        cap=float(plants.nameplate_mw.sum())
+        record={"month":month,"technology":tech,
+                "site_exposed_nameplate_mwh_ge_35_c":float(
+                    (plants.nameplate_mw*plants.hours_ge_35_c).sum()),
+                "site_exposed_nameplate_mwh_ge_40_c":float(
+                    (plants.nameplate_mw*plants.hours_ge_40_c).sum()),
+                "site_nameplate_weighted_degree_hours_above_35_c":float(
+                    (plants.nameplate_mw*plants.degree_hours_above_35_c).sum()/cap),
+                "site_nameplate_weighted_degree_hours_above_40_c":float(
+                    (plants.nameplate_mw*plants.degree_hours_above_40_c).sum()/cap),
+                "site_capacity_hour_fraction_ge_35_c":float(
+                    (plants.nameplate_mw*plants.hours_ge_35_c).sum()/(cap*hours)),
+                "site_capacity_hour_fraction_ge_40_c":float(
+                    (plants.nameplate_mw*plants.hours_ge_40_c).sum()/(cap*hours))}
+        exposures.append(record)
+    table=pd.DataFrame(summary).merge(pd.DataFrame(exposures),
+        on=["month","technology"],validate="one_to_one").sort_values(
+        ["technology","month"])
     pairs=table.pivot(index="technology",columns="month",values="capacity_weighted_mean_temp_c")
     differences=(pairs.July-pairs.January).rename("july_minus_january_mean_temp_c").reset_index()
     manifest={"year":2024,"source_months":["2024-01","2024-07"],
@@ -98,7 +125,9 @@ def compare(january,july):
         "thermal_derating_calibrated":False,
         "historical_reliability_calibrated":False,
         "climate_change_trend_estimated":False}
-    return table,hourly,pd.DataFrame(plant_rows),differences,manifest
+    manifest["plant_level_exposure_not_unit_outage_or_energy_loss"]=True
+    manifest["site_temperature_degree_hour_thresholds_c"]=[35,40]
+    return table,hourly,plant_table,differences,manifest
 
 
 def main():
