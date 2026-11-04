@@ -51,7 +51,7 @@ def test_small_four_cell_pypsa_grid_has_valid_monotonicity(tmp_path):
     pytest.importorskip("highspy")
     hours=pd.date_range("2024-01-01",periods=744,freq="h",tz="UTC")
     boundary=pd.DataFrame({"timestamp":hours,"demand_mw":10.,
-                           "interchange_mw":0.})
+                           "generation_mw":10.,"interchange_mw":0.})
     roster=pd.DataFrame({
         "plant_id":["1","2","3"],"generator_id":["A","B","C"],
         "plant_reported_ba":["SRP"]*3,
