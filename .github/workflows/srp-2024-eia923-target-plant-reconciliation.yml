@@ -57,6 +57,9 @@ jobs:
           for r in x.itertuples(index=False):
               assert abs(r.p1_minus_p4_mwh-expected[(r.plant_id,r.period)])<.01
           assert not m["monthly_difference_is_weather_derating"]
+          assert m["all_selected_differences_accounted_for_by_ng_gt_rows"]
+          assert x.difference_exactly_page1_only_gt.all()
+          assert x.non_gt_source_difference_mwh.abs().lt(1e-6).all()
           print(x.to_string(index=False))
           PY
       - uses: actions/upload-artifact@v4
