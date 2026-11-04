@@ -30,7 +30,7 @@ def inspect(archive, *, plants=TARGETS):
             expected={0:"Plant Id",13:"Reported Prime Mover",14:"Reported Fuel Type Code",
                       16:"Balancing Authority Code",79:"Netgen January",85:"Netgen July",96:"YEAR"}
             for i,label in expected.items():
-                if str(ah[i]).strip()!=label:raise ValueError("Page1 schema changed")
+                if " ".join(str(ah[i] or "").split())!=label:\n                    raise ValueError(f"Page1 schema changed at {i}: {ah[i]!r}")
             for rno,row in enumerate(a.iter_rows(min_row=7,values_only=True),7):
                 if row[0] is None:continue
                 pid=str(row[0]).strip().lstrip("0") or "0"
