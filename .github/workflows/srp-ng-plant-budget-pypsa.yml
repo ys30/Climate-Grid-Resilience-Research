@@ -11,6 +11,8 @@ on:
       - 'tests/test_srp_assumed_multitech_factorial.py'
       - 'src/grid_resilience/srp_assumed_multitech_threshold_grid.py'
       - 'tests/test_srp_assumed_multitech_threshold_grid.py'
+      - 'src/grid_resilience/srp_fossil_nuclear_decoupled_grid.py'
+      - 'tests/test_srp_fossil_nuclear_decoupled_grid.py'
       - 'tests/test_srp_ng_plant_budget_pypsa.py'
       - 'tests/test_srp_ng_plant_budget_pypsa_solver.py'
       - 'src/grid_resilience/srp_ng_plant_nameplate_envelope.py'
@@ -28,7 +30,7 @@ jobs:
       - name: Install full scientific optimizer and test both input and real solver
         run: |
           python -m pip install -e '.[dev,model]'
-          python -m pytest -q tests/test_srp_ng_plant_budget_pypsa.py tests/test_srp_ng_plant_budget_pypsa_solver.py tests/test_srp_ng_plant_nameplate_envelope.py tests/test_srp_ng_nongas_hourly_replay.py tests/test_srp_assumed_multitech_factorial.py tests/test_srp_assumed_multitech_threshold_grid.py
+          python -m pytest -q tests/test_srp_ng_plant_budget_pypsa.py tests/test_srp_ng_plant_budget_pypsa_solver.py tests/test_srp_ng_plant_nameplate_envelope.py tests/test_srp_ng_nongas_hourly_replay.py tests/test_srp_assumed_multitech_factorial.py tests/test_srp_assumed_multitech_threshold_grid.py tests/test_srp_fossil_nuclear_decoupled_grid.py
       - name: Download official EIA source tables and track SHA256
         run: |
           mkdir -p outputs/ng_budget
@@ -172,6 +174,26 @@ jobs:
           assert m["historical_calibration_certified"] is False
           print(x.to_string(index=False))
           PY
+      - name: Solve independent fossil versus nuclear 20-case SRP sensitivity grid
+        run: |
+          python -m grid_resilience.srp_fossil_nuclear_decoupled_grid \
+            --boundary outputs/ng_budget/eia930_hourly_balance_audit.csv \
+            --roster outputs/ng_budget/plant_ba_operable_generator_census.csv \
+            --output outputs/ng_budget/decoupled_grid
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          root=Path("outputs/ng_budget/decoupled_grid")
+          x=pd.read_csv(root/"decoupled_factorial_grid.csv")
+          b=pd.read_csv(root/"decoupled_threshold_brackets.csv")
+          m=json.loads((root/"decoupled_grid_manifest.json").read_text())
+          assert len(x)==20 and len(b)==4
+          assert m["grid_scenarios"]==20 and m["availability_monotonicity_verified"]
+          assert not m["historical_calibration_certified"]
+          assert not m["eia930_generation_replayed"]
+          print(x.to_string(index=False))
+          print(b.to_string(index=False))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -206,4 +228,8 @@ jobs:
             outputs/ng_budget/assumed_threshold_grid/thermal_no_gap_grid_boundary.csv
             outputs/ng_budget/assumed_threshold_grid/thermal_wind_discrete_interactions.csv
             outputs/ng_budget/assumed_threshold_grid/nonoverlapping_technology_nameplates.csv
+            outputs/ng_budget/decoupled_grid/decoupled_factorial_grid.csv
+            outputs/ng_budget/decoupled_grid/decoupled_threshold_brackets.csv
+            outputs/ng_budget/decoupled_grid/decoupled_grid_manifest.json
+            outputs/ng_budget/decoupled_grid/generator_class_nameplates.csv
           if-no-files-found: warn
