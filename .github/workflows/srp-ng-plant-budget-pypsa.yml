@@ -15,6 +15,8 @@ on:
       - 'tests/test_srp_fossil_nuclear_decoupled_grid.py'
       - 'src/grid_resilience/srp_gas_coal_nuclear_grid.py'
       - 'tests/test_srp_gas_coal_nuclear_grid.py'
+      - 'src/grid_resilience/srp_multitech_ba_coverage_gate.py'
+      - 'tests/test_srp_multitech_ba_coverage_gate.py'
       - 'tests/test_srp_ng_plant_budget_pypsa.py'
       - 'tests/test_srp_ng_plant_budget_pypsa_solver.py'
       - 'src/grid_resilience/srp_ng_plant_nameplate_envelope.py'
@@ -32,7 +34,7 @@ jobs:
       - name: Install full scientific optimizer and test both input and real solver
         run: |
           python -m pip install -e '.[dev,model]'
-          python -m pytest -q tests/test_srp_ng_plant_budget_pypsa.py tests/test_srp_ng_plant_budget_pypsa_solver.py tests/test_srp_ng_plant_nameplate_envelope.py tests/test_srp_ng_nongas_hourly_replay.py tests/test_srp_assumed_multitech_factorial.py tests/test_srp_assumed_multitech_threshold_grid.py tests/test_srp_fossil_nuclear_decoupled_grid.py tests/test_srp_gas_coal_nuclear_grid.py
+          python -m pytest -q tests/test_srp_ng_plant_budget_pypsa.py tests/test_srp_ng_plant_budget_pypsa_solver.py tests/test_srp_ng_plant_nameplate_envelope.py tests/test_srp_ng_nongas_hourly_replay.py tests/test_srp_assumed_multitech_factorial.py tests/test_srp_assumed_multitech_threshold_grid.py tests/test_srp_fossil_nuclear_decoupled_grid.py tests/test_srp_gas_coal_nuclear_grid.py tests/test_srp_multitech_ba_coverage_gate.py
       - name: Download official EIA source tables and track SHA256
         run: |
           mkdir -p outputs/ng_budget
@@ -215,6 +217,24 @@ jobs:
           assert not m["historical_eia930_generation_replayed"]
           print(m)
           PY
+      - name: Audit annual Plant BA vs actual January Page4 generator identities and fuel classes
+        run: |
+          python -m grid_resilience.srp_multitech_ba_coverage_gate \
+            --annual outputs/ng_budget/plant_ba_operable_generator_census.csv \
+            --page4 outputs/ng_budget/eia923_generator_month_net_mwh.csv \
+            --output outputs/ng_budget/plant_ba_scope_gate
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          root=Path("outputs/ng_budget/plant_ba_scope_gate")
+          m=json.loads((root/"plant_ba_coverage_manifest.json").read_text())
+          table=pd.read_csv(root/"plant_ba_technology_coverage.csv")
+          assert int(table.eia860_generator_count.sum())==m["annual_plant_ba_operable_generator_count"]
+          assert abs(m["page4_total_reported_ba_signed_mwh"]-m["page4_matched_annual_signed_mwh"]-m["page4_outside_annual_plant_ba_signed_mwh"])<1e-5
+          assert not m["ba_ownership_calibrated"]
+          assert not m["page4_absence_is_evidence_of_shutdown"]
+          print(m)
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -257,4 +277,8 @@ jobs:
             outputs/ng_budget/gas_coal_grid/conditional_gas_threshold_brackets.csv
             outputs/ng_budget/gas_coal_grid/gas_coal_grid_manifest.json
             outputs/ng_budget/gas_coal_grid/technology_nameplates.csv
+            outputs/ng_budget/plant_ba_scope_gate/plant_ba_generator_coverage_rows.csv
+            outputs/ng_budget/plant_ba_scope_gate/plant_ba_technology_coverage.csv
+            outputs/ng_budget/plant_ba_scope_gate/page4_outside_annual_plant_ba.csv
+            outputs/ng_budget/plant_ba_scope_gate/plant_ba_coverage_manifest.json
           if-no-files-found: warn
