@@ -1,0 +1,42 @@
+name: SRP EPA production facility identity and emissions admission
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-live-facility-admission.yml'
+      - 'src/grid_resilience/srp_epa_live_facility_admission.py'
+      - 'tests/test_srp_epa_live_facility_admission.py'
+jobs:
+  conservative-epa-facility-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test production EPA source admission and 2024 caution flags
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_live_facility_admission.py
+      - name: Probe documented EPA production facility endpoint for target ORIS IDs
+        run: |
+          python -m grid_resilience.srp_epa_live_facility_admission \
+            --output outputs/srp_epa_facility_admission
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/srp_epa_facility_admission/epa_live_facility_admission_manifest.json")
+          m=json.loads(p.read_text())
+          assert len(m["results"])==3
+          assert not m["2024_ecmps_monitoring_plan_admitted"]
+          assert not m["measured_hourly_electric_net_mw_admitted"]
+          assert not m["high_temperature_derating_calibrated"]
+          print("Production API status and identity verification retained; no unsupported 2024 operating-data claim")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-epa-production-facility-admission
+          path: outputs/srp_epa_facility_admission/epa_live_facility_admission_manifest.json
+          if-no-files-found: warn
