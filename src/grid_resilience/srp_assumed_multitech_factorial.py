@@ -29,7 +29,7 @@ SCENARIOS = {
 
 def capacity_from_annual_roster(roster, *, ba="SRP"):
     required={"plant_id","generator_id","plant_reported_ba",
-              "energy_source_1","nameplate_capacity_mw"}
+              "energy_source_1","prime_mover","nameplate_capacity_mw"}
     if not required.issubset(roster):
         raise ValueError("Missing official EIA860 Plant BA/identity/fuel/capacity")
     r=roster.copy()
@@ -45,7 +45,16 @@ def capacity_from_annual_roster(roster, *, ba="SRP"):
     if not np.isfinite(r.nameplate_capacity_mw.to_numpy(float)).all() or r.nameplate_capacity_mw.lt(0).any():
         raise ValueError("Invalid official nameplate")
     r["primary_fuel"]=r.energy_source_1.astype("string").str.strip()
+    r["prime_mover"]=r.prime_mover.astype("string").str.strip()
+    # Never turn pumped-storage PS (WAT), battery BA, or unreviewed mover/fuel
+    # combinations into free dispatchable hydro or another supply technology.
+    mover_rules={"gas":{"GT","CT","CA","CS","ST"},
+                 "coal":{"ST"},"nuclear":{"ST"},
+                 "hydro":{"HY"},"solar":{"PV"},"wind":{"WT"}}
     r["technology"]=r.primary_fuel.map(PRIMARY_FUEL)
+    valid=r.apply(lambda row: row.technology in mover_rules and
+                  row.prime_mover in mover_rules[row.technology],axis=1)
+    r.loc[~valid,"technology"]=pd.NA
     included=r.loc[r.technology.notna()].copy()
     excluded=r.loc[r.technology.isna()].copy()
     if included.empty:raise ValueError("No explicitly classifiable technologies")
@@ -64,6 +73,8 @@ def capacity_from_annual_roster(roster, *, ba="SRP"):
             "assigned_nameplate_mw":float(included.nameplate_capacity_mw.sum()),
             "excluded_nameplate_mw":float(excluded.nameplate_capacity_mw.sum()),
             "fuel_classification_is_primary_source_only":True,
+            "prime_mover_classification_gate_applied":True,
+            "pumped_storage_and_battery_excluded":True,
             "multi_fuel_dispatch_verified":False,
             "storage_soc_modeled":False,
             "ba_physical_dispatch_rights_verified":False,
