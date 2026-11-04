@@ -73,3 +73,16 @@ def test_july_2024_hour_boundaries_and_weighted_output(tmp_path):
 def test_invalid_month_rejected_before_download(tmp_path):
     with pytest.raises(ValueError,match="month"):
         sample(sites(),tmp_path,year=2024,month=13,fetch=lambda _:response())
+
+
+def test_transient_era5_transport_failure_retries_without_losing_hours(tmp_path):
+    from urllib.error import URLError
+    calls={"n":0}
+    def unstable(_url):
+        calls["n"]+=1
+        if calls["n"]==1:
+            raise URLError("temporary SSL handshake timeout")
+        return response()
+    m=sample(sites(),tmp_path,fetch=unstable)
+    assert calls["n"]==3
+    assert m["selected_site_hours"]==1488
