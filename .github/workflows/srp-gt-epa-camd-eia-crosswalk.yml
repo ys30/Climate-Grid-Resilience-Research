@@ -72,6 +72,8 @@ jobs:
           x=pd.read_csv(p/"gt_candidate_epa_unit_relationships.csv",dtype={"plant_id":"string"})
           m=json.loads((p/"epa_crosswalk_data_admission_manifest.json").read_text())
           assert len(x)==10 and set(x.plant_id)=={"141","55129","147"}
+          site=pd.read_csv(p/"target_plant_epa_all_source_relationships.csv",dtype="string")
+          assert len(site)==9 and set(site.EIA_PLANT_ID)=={"141","55129","147"}
           assert not m["hourly_operational_data_downloaded"]
           assert not m["temperature_derating_calibrated"]
           assert not x.epa_hourly_electrical_net_mw_validated.any()
@@ -83,6 +85,7 @@ jobs:
           name: srp-gt-epa-camd-eia-unit-crosswalk
           path: |
             outputs/srp_epa_camd/source_provenance.json
+            outputs/srp_epa_camd/target_plant_epa_all_source_relationships.csv
             outputs/srp_epa_camd/gt_candidate_epa_unit_relationships.csv
             outputs/srp_epa_camd/gt_candidate_epa_coverage_summary.csv
             outputs/srp_epa_camd/gt_candidate_epa_raw_relationship_rows.csv
