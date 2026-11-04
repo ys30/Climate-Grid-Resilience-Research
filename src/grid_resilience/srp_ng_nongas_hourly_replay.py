@@ -97,7 +97,15 @@ def solve(boundary,raw,plant_envelope,*,year=2024,month=1,budget_scale=None):
     ng=gen[plantcols].sum(axis=1)
     gap=gen.portfolio_gap
     disposal=-gen.surplus_disposal
-    check=ng+nongas_in+imports+gap-b.demand_mw-exports-nongas_abs-disposal
+    # PyPSA snapshots are timezone-naive; source EIA timestamps are UTC aware.
+    # Use aligned hourly arrays, never add pandas Series across mixed datetime indexes.
+    check=pd.Series(
+        ng.to_numpy()+nongas_in.to_numpy()+imports.to_numpy()+gap.to_numpy()
+        -b.demand_mw.to_numpy()-exports.to_numpy()
+        -nongas_abs.to_numpy()-disposal.to_numpy(),
+        index=n.snapshots,dtype=float)
+    if not np.isfinite(check.to_numpy()).all():
+        raise ValueError("Nonfinite hourly bus balance")
     if float(check.abs().max())>1e-3:
         raise ValueError("Hourly bus balance failed")
     for r in plants.itertuples(index=False):
