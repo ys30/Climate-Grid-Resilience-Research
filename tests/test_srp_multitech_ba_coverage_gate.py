@@ -62,4 +62,5 @@ def test_absent_generator_month_does_not_enter_source_generation():
     coal=by.loc[by.technology.eq("coal")].iloc[0]
     assert coal.not_in_page4_generator_count==1
     assert coal.page4_matched_generator_count==0
+    assert pd.isna(coal.page4_matching_signed_mwh)
     assert m["generation_month_missing_must_not_be_imputed_zero"]
