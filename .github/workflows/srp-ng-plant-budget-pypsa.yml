@@ -101,7 +101,6 @@ jobs:
           assert (x.max_hourly_bus_residual_mw<1e-3).all()
           assert x.loc["unlimited_nameplate","modeled_portfolio_gap_mwh"] <= x.loc["1x_page1","modeled_portfolio_gap_mwh"]+1e-2
           assert x.loc["1x_page1","modeled_portfolio_gap_mwh"] <= x.loc["0.75x_page1","modeled_portfolio_gap_mwh"]+1e-2
-          assert x.loc["0.75x_page1","artificial_portfolio_gap_mwh"]<=x.loc["0.5x_page1","artificial_portfolio_gap_mwh"]+0.01
           assert not x.historical_calibration_certified.any()
           assert not x.portfolio_gap_is_real_unserved_energy.any()
           print(x[["scenario_gas_dispatch_mwh","modeled_portfolio_gap_mwh","max_hourly_bus_residual_mw"]])
@@ -122,6 +121,7 @@ jobs:
           assert (x.max_hourly_bus_residual_mw<1e-3).all()
           assert x.loc["unlimited","artificial_portfolio_gap_mwh"]<=x.loc["1x_page1","artificial_portfolio_gap_mwh"]+0.01
           assert x.loc["1x_page1","artificial_portfolio_gap_mwh"]<=x.loc["0.75x_page1","artificial_portfolio_gap_mwh"]+0.01
+          assert x.loc["0.75x_page1","artificial_portfolio_gap_mwh"]<=x.loc["0.5x_page1","artificial_portfolio_gap_mwh"]+0.01
           assert not x.historical_calibration_certified.any()
           print(x[["modeled_ng_generation_mwh","fixed_non_gas_replay_mwh","artificial_portfolio_gap_mwh"]])
           PY
