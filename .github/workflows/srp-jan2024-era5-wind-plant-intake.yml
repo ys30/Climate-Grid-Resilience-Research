@@ -6,6 +6,8 @@ on:
       - '.github/workflows/srp-jan2024-era5-wind-plant-intake.yml'
       - 'src/grid_resilience/srp_era5_wind_plant_intake.py'
       - 'tests/test_srp_era5_wind_plant_intake.py'
+      - 'src/grid_resilience/srp_era5_wind_curve_sensitivity.py'
+      - 'tests/test_srp_era5_wind_curve_sensitivity.py'
       - 'src/grid_resilience/eia860_wind_plant_locations.py'
 jobs:
   srp-independent-point-weather:
@@ -19,7 +21,7 @@ jobs:
       - name: Install scientific parsers and validate weather intake
         run: |
           python -m pip install -e '.[dev]'
-          python -m pytest -q tests/test_srp_era5_wind_plant_intake.py
+          python -m pytest -q tests/test_srp_era5_wind_plant_intake.py tests/test_srp_era5_wind_curve_sensitivity.py
       - name: Download source EIA-860 2024 and record SHA256
         run: |
           mkdir -p outputs/srp_era5
@@ -76,6 +78,24 @@ jobs:
           print(hourly[["fleet_capacity_weighted_wind_speed_100m_ms",
                         "fleet_capacity_weighted_temperature_2m_c"]].describe().to_string())
           PY
+      - name: Apply three non-calibrated wind power curves to individual ERA5 plant-hours
+        run: |
+          python -m grid_resilience.srp_era5_wind_curve_sensitivity \
+            --weather outputs/srp_era5/srp_era5_wind_plant_hourly.csv \
+            --output outputs/srp_era5
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/srp_era5")
+          x=pd.read_csv(p/"srp_era5_wind_curve_sensitivity_summary.csv")
+          m=json.loads((p/"srp_era5_wind_curve_manifest.json").read_text())
+          assert len(x)==3 and x.mean_uncalibrated_proxy_pu.between(0,1).all()
+          assert m["all_744_utc_hours_per_curve_verified"]
+          assert m["source_plant_count"]==2
+          assert not m["wind_fleet_production_calibrated"]
+          assert not m["estimated_actual_wind_generation"]
+          print(x.to_string(index=False))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -88,4 +108,8 @@ jobs:
             outputs/srp_era5/srp_era5_wind_plant_hourly.csv
             outputs/srp_era5/srp_era5_wind_fleet_hourly_exposure.csv
             outputs/srp_era5/srp_era5_wind_source_manifest.json
+            outputs/srp_era5/srp_era5_wind_curve_plant_hourly.csv
+            outputs/srp_era5/srp_era5_wind_curve_fleet_hourly.csv
+            outputs/srp_era5/srp_era5_wind_curve_sensitivity_summary.csv
+            outputs/srp_era5/srp_era5_wind_curve_manifest.json
           if-no-files-found: warn
