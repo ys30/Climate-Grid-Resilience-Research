@@ -57,6 +57,7 @@ def test_pypsa_scenario_monotonicity_and_hourly_conservation():
     assert r.loc["unlimited","artificial_portfolio_gap_mwh"]<1e-4
     assert r.loc["1x_page1","artificial_portfolio_gap_mwh"]<1e-4
     assert abs(r.loc["0.75x_page1","artificial_portfolio_gap_mwh"]-7440.)<1e-3
+    assert abs(r.loc["0.5x_page1","artificial_portfolio_gap_mwh"]-14880.)<1e-3
     assert (results.max_hourly_bus_residual_mw<1e-4).all()
     assert len(hourly["0.75x_page1"])==744
     assert all(not x for x in results.artificial_gap_is_observed_outage)
