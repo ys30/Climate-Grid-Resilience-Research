@@ -48,7 +48,6 @@ def audit_csv(path):
         except ValueError:pass
     columns=list(dict.fromkeys(columns))
     rows=[]
-    all_target_units=set()
     total_selected=0
     for chunk in pd.read_csv(path, chunksize=120000,dtype="string",usecols=columns):
         idseries=chunk[facility].astype("string").str.strip().str.replace(
@@ -61,8 +60,6 @@ def audit_csv(path):
             raise ValueError("Target EPA unit ID is missing")
         selected["normalized_oris"]=idseries.loc[selected.index]
         total_selected+=len(selected)
-        all_target_units.update((str(r.normalized_oris),str(getattr(r,unit)))
-                                for r in selected.itertuples(index=False,name=None)) if False else None
         for fac,frame in selected.groupby("normalized_oris"):
             counts=frame[unit].value_counts(dropna=False)
             rows.extend({"oris":str(fac),"epa_unit_id":str(uid),
