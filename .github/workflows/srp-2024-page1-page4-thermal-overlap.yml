@@ -1,0 +1,101 @@
+name: SRP 2024 thermal EIA923 Page1/Page4 source overlap
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-2024-page1-page4-thermal-overlap.yml'
+      - 'src/grid_resilience/srp_page1_page4_thermal_month_scope.py'
+      - 'tests/test_srp_page1_page4_thermal_month_scope.py'
+jobs:
+  audit-distinct-reporting-scopes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and test cross-sheet reconciliation gate
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_page1_page4_thermal_month_scope.py
+      - name: Retrieve verified source annual thermal plant identities and nameplate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_thermal_overlap/site
+          gh run download 41773763147 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-july2024-fullfleet-thermal-era5 \
+            --dir outputs/srp_thermal_overlap/site
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_thermal_overlap/site")
+          m=json.loads((p/"srp_thermal_site_coverage_manifest.json").read_text())
+          assert m["coverage_by_technology"]["gas"]["selected_plant_count"]==12
+          assert m["coverage_by_technology"]["coal"]["selected_plant_count"]==1
+          s=pd.read_csv(p/"srp_thermal_era5_site_selection.csv")
+          assert len(s)==13 and s.plant_id.nunique()==13
+          PY
+      - name: Independently fetch official 2024 EIA923 archive with source SHA256
+        run: |
+          python - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+          p=Path("outputs/srp_thermal_overlap")
+          url="https://www.eia.gov/electricity/data/eia923/archive/xls/f923_2024.zip"
+          with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"}),timeout=120) as r:
+              payload=r.read(150_000_001)
+          if not payload or len(payload)>150_000_000:raise ValueError("Unexpected official EIA923 archive")
+          (p/"eia923_2024.zip").write_bytes(payload)
+          (p/"official_eia923_source_manifest.json").write_text(json.dumps({
+              "url":url,"sha256":hashlib.sha256(payload).hexdigest(),
+              "bytes":len(payload)},indent=2)+"\n")
+          PY
+          python -m grid_resilience.eia923_generator_extract \
+            --archive outputs/srp_thermal_overlap/eia923_2024.zip \
+            --output outputs/srp_thermal_overlap
+      - name: Extract official EIA923 Page1 January and July reported BA-fuel records
+        run: |
+          python -m grid_resilience.eia923_page1_all_fuels \
+            --archive outputs/srp_thermal_overlap/eia923_2024.zip \
+            --ba SRP --month 1 --output outputs/srp_thermal_overlap/jan
+          python -m grid_resilience.eia923_page1_all_fuels \
+            --archive outputs/srp_thermal_overlap/eia923_2024.zip \
+            --ba SRP --month 7 --output outputs/srp_thermal_overlap/jul
+      - name: Audit overlaps without adding Page1 and Page4 totals
+        run: |
+          python -m grid_resilience.srp_page1_page4_thermal_month_scope \
+            --page1-jan outputs/srp_thermal_overlap/jan/page1_all_fuels_reported_ba.csv \
+            --page1-jul outputs/srp_thermal_overlap/jul/page1_all_fuels_reported_ba.csv \
+            --page4 outputs/srp_thermal_overlap/eia923_generator_month_net_mwh.csv \
+            --sites outputs/srp_thermal_overlap/site/srp_thermal_era5_site_selection.csv \
+            --output outputs/srp_thermal_overlap
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_thermal_overlap")
+          x=pd.read_csv(p/"thermal_page1_page4_overlap_summary.csv")
+          m=json.loads((p/"thermal_page1_page4_overlap_manifest.json").read_text())
+          assert len(x)==4 and x.annual_eia860_plant_count.sum()==26
+          assert set(x.technology)=={"gas","coal"}
+          assert not m["monthly_reconciliation_can_calibrate_hourly_heat_derating"]
+          assert not m["historical_reliability_calibrated"]
+          assert m["page1_plus_page4_is_double_counted_generation"]
+          print(x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-thermal-page1-page4-overlap
+          path: |
+            outputs/srp_thermal_overlap/official_eia923_source_manifest.json
+            outputs/srp_thermal_overlap/jan/page1_all_fuels_manifest.json
+            outputs/srp_thermal_overlap/jul/page1_all_fuels_manifest.json
+            outputs/srp_thermal_overlap/thermal_page1_page4_plant_month_overlap.csv
+            outputs/srp_thermal_overlap/thermal_page1_page4_overlap_summary.csv
+            outputs/srp_thermal_overlap/thermal_page1_page4_overlap_manifest.json
+          if-no-files-found: warn
