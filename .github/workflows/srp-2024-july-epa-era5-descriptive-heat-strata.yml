@@ -1,0 +1,71 @@
+name: SRP EPA 2024 July source heat strata exploratory audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-2024-july-epa-era5-descriptive-heat-strata.yml'
+      - 'src/grid_resilience/srp_epa_era5_july_exposure_strata.py'
+      - 'tests/test_srp_epa_era5_july_exposure_strata.py'
+jobs:
+  audited-heat-exposure-strata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test source-hour conservation and noncausal analysis boundaries
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_era5_july_exposure_strata.py
+      - name: Read immutable fully verified source-hour join
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_2024_july_thermal_strata
+          gh run download 41926491544 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-2024-epa-era5-july-mst-utc-source-alignment \
+            --dir outputs/srp_2024_july_thermal_strata
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_2024_july_thermal_strata")
+          source=json.loads((p/"epa_era5_july_alignment_manifest.json").read_text())
+          assert source["epa_hour_to_utc_hours_added"]==7
+          assert not source["dst_applied"]
+          assert not source["causal_weather_derating_calibrated"]
+          hours=pd.read_csv(p/"epa_source_july_lstd_era5_utc_hourly.csv")
+          assert len(hours)==744*10 and hours.era5_july_hour_matched.sum()==737*10
+          PY
+      - name: Attribute source operation evidence by same-plant ERA5 exposure without weather pseudoreplication
+        run: |
+          python -m grid_resilience.srp_epa_era5_july_exposure_strata \
+            --hourly outputs/srp_2024_july_thermal_strata/epa_source_july_lstd_era5_utc_hourly.csv \
+            --output outputs/srp_2024_july_thermal_strata
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          p=Path("outputs/srp_2024_july_thermal_strata")
+          data=pd.read_csv(p/"epa_unit_source_heat_strata_descriptive.csv")
+          weather=pd.read_csv(p/"unique_plant_era5_heat_strata_hours.csv")
+          manifest=json.loads((p/"epa_2024_july_source_heat_strata_manifest.json").read_text())
+          assert len(data[["facility_id","epa_unit_id"]].drop_duplicates())==10
+          assert data.source_weather_hour_count.sum()==737*10
+          assert weather.unique_site_weather_hours.sum()==737*3
+          assert not manifest["causal_thermal_derating_or_outage_identified"]
+          print(weather.to_string(index=False))
+          print(data.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-era5-source-heat-bin-audit
+          path: |
+            outputs/srp_2024_july_thermal_strata/epa_unit_source_heat_strata_descriptive.csv
+            outputs/srp_2024_july_thermal_strata/unique_plant_era5_heat_strata_hours.csv
+            outputs/srp_2024_july_thermal_strata/epa_2024_july_source_heat_strata_manifest.json
+          if-no-files-found: warn
