@@ -108,6 +108,71 @@ def audit_csv(path):
     return out,counts,meta
 
 
+
+def operation_profile_csv(path):
+    """Descriptive CAMD source indicators; never net electric MW or outages.
+
+    Treat missing, zero, and positive source values distinctly. Do not infer
+    generation from emissions or declare a zero operating-time hour an outage.
+    """
+    fields=pd.read_csv(path,nrows=0).columns
+    facility=_column(fields,("Facility ID","facilityId","orisCode"),"facility")
+    unit=_column(fields,("Unit ID","unitId"),"unit")
+    optime=_column(fields,("Operating Time","operatingTime"),"operating time")
+    gross=_column(fields,("Gross Load (MW)","grossLoad"),"gross load")
+    heat=_column(fields,("Heat Input (mmBtu)","heatInput"),"heat input")
+    names=[facility,unit,optime,gross,heat]
+    records=[]
+    for chunk in pd.read_csv(path,chunksize=100000,dtype="string",usecols=names):
+        pid=chunk[facility].astype("string").str.strip().str.replace(
+            r"^0+(?=[0-9])","",regex=True)
+        selected=chunk.loc[pid.isin(FACILITIES)].copy()
+        if selected.empty:continue
+        selected["oris"]=pid.loc[selected.index]
+        for key,col in (("operating",optime),("gross",gross),("heat",heat)):
+            selected[key]=pd.to_numeric(selected[col],errors="coerce")
+            # Preserve missing source rows, reject infinities rather than
+            # silently counting them as zero.
+            values=selected[key].dropna()
+            if not values.map(lambda v:float("-inf")<v<float("inf")).all():
+                raise ValueError("Nonfinite EPA source metrics")
+        if selected["operating"].dropna().lt(0).any() or selected["operating"].dropna().gt(1).any():
+            raise ValueError("Operating Time outside source hourly fraction [0,1]")
+        for (oris,uid),part in selected.groupby(["oris",unit],dropna=False):
+            records.append({
+                "oris":str(oris),"epa_unit_id":str(uid),
+                "source_calendar_hour_rows":len(part),
+                "operating_time_reported_rows":int(part.operating.notna().sum()),
+                "positive_operating_time_rows":int(part.operating.gt(0).sum()),
+                "zero_operating_time_rows":int(part.operating.eq(0).sum()),
+                "reported_operating_hours_sum":float(part.operating.sum()),
+                "gross_load_reported_rows":int(part.gross.notna().sum()),
+                "positive_gross_load_rows":int(part.gross.gt(0).sum()),
+                "zero_gross_load_rows":int(part.gross.eq(0).sum()),
+                "gross_load_sum_reported_mw_values":float(part.gross.sum()),
+                "gross_load_max_reported_mw":float(part.gross.max()) if part.gross.notna().any() else float("nan"),
+                "heat_input_reported_rows":int(part.heat.notna().sum()),
+                "positive_heat_input_rows":int(part.heat.gt(0).sum()),
+            })
+    if not records:
+        return pd.DataFrame(columns=["oris","epa_unit_id"])
+    d=pd.DataFrame(records)
+    sumcols=[k for k in d if k not in ("oris","epa_unit_id","gross_load_max_reported_mw")]
+    grouped=d.groupby(["oris","epa_unit_id"],as_index=False)[sumcols].sum()
+    maxcol=d.groupby(["oris","epa_unit_id"],as_index=False).gross_load_max_reported_mw.max()
+    grouped=grouped.merge(maxcol,on=["oris","epa_unit_id"],validate="one_to_one")
+    for measure in ("operating_time","gross_load","heat_input"):
+        prefix="operating_time" if measure=="operating_time" else measure
+        reported=prefix+"_reported_rows"
+        missing_col=prefix+"_missing_rows"
+        grouped[missing_col]=grouped.source_calendar_hour_rows-grouped[reported]
+        if grouped[missing_col].lt(0).any():
+            raise AssertionError("Negative source missingness")
+    if grouped.source_calendar_hour_rows.gt(8784).any():
+        raise ValueError("More than 8784 unique 2024 hours for one unit")
+    return grouped.sort_values(["oris","epa_unit_id"])
+
+
 def fetch(out):
     root=Path(out);root.mkdir(parents=True,exist_ok=True)
     path=root/"epacampd_2024_arizona_hourly_source.csv"
@@ -124,6 +189,16 @@ def fetch(out):
     if digest.hexdigest()!=EXPECTED_MD5:
         raise ValueError("Official-republished 2024 AZ snapshot checksum mismatch")
     units,summary,manifest=audit_csv(path)
+    operation=operation_profile_csv(path)
+    observed=operation[["oris","epa_unit_id","source_calendar_hour_rows"]].rename(
+        columns={"source_calendar_hour_rows":"profile_rows"})
+    proof=units.merge(observed,on=["oris","epa_unit_id"],validate="one_to_one")
+    if len(proof)!=len(units) or not proof.report_rows.eq(proof.profile_rows).all():
+        raise AssertionError("EPA operating indicators do not conserve source unit-hour rows")
+    operation.to_csv(root/"target_camd_2024_unit_operation_profile.csv",index=False)
+    manifest["source_operating_and_gross_load_profile_extracted"]=True
+    manifest["gross_load_is_not_net_generator_mw"]=True
+    manifest["zero_operating_time_is_not_verified_outage"]=True
     manifest["observed_md5"]=digest.hexdigest()
     manifest["downloaded_bytes"]=path.stat().st_size
     units.to_csv(root/"target_camd_2024_hourly_unit_ids.csv",index=False)
