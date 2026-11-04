@@ -80,6 +80,15 @@ def analyze(inventory,crosswalk):
         candidates_with_epa_unit_relationship=("epa_mapping_exists","sum"),
         annual_gt_ids_with_multiple_camd_units=("epa_camd_unit_relationship_count",
                                                  lambda x:int((x>1).sum())))
+    # A site present at the plant grain still does not establish its missing
+    # GT electrical-generator mapping or measured hourly operation.
+    plant_rows=cw.groupby("EIA_PLANT_ID",dropna=False).size()
+    camd_rows=cw.loc[cw.CAMD_PLANT_ID.isin(TARGETS)].groupby(
+        "CAMD_PLANT_ID").size()
+    counts["crosswalk_eia_plant_rows"]=counts.plant_id.map(plant_rows).fillna(0).astype(int)
+    counts["crosswalk_camd_plant_rows_same_numeric_id"]=counts.plant_id.map(
+        camd_rows).fillna(0).astype(int)
+    counts["eia_plant_in_crosswalk"]=counts.crosswalk_eia_plant_rows.gt(0)
     # Distinguish crosswalk missingness from actual absence of emissions reports.
     manifest={
         "reference":"USEPA/camd-eia-crosswalk epa_eia_crosswalk.csv",
