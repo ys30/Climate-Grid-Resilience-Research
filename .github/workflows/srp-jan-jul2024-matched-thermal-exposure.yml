@@ -27,13 +27,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p outputs/seasonal/january outputs/seasonal/july
-          gh run download 41772449116 --repo ys30/Climate-Grid-Resilience-Research --name srp-jan2024-real-era5-thermal-plant-points --dir outputs/seasonal/january
+          gh run download 41775332025 --repo ys30/Climate-Grid-Resilience-Research --name srp-jan2024-fullfleet-thermal-era5 --dir outputs/seasonal/january
           gh run download 41773763147 --repo ys30/Climate-Grid-Resilience-Research --name srp-july2024-fullfleet-thermal-era5 --dir outputs/seasonal/july
           python - <<'PY'
           from pathlib import Path
           import json,pandas as pd
           root=Path("outputs/seasonal")
-          for month,path,n in (("2024-01","january",9),("2024-07","july",13)):
+          for month,path,n in (("2024-01","january",13),("2024-07","july",13)):
               m=json.loads((root/path/"srp_thermal_era5_manifest.json").read_text())
               p=json.loads((root/path/"srp_thermal_site_coverage_manifest.json").read_text())
               x=pd.read_csv(root/path/"srp_thermal_era5_plant_hourly.csv")
@@ -55,9 +55,12 @@ jobs:
           root=Path("outputs/seasonal/matched")
           m=json.loads((root/"matched_seasonal_manifest.json").read_text())
           a=pd.read_csv(root/"matched_seasonal_technology_summary.csv")
-          assert m["matched_gas_plants"]==8 and m["matched_coal_plants"]==1
-          assert m["july_only_gas_plants"]==4
+          assert m["matched_gas_plants"]==12 and m["matched_coal_plants"]==1
+          assert m["july_only_gas_plants"]==0
           assert len(a)==4 and a.hours.eq(744).all()
+          assert abs(m["matched_gas_nameplate_mw"]-8550.1)<1e-6
+          assert (a.site_capacity_hour_fraction_ge_35_c.between(0,1)).all()
+          assert (a.site_capacity_hour_fraction_ge_40_c.between(0,1)).all()
           assert not m["historical_reliability_calibrated"]
           print(a.to_string(index=False))
           PY
