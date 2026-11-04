@@ -1,0 +1,90 @@
+name: SRP GT source EIA860 and EPA CAMD unit crosswalk
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-gt-epa-camd-eia-crosswalk.yml'
+      - 'src/grid_resilience/srp_gt_epa_camd_crosswalk_gate.py'
+      - 'tests/test_srp_gt_epa_camd_crosswalk_gate.py'
+jobs:
+  official-eia-epa-unit-admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test conservative EPA-CAMD/EIA unit crosswalk
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_gt_epa_camd_crosswalk_gate.py
+      - name: Reuse immutable independently verified EIA860 target generator identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_epa_camd/eia860
+          gh run download 41873051184 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-eia860-annual-gt-unit-identity-gate \
+            --dir outputs/srp_epa_camd/eia860
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_epa_camd/eia860")
+          table=pd.read_csv(p/"target_gt_annual_generator_identity_gate.csv",dtype={"plant_id":"string"})
+          assert len(table)==6
+          assert not table.page1_gt_to_unit_allocation_certified.any()
+          PY
+      - name: Download official EIA860 2024 Operable workbook and pinned EPA-EIA crosswalk
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,urllib.request
+          root=Path("outputs/srp_epa_camd")
+          urls={
+            "eia8602024.zip":"https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip",
+            "epa_eia_crosswalk.csv":"https://raw.githubusercontent.com/USEPA/camd-eia-crosswalk/3c7d6724cddee38dfb6a06debca732c33a227ed6/epa_eia_crosswalk.csv"}
+          records=[]
+          for file,url in urls.items():
+              with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"}),timeout=120) as h:
+                  data=h.read(100_000_001)
+              if not data or len(data)>100_000_000:raise ValueError("Invalid official-source bytes")
+              (root/file).write_bytes(data)
+              records.append({"url":url,"file":file,"sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data)})
+          (root/"source_provenance.json").write_text(json.dumps(records,indent=2)+"\n")
+          PY
+          python -m grid_resilience.eia860_generator_extract \
+            --archive outputs/srp_epa_camd/eia8602024.zip \
+            --output outputs/srp_epa_camd
+      - name: Crosswalk 2024 annual GT candidates to EPA CAMD unit identities
+        run: |
+          python -m grid_resilience.srp_gt_epa_camd_crosswalk_gate \
+            --inventory outputs/srp_epa_camd/eia860_2024_operable_generators.csv \
+            --crosswalk outputs/srp_epa_camd/epa_eia_crosswalk.csv \
+            --output outputs/srp_epa_camd
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          p=Path("outputs/srp_epa_camd")
+          x=pd.read_csv(p/"gt_candidate_epa_unit_relationships.csv",dtype={"plant_id":"string"})
+          m=json.loads((p/"epa_crosswalk_data_admission_manifest.json").read_text())
+          assert len(x)==10 and set(x.plant_id)=={"141","55129","147"}
+          assert not m["hourly_operational_data_downloaded"]
+          assert not m["temperature_derating_calibrated"]
+          assert not x.epa_hourly_electrical_net_mw_validated.any()
+          print(x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-gt-epa-camd-eia-unit-crosswalk
+          path: |
+            outputs/srp_epa_camd/source_provenance.json
+            outputs/srp_epa_camd/gt_candidate_epa_unit_relationships.csv
+            outputs/srp_epa_camd/gt_candidate_epa_coverage_summary.csv
+            outputs/srp_epa_camd/gt_candidate_epa_raw_relationship_rows.csv
+            outputs/srp_epa_camd/epa_crosswalk_data_admission_manifest.json
+          if-no-files-found: warn
