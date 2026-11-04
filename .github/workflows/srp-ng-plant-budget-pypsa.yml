@@ -1,0 +1,121 @@
+name: SRP NG monthly plant budget PyPSA sensitivity
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-ng-plant-budget-pypsa.yml'
+      - 'src/grid_resilience/srp_ng_plant_budget_pypsa.py'
+      - 'tests/test_srp_ng_plant_budget_pypsa.py'
+      - 'tests/test_srp_ng_plant_budget_pypsa_solver.py'
+      - 'src/grid_resilience/srp_ng_plant_nameplate_envelope.py'
+      - 'src/grid_resilience/eia923_page1_all_fuels.py'
+      - 'src/grid_resilience/eia860_plant_ba_census.py'
+jobs:
+  source-conditioned-scenario:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install full scientific optimizer and test both input and real solver
+        run: |
+          python -m pip install -e '.[dev,model]'
+          python -m pytest -q tests/test_srp_ng_plant_budget_pypsa.py tests/test_srp_ng_plant_budget_pypsa_solver.py tests/test_srp_ng_plant_nameplate_envelope.py
+      - name: Download official EIA source tables and track SHA256
+        run: |
+          mkdir -p outputs/ng_budget
+          python - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+          root=Path("outputs/ng_budget")
+          sources={
+            "eia860_2024.zip":"https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip",
+            "eia923_2024.zip":"https://www.eia.gov/electricity/data/eia923/archive/xls/f923_2024.zip",
+            "eia930_2023H2.csv":"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2023_Jul_Dec.csv",
+            "eia930_2024H1.csv":"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv",
+          }
+          manifest={}
+          for name,url in sources.items():
+              req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+              with urllib.request.urlopen(req,timeout=120) as response:
+                  data=response.read(150_000_001)
+              if not data or len(data)>150_000_000:
+                  raise ValueError("Invalid official source bytes")
+              (root/name).write_bytes(data)
+              manifest[name]={"url":url,"bytes":len(data),"sha256":hashlib.sha256(data).hexdigest()}
+          (root/"source_provenance.json").write_text(json.dumps(manifest,indent=2)+"\n")
+          PY
+      - name: Extract official Page1, Page4 and Plant BA capacity
+        run: |
+          python -m grid_resilience.eia923_page1_all_fuels --archive outputs/ng_budget/eia923_2024.zip --output outputs/ng_budget --ba SRP --month 1
+          python -m grid_resilience.eia923_generator_extract --archive outputs/ng_budget/eia923_2024.zip --output outputs/ng_budget
+          python -m grid_resilience.eia860_generator_extract --archive outputs/ng_budget/eia860_2024.zip --output outputs/ng_budget
+          python -m grid_resilience.eia860_plant_ba_census \
+            --archive outputs/ng_budget/eia860_2024.zip \
+            --operable outputs/ng_budget/eia860_2024_operable_generators.csv \
+            --page4 outputs/ng_budget/eia923_generator_month_net_mwh.csv \
+            --ba SRP --output outputs/ng_budget
+          python -m grid_resilience.srp_page1_eia860_fuel_crosswalk \
+            --page1 outputs/ng_budget/page1_all_fuels_reported_ba.csv \
+            --roster outputs/ng_budget/plant_ba_operable_generator_census.csv \
+            --output outputs/ng_budget
+          python -m grid_resilience.srp_ng_plant_nameplate_envelope \
+            --candidates outputs/ng_budget/page1_eia860_fuel_candidate_rows.csv \
+            --roster outputs/ng_budget/plant_ba_operable_generator_census.csv \
+            --output outputs/ng_budget --year 2024 --month 1
+      - name: Assemble full UTC January observed EIA930 boundary
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          root=Path("outputs/ng_budget")
+          parts=[]
+          for name in ["eia930_2023H2.csv","eia930_2024H1.csv"]:
+              x=pd.read_csv(root/name,low_memory=False)
+              x=x.loc[x["Balancing Authority"].astype(str).str.strip().eq("SRP")].copy()
+              t=pd.to_datetime(x["UTC Time at End of Hour"],utc=True,errors="raise")
+              x=x.loc[t.ge(pd.Timestamp("2024-01-01T01:00Z"))&
+                      t.le(pd.Timestamp("2024-02-01T00:00Z"))]
+              parts.append(x)
+          pd.concat(parts,ignore_index=True).to_csv(root/"january_srp_eia930.csv",index=False)
+          PY
+          python -m grid_resilience.eia930_net_interchange_audit \
+            --csv outputs/ng_budget/january_srp_eia930.csv \
+            --ba SRP --year 2024 --month 1 --output outputs/ng_budget
+      - name: Run standalone 744h NG portfolio with two monthly budget sensitivities
+        run: |
+          python -m grid_resilience.srp_ng_plant_budget_pypsa \
+            --balance outputs/ng_budget/eia930_hourly_balance_audit.csv \
+            --plant-envelope outputs/ng_budget/ng_plant_nameplate_energy_envelope.csv \
+            --year 2024 --month 1 --scales 1.0 0.75 --output outputs/ng_budget
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          r=Path("outputs/ng_budget")
+          x=pd.read_csv(r/"ng_portfolio_budget_comparison.csv").set_index("scenario")
+          assert len(x)==3
+          assert (x.max_hourly_bus_residual_mw<1e-3).all()
+          assert x.loc["unlimited_nameplate","modeled_portfolio_gap_mwh"] <= x.loc["1x_page1","modeled_portfolio_gap_mwh"]+1e-2
+          assert x.loc["1x_page1","modeled_portfolio_gap_mwh"] <= x.loc["0.75x_page1","modeled_portfolio_gap_mwh"]+1e-2
+          assert not x.historical_calibration_certified.any()
+          assert not x.portfolio_gap_is_real_unserved_energy.any()
+          print(x[["scenario_gas_dispatch_mwh","modeled_portfolio_gap_mwh","max_hourly_bus_residual_mw"]])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-jan2024-ng-plant-budget-pypsa
+          path: |
+            outputs/ng_budget/source_provenance.json
+            outputs/ng_budget/page1_all_fuels_manifest.json
+            outputs/ng_budget/plant_ba_generator_census_manifest.json
+            outputs/ng_budget/page1_eia860_fuel_candidate_manifest.json
+            outputs/ng_budget/ng_plant_nameplate_energy_envelope.csv
+            outputs/ng_budget/ng_plant_nameplate_energy_envelope_manifest.json
+            outputs/ng_budget/eia930_balance_metrics.json
+            outputs/ng_budget/ng_plant_budget_scenarios.csv
+            outputs/ng_budget/ng_portfolio_budget_comparison.csv
+            outputs/ng_budget/ng_portfolio_budget_manifest.json
+          if-no-files-found: warn
