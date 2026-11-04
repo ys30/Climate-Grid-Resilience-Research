@@ -13,6 +13,7 @@ def roster():
         "generator_id":["A","B","C","D","E","F","G","H"],
         "plant_reported_ba":["SRP"]*7+["AZPS"],
         "energy_source_1":["NG","NG","NUC","SUB","SUN","WND","WAT","NG"],
+        "prime_mover":["GT","CT","ST","ST","PV","WT","HY","GT"],
         "nameplate_capacity_mw":[3.,2.,5.,4.,1.,2.,3.,999.]
     })
 
@@ -43,6 +44,15 @@ def test_solar_is_zero_during_assumed_local_night_and_all_rows_present():
     assert pv.availability_pu.eq(0).any()
     assert pv.availability_pu.gt(0).any()
     assert a[a.technology.eq("nuclear")].availability_pu.eq(.9).all()
+
+
+def test_pumped_storage_water_cannot_be_misclassified_as_hydro():
+    r=roster()
+    r.loc[r.generator_id.eq("G"),"prime_mover"]="PS"
+    c,m=capacity_from_annual_roster(r)
+    assert "hydro" not in set(c.technology)
+    assert m["excluded_generator_rows"]==1
+    assert m["pumped_storage_and_battery_excluded"]
 
 
 def test_duplicate_annual_generator_identity_rejected():
