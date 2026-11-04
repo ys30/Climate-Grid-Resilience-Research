@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from grid_resilience.srp_gt_epa_camd_crosswalk_gate import analyze
+from grid_resilience.srp_gt_epa_camd_crosswalk_gate import analyze,site_level_context
 
 
 def examples():
@@ -56,3 +56,21 @@ def test_missing_required_crosswalk_identity_rejected():
     a,b=examples()
     with pytest.raises(ValueError,match="Missing EPA-EIA"):
         analyze(a,b.drop(columns=["MATCH_TYPE_BOILER"]))
+
+
+def test_site_relationships_preserve_non_gt_source_rows():
+    a,b=examples()
+    row=b.iloc[[0]].copy()
+    row["EIA_GENERATOR_ID"]="ST1"
+    row["EIA_UNIT_TYPE"]="ST"
+    out=site_level_context(pd.concat([b,row],ignore_index=True))
+    assert len(out)==4
+    assert out.EIA_GENERATOR_ID.eq("ST1").sum()==1
+    assert out.has_camd_unit_id.all()
+
+
+def test_site_level_missing_source_unit_key_kept_as_missing():
+    a,b=examples()
+    b.loc[0,"CAMD_UNIT_ID"]=None
+    out=site_level_context(b)
+    assert not out.loc[out.EIA_PLANT_ID.eq("141"),"has_camd_unit_id"].iloc[0]
