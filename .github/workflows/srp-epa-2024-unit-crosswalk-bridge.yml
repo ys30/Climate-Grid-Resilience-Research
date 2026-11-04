@@ -1,0 +1,79 @@
+name: SRP 2024 observed EPA hour unit and pinned EIA crosswalk bridge
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-2024-unit-crosswalk-bridge.yml'
+      - 'src/grid_resilience/srp_epa_camd_eia_2024_operation_bridge.py'
+      - 'tests/test_srp_epa_camd_eia_2024_operation_bridge.py'
+jobs:
+  verified-source-unit-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate one-to-many crosswalk and forbidden net-MW inference
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_camd_eia_2024_operation_bridge.py
+      - name: Download immutable verified EPA 2024 hourly operation source and EPA EIA static crosswalk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/epa_bridge/observed outputs/epa_bridge/crosswalk
+          gh run download 41888598785 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-2024-az-hourly-identity-and-reporting-gate \
+            --dir outputs/epa_bridge/observed
+          gh run download 41876110511 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-gt-epa-camd-eia-unit-crosswalk \
+            --dir outputs/epa_bridge/crosswalk
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          r=Path("outputs/epa_bridge")
+          ep=json.loads((r/"observed/target_camd_2024_hourly_admission.json").read_text())
+          assert ep["observed_md5"]==ep["expected_md5"]
+          assert ep["source_operating_and_gross_load_profile_extracted"]
+          a=pd.read_csv(r/"observed/target_camd_2024_unit_operation_profile.csv")
+          b=pd.read_csv(r/"crosswalk/target_plant_epa_all_source_relationships.csv")
+          assert len(a)==10 and len(b)==9
+          assert a.source_calendar_hour_rows.eq(8784).all()
+          PY
+      - name: Map EPA source units only to documented static electrical source IDs
+        run: |
+          python -m grid_resilience.srp_epa_camd_eia_2024_operation_bridge \
+            --operation outputs/epa_bridge/observed/target_camd_2024_unit_operation_profile.csv \
+            --crosswalk outputs/epa_bridge/crosswalk/target_plant_epa_all_source_relationships.csv \
+            --output outputs/epa_bridge
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          p=Path("outputs/epa_bridge")
+          a=pd.read_csv(p/"epa_2024_unit_to_eia_static_link_summary.csv")
+          b=pd.read_csv(p/"epa_2024_plant_crosswalk_coverage.csv")
+          m=json.loads((p/"epa_2024_unit_crosswalk_manifest.json").read_text())
+          assert len(a)==10
+          assert b.observed_epa_units.sum()==10
+          assert b.units_with_static_crosswalk.sum()==6
+          assert b.units_without_static_crosswalk.sum()==4
+          assert b.units_with_direct_gt_class_link.sum()==0
+          assert not m["actual_temperature_derating_calibrated"]
+          assert not m["eia_gt_generator_net_mw_inferred"]
+          print(a.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-unit-to-eia-source-bridge
+          path: |
+            outputs/epa_bridge/epa_2024_unit_to_eia_static_link_summary.csv
+            outputs/epa_bridge/epa_2024_plant_crosswalk_coverage.csv
+            outputs/epa_bridge/epa_2024_unit_static_relationship_rows.csv
+            outputs/epa_bridge/epa_2024_unit_crosswalk_manifest.json
+          if-no-files-found: warn
