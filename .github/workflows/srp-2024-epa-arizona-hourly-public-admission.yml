@@ -1,0 +1,47 @@
+name: SRP 2024 EPA Arizona public hourly operations admission
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-2024-epa-arizona-hourly-public-admission.yml'
+      - 'src/grid_resilience/srp_epa_2024_az_hourly_admission.py'
+      - 'tests/test_srp_epa_2024_az_hourly_admission.py'
+jobs:
+  admit-hourly-emissions-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify source unit schema and no net-generator inference
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_2024_az_hourly_admission.py
+      - name: Independently retrieve checksummed public 2024 EPA hourly Arizona snapshot
+        run: |
+          python -m grid_resilience.srp_epa_2024_az_hourly_admission \
+            --output outputs/srp_epa_2024_az_admission
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/srp_epa_2024_az_admission")
+          m=json.loads((p/"target_camd_2024_hourly_admission.json").read_text())
+          assert m["observed_md5"]==m["expected_md5"]
+          assert not m["unit_level_hourly_net_mw_verified"]
+          assert not m["weather_derating_calibrated"]
+          assert not m["target_eia860_gt_generators_automatically_matched"]
+          assert not (p/"epacampd_2024_arizona_hourly_source.csv").exists()
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-epa-2024-az-hourly-identity-and-reporting-gate
+          path: |
+            outputs/srp_epa_2024_az_admission/target_camd_2024_hourly_unit_ids.csv
+            outputs/srp_epa_2024_az_admission/target_camd_2024_hourly_facility_coverage.csv
+            outputs/srp_epa_2024_az_admission/target_camd_2024_hourly_admission.json
+          if-no-files-found: warn
