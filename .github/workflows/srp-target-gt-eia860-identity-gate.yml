@@ -1,0 +1,92 @@
+name: SRP GT annual EIA860 identity and EIA923 reporting reconciliation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-target-gt-eia860-identity-gate.yml'
+      - 'src/grid_resilience/srp_target_gt_eia860_identity_gate.py'
+      - 'tests/test_srp_target_gt_eia860_identity_gate.py'
+jobs:
+  official-unit-identity-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate annual unit identity mapping without false unit allocation
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_target_gt_eia860_identity_gate.py
+      - name: Acquire official EIA860 Operable identity inventory and SHA256
+        run: |
+          mkdir -p outputs/srp_gt_identity
+          python - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+          p=Path("outputs/srp_gt_identity")
+          url="https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip"
+          req=urllib.request.Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"})
+          with urllib.request.urlopen(req,timeout=120) as r:data=r.read(80_000_001)
+          if len(data)==0 or len(data)>80_000_000:raise ValueError("Invalid EIA860 source bytes")
+          (p/"eia8602024.zip").write_bytes(data)
+          (p/"eia860_source_manifest.json").write_text(json.dumps({
+              "url":url,"sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data)
+          },indent=2)+"\n")
+          PY
+          python -m grid_resilience.eia860_generator_extract \
+            --archive outputs/srp_gt_identity/eia8602024.zip \
+            --output outputs/srp_gt_identity
+      - name: Read prior successful immutable original-row EIA923 source evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 41871741828 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-2024-target-plant-eia923-original-rows \
+            --dir outputs/srp_gt_identity
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/srp_gt_identity")
+          m=json.loads((p/"target_plant_reconciliation_manifest.json").read_text())
+          assert m["all_selected_differences_accounted_for_by_ng_gt_rows"]
+          a=pd.read_csv(p/"target_page1_source_rows.csv")
+          b=pd.read_csv(p/"target_page4_source_rows.csv")
+          assert set(a.plant_id.astype(str))=={"141","55129","147"}
+          assert set(b.plant_id.astype(str))=={"141","55129","147"}
+          PY
+      - name: Match EIA860 exact generator IDs and explicitly withhold Page1 unit attribution
+        run: |
+          python -m grid_resilience.srp_target_gt_eia860_identity_gate \
+            --eia860 outputs/srp_gt_identity/eia860_2024_operable_generators.csv \
+            --page1 outputs/srp_gt_identity/target_page1_source_rows.csv \
+            --page4 outputs/srp_gt_identity/target_page4_source_rows.csv \
+            --output outputs/srp_gt_identity
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_gt_identity")
+          x=pd.read_csv(p/"target_gt_annual_generator_identity_gate.csv",dtype={"plant_id":"string"})
+          m=json.loads((p/"target_gt_annual_identity_manifest.json").read_text())
+          assert len(x)==6 and set(x.plant_id)=={"141","55129","147"}
+          assert x.page4_reported_gt_generator_count.eq(0).all()
+          assert x.page1_gt_to_unit_allocation_certified.eq(False).all()
+          assert x.non_gt_residual_mwh.abs().lt(1e-5).all()
+          assert not m["heat_related_derating_calibrated"]
+          print(x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-eia860-annual-gt-unit-identity-gate
+          path: |
+            outputs/srp_gt_identity/eia860_source_manifest.json
+            outputs/srp_gt_identity/eia860_extraction_manifest.json
+            outputs/srp_gt_identity/target_gt_annual_generator_identity_gate.csv
+            outputs/srp_gt_identity/target_gt_page4_generator_id_join.csv
+            outputs/srp_gt_identity/target_gt_annual_identity_manifest.json
+          if-no-files-found: warn
