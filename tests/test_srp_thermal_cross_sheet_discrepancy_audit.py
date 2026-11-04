@@ -29,7 +29,7 @@ def test_signed_and_absolute_source_discrepancy_preserved():
     assert j.absolute_source_difference_mwh==20
     assert j.flagged_plant_count==1
     assert len(missing)==2
-    assert missing.page4_reported.eq(False).all()
+    assert missing.page4_plant_reported.eq(False).all()
     assert not m["monthly_difference_proves_thermal_derating"]
 
 
