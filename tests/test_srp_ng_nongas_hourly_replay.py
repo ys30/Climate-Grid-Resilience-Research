@@ -32,6 +32,7 @@ def test_source_missing_fuel_not_zero_and_category_sum():
 
 def test_replay_fails_if_required_category_blank():
     _,_,raw,hours=inputs()
+    raw["Net Generation (MW) from Nuclear"]=raw["Net Generation (MW) from Nuclear"].astype("object")
     raw.loc[0,"Net Generation (MW) from Nuclear"]=""
     with pytest.raises(ValueError,match="Missing/nonfinite"):
         prepare_fuel_replay(raw,hours)
