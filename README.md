@@ -2,6 +2,23 @@
 
 **Research V2 — independent climate and power-system adequacy paper.** This repository is separate from the [portfolio V1 demonstration](https://github.com/ys30/Climate-Grid-Resilience-PyPSA). Results in the portfolio remain versioned and are not presented as historically calibrated grid reliability forecasts.
 
+## Latest verified results: SRP real-source meteorology and matched PyPSA (November 2026)
+
+**What is verified.** Official EIA-860/923/930 provenance, 744-hour SRP hourly demand/interchange boundaries, ERA5 plant-coordinate meteorology, and successful PyPSA + HiGHS screening runs. **What is not verified:** physical BA dispatch rights, plant-specific turbine/thermal performance, transmission ratings, historical outages, EENS, or climate-attributable capacity losses.
+
+| Audited research output | Result | Reproducible evidence |
+|---|---|---|
+| SRP plant BA generator-reporting crosswalk | 108 EIA-860 annual Plant BA generators; only 40 matched EIA-923 Jan Page 4 monthly entries; noncoverage is *missing*, not zero production | [Coverage report](reports/SRP_JAN2024_MULTITECH_PLANT_BA_PAGE4_COVERAGE_GATE.md) |
+| Wind-plant weather | 2 EIA-860 wind plant locations, 226 MW, 1,488 ERA5 plant-hours (Jan 2024) | [Source and caveats](reports/SRP_JAN2024_REAL_ERA5_WIND_PLANT_EXPOSURE_VERIFIED.md) |
+| Wind power-curve uncertainty | Three **uncalibrated** ERA5 wind-to-power proxies: 19,322–44,926 MWh January proxy energy on identical weather | [Curve comparison](reports/SRP_JAN2024_ERA5_WIND_CURVE_SENSITIVITY_VERIFIED.md) |
+| Matched 744h PyPSA comparison | Fixed assumed 35% wind: **113,630 MWh** artificial coverage gap; ERA5 reference curve: **120,557 MWh**, **+6,927 MWh** | [Matched solver report](reports/SRP_JAN2024_ERA5_WIND_PYPSA_MATCHED_VERIFIED.md) · [passing run](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41771806677) |
+| Gas and coal site meteorology | Jan 2024: 8 gas + 1 coal site; July 2024: **all 12 gas + 1 coal EIA-860 eligible Plant BA sites**, 9,672 site-hours, 100% source-eligible nameplate geolocation coverage | [Full July report](reports/SRP_JUL2024_FULL_THERMAL_FLEET_ERA5_EXPOSURE_VERIFIED.md) · [passing run](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41773763147) |
+| Matched-site January vs July | Identical 8 gas sites: **11.90°C → 37.00°C** capacity-weighted mean; same coal site: **2.09°C → 26.26°C** | [Matched-site report](reports/SRP_JAN_JUL2024_MATCHED_THERMAL_PLANT_EXPOSURE.md) |
+
+**Interpretation:** the +6,927 MWh is a difference between two *conditional, uncalibrated screening scenarios*, **not** measured unserved electricity or a causal weather effect. The July 37.08°C mean across all 12 eligible gas sites describes atmospheric exposure only; an annual plant-BA affiliation does not certify SRP operating rights. Jan and July 12-site temperatures must not be naively compared because January sampled eight sites; use the matched eight-site comparison above.
+
+**Run / inspect:** [Jan wind and matched PyPSA workflow](.github/workflows/srp-jan2024-era5-wind-plant-intake.yml) · [July full-fleet thermal ERA5 workflow](.github/workflows/srp-jul2024-fullfleet-era5-thermal.yml). The workflows retain source query URLs, archive/download SHA-256, UTC complete-hour checks, and no-calibration flags. Next gates are matched plant-hour weather exposure for both seasons and independent unit/turbine performance records before physical heat derating or reliability attribution.
+
 ## Main research question
 
 How do compound climate stresses interact with generation availability and constrained interregional transfers to affect electricity adequacy across selected Western U.S. balancing authorities?
