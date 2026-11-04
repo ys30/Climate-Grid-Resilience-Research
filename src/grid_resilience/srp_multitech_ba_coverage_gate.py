@@ -28,8 +28,7 @@ def normalize_identity(df, columns):
 
 
 def audit(annual, page4, *, ba="SRP", period="2024-01"):
-    r=normalize_identity(annual,["plant_id","generator_id","plant_reported_ba",
-                                 "prime_mover","energy_source_1"])
+    r=normalize_identity(annual,["plant_id","generator_id","plant_reported_ba"])
     r=r.loc[r.plant_reported_ba.eq(ba)].copy()
     p=normalize_identity(page4,["plant_id","generator_id","reported_ba","period"])
     p=p.loc[p.reported_ba.eq(ba)&p.period.eq(period)].copy()
@@ -44,7 +43,8 @@ def audit(annual, page4, *, ba="SRP", period="2024-01"):
         raise ValueError("Invalid annual nameplate")
     if not np.isfinite(p.generation_mwh.to_numpy(float)).all():
         raise ValueError("Invalid Page4 signed generation")
-    r["technology"]=r.energy_source_1.map(PRIMARY_FUEL)
+    r["technology"]=r.energy_source_1.astype("string").str.strip().map(PRIMARY_FUEL)
+    r["prime_mover"]=r.prime_mover.astype("string").str.strip()
     valid=r.apply(lambda x: x.technology in MOVERS and x.prime_mover in MOVERS[x.technology],axis=1)
     r.loc[~valid,"technology"]="excluded_unmodeled"
     merged=r.merge(p[["plant_id","generator_id","generation_mwh"]],
@@ -57,7 +57,9 @@ def audit(annual, page4, *, ba="SRP", period="2024-01"):
         page4_matched_generator_count=("in_page4_reported_ba_month","sum"),
         page4_matched_nameplate_mw=("nameplate_capacity_mw",
             lambda s:float(s[merged.loc[s.index,"in_page4_reported_ba_month"]].sum())),
-        page4_matching_signed_mwh=("generation_mwh","sum")
+        # A technology with no Page4 monthly match has *missing* generation,
+        # not an observed zero. Preserve that distinction in exported tables.
+        page4_matching_signed_mwh=("generation_mwh",lambda s:s.sum(min_count=1))
     ).reset_index()
     summary["not_in_page4_generator_count"]=(
         summary.eia860_generator_count-summary.page4_matched_generator_count)
