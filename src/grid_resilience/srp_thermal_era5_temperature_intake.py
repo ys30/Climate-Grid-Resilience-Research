@@ -11,6 +11,8 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import urlopen,Request
+from urllib.error import URLError, HTTPError
+from time import sleep
 import numpy as np
 import pandas as pd
 
@@ -61,10 +63,24 @@ def sample(sites,output,*,year=2024,month=1,fetch=None):
                          "end_date":date(year,month,calendar.monthrange(year,month)[1]).isoformat(),
                          "hourly":"temperature_2m","models":"era5","timezone":"GMT"})
         url=BASE+"?"+query
-        if fetch is None:
-            with urlopen(Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"}),timeout=120) as h:
-                payload=h.read(10_000_001)
-        else:payload=fetch(url)
+        # ERA5 archive requests can intermittently fail during TLS handshake.
+        # Retry transient transport/server errors, never semantic schema issues.
+        for attempt in range(4):
+            try:
+                if fetch is None:
+                    with urlopen(Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"}),timeout=90) as h:
+                        payload=h.read(10_000_001)
+                else:
+                    payload=fetch(url)
+                break
+            except (URLError, TimeoutError, ConnectionError, HTTPError) as exc:
+                if isinstance(exc,HTTPError) and exc.code not in (408,429,500,502,503,504):
+                    raise
+                if attempt==3:raise
+                if fetch is None:
+                    print(f"Transient ERA5 fetch error plant {site.plant_id}, attempt {attempt+1}: {type(exc).__name__}",flush=True)
+                    sleep((attempt+1)*5)
+        print(f"ERA5 source received: {site.technology} plant {site.plant_id}",flush=True)
         if not isinstance(payload,bytes) or not payload or len(payload)>10_000_000:
             raise ValueError("ERA5 response bytes invalid")
         hours,t,obj=validate_response(payload,year=year,month=month)
