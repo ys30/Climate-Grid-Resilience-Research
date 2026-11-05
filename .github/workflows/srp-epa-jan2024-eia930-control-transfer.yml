@@ -1,0 +1,85 @@
+name: SRP EPA 2024 January demand controlled independent winter comparison
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-jan2024-eia930-control-transfer.yml'
+      - 'src/grid_resilience/srp_epa_2024_january_eia930_controlled_transfer.py'
+      - 'tests/test_srp_epa_2024_january_eia930_controlled_transfer.py'
+jobs:
+  real-winter-controlled:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify winter controls and source admission tests
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_2024_january_eia930_controlled_transfer.py
+      - name: Retrieve independently source-certified January EPA ERA5, EIA930 and July OLS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/winter_controls/january outputs/winter_controls/eia outputs/winter_controls/july outputs/winter_controls/results
+          gh run download 42072156313 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-2024-epa-january-july-independent-season-comparison \
+            --dir outputs/winter_controls/january
+          gh run download 41407182014 --repo ys30/Climate-Grid-Resilience-Research \
+            --name eia930-2024-jan-utc-boundary-audit \
+            --dir outputs/winter_controls/eia
+          gh run download 41967906150 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-2024-demand-hour-day-controls-exploratory-ols \
+            --dir outputs/winter_controls/july
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          root=Path("outputs/winter_controls")
+          j=pd.read_csv(root/"january/epa_january_2024_744_local_hours_era5_utc_weather_gate.csv")
+          d=pd.read_csv(root/"eia/srp_2024_jan_utc_744.csv")
+          u=pd.read_csv(root/"july/epa_eia930_hour_day_controlled_exploratory_ols.csv")
+          assert len(j)==7440 and len(d)==744 and len(u)==10
+          assert j.observed_utc_month_weather_matched.sum()==7370
+          assert d.ba.eq("SRP").all()
+          PY
+      - name: Fit genuine January EPA source operating models with official demand and fixed effects
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python -m grid_resilience.srp_epa_2024_january_eia930_controlled_transfer \
+            --january-panel outputs/winter_controls/january/epa_january_2024_744_local_hours_era5_utc_weather_gate.csv \
+            --january-demand outputs/winter_controls/eia/srp_2024_jan_utc_744.csv \
+            --july-model outputs/winter_controls/july/epa_eia930_hour_day_controlled_exploratory_ols.csv \
+            --output outputs/winter_controls/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/winter_controls/results")
+          r=pd.read_csv(p/"epa_january_july_demand_hour_day_controlled_ols_comparison.csv")
+          m=json.loads((p/"epa_january_july_controlled_ols_comparison_manifest.json").read_text())
+          assert len(r)==10 and r.source_matched_hours.eq(737).all()
+          assert r.loc[(r.facility_id==141)&r.epa_unit_id.astype(str).isin(["1","2","3"]),"january_gross_model_status"].eq("insufficient_outcome_records").all()
+          assert not m["causal_effect_or_transfer_predictive_validity_claimed"]
+          assert not m["generator_thermal_derating_or_net_mw_calibrated"]
+          print("REAL JANUARY AND JULY CONTROLLED OBSERVATIONAL COEFFICIENTS")
+          print(r[["facility_id","epa_unit_id","source_operating_positive_hours",
+                   "january_operation_model_status","january_operation_temperature_lpm_per_c",
+                   "operation_lpm_temperature_coefficient_per_c",
+                   "january_gross_model_status","january_gross_temperature_mw_per_c",
+                   "gross_load_temperature_coefficient_mw_per_c"]].to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-eia930-january-controlled-seasonal-transfer
+          path: outputs/winter_controls/results/
+          if-no-files-found: warn
