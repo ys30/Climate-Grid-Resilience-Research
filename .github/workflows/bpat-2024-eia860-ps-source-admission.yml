@@ -1,0 +1,75 @@
+name: BPAT 2024 EIA860 genuine PS generator power energy identity admission
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-2024-eia860-ps-source-admission.yml'
+      - 'src/grid_resilience/bpat_2024_eia860_ps_generator_power_energy_admission.py'
+      - 'tests/test_bpat_2024_eia860_ps_generator_power_energy_admission.py'
+jobs:
+  original-eia860-ps-generator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test no battery-to-PS substitutions, exact generator identity and completeness gate
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_bpat_2024_eia860_ps_generator_power_energy_admission.py
+      - name: Retrieve original 2024 official EIA860 with SHA256
+        run: |
+          mkdir -p outputs/bpat_ps/source outputs/bpat_ps/results
+          python - <<'PY'
+          from urllib.request import Request,urlopen
+          from pathlib import Path
+          import hashlib,json
+          url="https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip"
+          with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=150) as r:
+              raw=r.read()
+          if len(raw)<50000:raise ValueError("EIA860 archive too small")
+          p=Path("outputs/bpat_ps/source")
+          (p/"eia8602024.zip").write_bytes(raw)
+          (p/"eia860_original_source_sha256.json").write_text(json.dumps(
+              {"original_source_url":url,"original_source_sha256":hashlib.sha256(raw).hexdigest(),
+               "bytes":len(raw)},indent=2)+"\n")
+          PY
+      - name: Extract official independent generator and storage sheets
+        run: |
+          python -m grid_resilience.eia860_generator_extract --archive outputs/bpat_ps/source/eia8602024.zip --output outputs/bpat_ps/source
+          python -m grid_resilience.eia860_storage_power_energy_extract --archive outputs/bpat_ps/source/eia8602024.zip --output outputs/bpat_ps/source
+      - name: Join original 2024 EIA860 Plant BA to PS prime-mover and independent storage sheet
+        run: |
+          python -m grid_resilience.bpat_2024_eia860_ps_generator_power_energy_admission \
+            --archive outputs/bpat_ps/source/eia8602024.zip \
+            --operable outputs/bpat_ps/source/eia860_2024_operable_generators.csv \
+            --storage outputs/bpat_ps/source/eia860_2024_storage_operable_power_energy.csv \
+            --output outputs/bpat_ps/results
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/bpat_ps/results")
+          m=json.loads((p/"bpat_2024_ps_power_energy_admission_manifest.json").read_text())
+          assert m["bpat_storage_sheet_not_pumped_storage_by_default"]
+          assert not m["initial_soc_verified"]
+          assert not m["efficiency_verified_from_historical_measurements"]
+          assert m["bpat_ps_source_complete_mw_mwh_records"]<=m["bpat_ps_prime_mover_records"]
+          print("BPAT REAL PS 2024 SOURCE IDENTITY AND PARAMETER GATE")
+          print(json.dumps(m,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-2024-eia860-ps-prime-mover-exact-storage-power-energy-evidence
+          path: |
+            outputs/bpat_ps/results/
+            outputs/bpat_ps/source/eia860_original_source_sha256.json
+            outputs/bpat_ps/source/eia860_2024_storage_power_energy_manifest.json
+          if-no-files-found: warn
