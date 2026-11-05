@@ -1,0 +1,92 @@
+name: SRP EPA January versus July 2024 independent seasonal source comparison
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-jan-jul-2024-seasonal-source-comparison.yml'
+      - 'src/grid_resilience/srp_epa_2024_january_july_observed_seasonal.py'
+      - 'tests/test_srp_epa_2024_january_july_observed_seasonal.py'
+jobs:
+  actual-source-independent-season-comparison:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate January local clock and 10-unit identity invariants
+        run: |
+          python -m pip install -e '.[dev]'
+          OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q tests/test_srp_epa_2024_january_july_observed_seasonal.py
+      - name: Recover original source-verified January ERA5 and July EPA ERA5 artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_seasons/epasource outputs/srp_seasons/january outputs/srp_seasons/july outputs/srp_seasons/results
+          gh run download 41775332025 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-jan2024-fullfleet-thermal-era5 --dir outputs/srp_seasons/january
+          gh run download 41961038085 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-local-july744-real-august-era5 --dir outputs/srp_seasons/july
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          x=Path("outputs/srp_seasons")
+          m=json.loads((x/"january/srp_thermal_era5_manifest.json").read_text())
+          j=pd.read_csv(x/"july/completed/epa_local_july_744h_observed_summary.csv")
+          assert m["period"]=="2024-01" and m["selected_site_count"]==13
+          assert len(j)==10 and j.complete_matched_hours.eq(744).all()
+          assert not m["weather_to_generator_derating_calibrated"]
+          PY
+      - name: Retrieve original checksummed 2024 Arizona EPA CAMPD archive
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from grid_resilience.srp_epa_2024_az_hourly_admission import SNAPSHOT_URL,EXPECTED_MD5
+          path=Path("outputs/srp_seasons/epasource/emissions-hourly-2024-az.csv")
+          digest=hashlib.md5()
+          with urlopen(Request(SNAPSHOT_URL,headers={"User-Agent":"ClimateGridResilienceResearch/1.0"}),timeout=180) as s,path.open("wb") as f:
+              while True:
+                  chunk=s.read(1024*1024)
+                  if not chunk:break
+                  digest.update(chunk);f.write(chunk)
+                  if f.tell()>250_000_000:raise ValueError("EPA archive unexpectedly large")
+          assert digest.hexdigest()==EXPECTED_MD5
+          assert path.stat().st_size>100_000_000
+          print("Original EPA archived MD5 verified; source bytes:",path.stat().st_size)
+          PY
+      - name: Join original January EPA operations and ERA5 and compare identical units to July
+        run: |
+          python -m grid_resilience.srp_epa_2024_january_july_observed_seasonal \
+            --original-epa outputs/srp_seasons/epasource/emissions-hourly-2024-az.csv \
+            --january-era5 outputs/srp_seasons/january/srp_thermal_era5_plant_hourly.csv \
+            --july-panel outputs/srp_seasons/july/completed/epa_local_july_744h_observed_era5.csv \
+            --output outputs/srp_seasons/results
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_seasons/results")
+          x=pd.read_csv(p/"epa_source_january_july_matched_operating_comparison.csv")
+          d=pd.read_csv(p/"epa_source_january_july_matched_differences.csv")
+          m=json.loads((p/"epa_source_january_july_comparison_manifest.json").read_text())
+          assert len(x)==20 and len(d)==10 and x.matched_utc_month_source_hours.eq(737).all()
+          assert m["same_epa_source_unit_cohort"]
+          assert not m["transfer_validation_of_july_temperature_slope"]
+          assert not m["causal_heat_derating_or_eens_estimated"]
+          print("SOURCE-MATCHED 2024 JAN-JUL EPA SEASONAL OPERATIONS")
+          print(x.to_string(index=False))
+          print("JAN-JUL PAIRWISE SOURCE DIFFERENCES")
+          print(d.to_string(index=False))
+          PY
+          rm -f outputs/srp_seasons/epasource/emissions-hourly-2024-az.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-january-july-independent-season-comparison
+          path: outputs/srp_seasons/results/
+          if-no-files-found: warn
