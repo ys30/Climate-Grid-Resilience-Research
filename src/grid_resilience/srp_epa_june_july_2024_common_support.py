@@ -236,6 +236,15 @@ def main():
                    pd.read_csv(args.july_demand,dtype="string"))
     result,meta=common_support(june,july)
     folder=Path(args.output);folder.mkdir(parents=True,exist_ok=True)
+    # Retain the small, observed, joined source-hour panels for reproducible
+    # holdout diagnostics without downloading the 183MB EPA archive again.
+    keep=["facility_id","unit_id","timestamp_utc","temperature_2m_c",
+          "operating_time","gross_load_mw","srp_ba_demand_mw"]
+    assert len(june)==7130 and len(july)==7370
+    june[keep].sort_values(["facility_id","unit_id","timestamp_utc"]).to_csv(
+        folder/"june_2024_epa_era5_eia930_verified_unit_hours.csv",index=False)
+    july[keep].sort_values(["facility_id","unit_id","timestamp_utc"]).to_csv(
+        folder/"july_2024_epa_era5_eia930_verified_unit_hours.csv",index=False)
     result.to_csv(folder/"srp_epa_june_july_joint_common_support.csv",index=False)
     (folder/"srp_epa_june_july_common_support_manifest.json").write_text(
         json.dumps(meta,indent=2)+"\n")
