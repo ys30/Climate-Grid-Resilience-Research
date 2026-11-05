@@ -100,6 +100,9 @@ jobs:
             outputs/july4/inputs/four_distinct_july_weeks_source_coverage.csv
             outputs/july4/inputs/four_week_source_manifest.json
             outputs/july4/inputs/frozen_hypothetical_links.csv
+            outputs/july4/inputs/frozen_partial_eia860_capacity.csv
+            outputs/july4/inputs/week_*/demand.csv
+            outputs/july4/inputs/week_*/weather.csv
             outputs/july4/results/july_four_week_four_scenario_ba_dispatch.csv
             outputs/july4/results/july_four_week_factorial_interaction_by_ba.csv
             outputs/july4/results/july_four_week_isolated_vs_links_interaction.csv
