@@ -1,0 +1,90 @@
+name: SRP 2024 January July EPA–ERA5–EIA930 common support
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-jan-jul-common-support.yml'
+      - 'src/grid_resilience/srp_epa_jan_jul_common_support.py'
+      - 'tests/test_srp_epa_jan_jul_common_support.py'
+jobs:
+  source-exact-support:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test strict 3D covariate support admission and no imputation
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_jan_jul_common_support.py
+      - name: Restore original-source January and July site weather and official BA demand
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/support/january outputs/support/jan_demand outputs/support/july outputs/support/jul_demand outputs/support/results
+          gh run download 42072156313 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-2024-epa-january-july-independent-season-comparison \
+            --dir outputs/support/january
+          gh run download 41407182014 --repo ys30/Climate-Grid-Resilience-Research \
+            --name eia930-2024-jan-utc-boundary-audit \
+            --dir outputs/support/jan_demand
+          gh run download 41961038085 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-local-july744-real-august-era5 \
+            --dir outputs/support/july
+          gh run download 41325415594 --repo ys30/Climate-Grid-Resilience-Research \
+            --name JULY2024-EIA930-OFFICIAL-RAW-ADJUSTED-BALANCE \
+            --dir outputs/support/jul_demand
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path("outputs/support")
+          a=pd.read_csv(p/"january/epa_january_2024_744_local_hours_era5_utc_weather_gate.csv")
+          b=pd.read_csv(p/"jan_demand/srp_2024_jan_utc_744.csv")
+          c=pd.read_csv(p/"july/completed/epa_local_july_744h_observed_era5.csv")
+          assert len(a)==len(c)==7440 and len(b)==744
+          PY
+      - name: Run genuine winter summer temperature demand hour-bin overlap audit
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python -m grid_resilience.srp_epa_jan_jul_common_support \
+            --january-panel outputs/support/january/epa_january_2024_744_local_hours_era5_utc_weather_gate.csv \
+            --january-demand outputs/support/jan_demand/srp_2024_jan_utc_744.csv \
+            --july-panel outputs/support/july/completed/epa_local_july_744h_observed_era5.csv \
+            --july-demand outputs/support/jul_demand/official_2024_july_combined.csv \
+            --output outputs/support/results
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          root=Path("outputs/support/results")
+          a=pd.read_csv(root/"epa_jan_jul_joint_covariate_support_audit.csv")
+          m=json.loads((root/"epa_jan_jul_joint_support_manifest.json").read_text())
+          assert len(a)==10 and a.january_source_hours.eq(737).all()
+          assert a.july_source_hours.eq(737).all()
+          assert not m["causal_temperature_derating_or_eens_claimed"]
+          assert not m["ecmps_physical_generator_electrical_identity_admitted"]
+          assert not m["weather_imputation_or_matching"]
+          print("SOURCE-VERIFIED JOINT TEMP–DEMAND–HOUR SUPPORT")
+          print(a[["facility_id","epa_unit_id","january_temperature_max_c",
+                   "july_temperature_min_c","temperature_ranges_intersect",
+                   "demand_ranges_intersect","shared_2c_500mw_4h_bins",
+                   "january_joint_cell_covered_hours","july_joint_cell_covered_hours",
+                   "descriptive_covariate_common_support_screen_pass",
+                   "descriptive_running_gross_support_screen_pass"]].to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-january-july-common-support-source-audit
+          path: outputs/support/results/
+          if-no-files-found: warn
