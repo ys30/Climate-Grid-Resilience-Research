@@ -48,3 +48,31 @@ def test_original_official_csv_rejects_missing_end_hour(tmp_path):
     path=tmp_path/"incomplete.csv";source.to_csv(path,index=False)
     with pytest.raises(ValueError,match="complete valid UTC"):
         from_official_balance_csv(path,"SRP",2024,1)
+
+def test_srp_january_2024_seven_utc_boundary_hours_only_admitted_explicitly(tmp_path):
+    h=pd.date_range("2024-01-01T08:00:00Z",periods=737,freq="h")
+    source=pd.DataFrame({
+        "Balancing Authority":"SRP",
+        "UTC Time at End of Hour":h.strftime("%m/%d/%Y %I:%M:%S %p"),
+        "Demand (MW)":1200.})
+    path=tmp_path/"boundary_original.csv";source.to_csv(path,index=False)
+    with pytest.raises(ValueError,match="missing_hours=7"):
+        from_official_balance_csv(path,"SRP",2024,1)
+    admitted=from_official_balance_csv(path,"SRP",2024,1,
+        permit_2024_jan_srp_first_seven_absent=True)
+    assert len(admitted)==737
+    assert admitted.timestamp.iloc[0]==pd.Timestamp("2024-01-01T07:00:00Z")
+    assert admitted.timestamp.iloc[-1]==pd.Timestamp("2024-01-31T23:00:00Z")
+    assert not admitted.timestamp.isna().any()
+
+
+def test_boundary_exception_cannot_hide_nonboundary_missing_hour(tmp_path):
+    h=pd.date_range("2024-01-01T08:00:00Z",periods=737,freq="h").delete(20)
+    source=pd.DataFrame({
+        "Balancing Authority":"SRP",
+        "UTC Time at End of Hour":h.strftime("%m/%d/%Y %I:%M:%S %p"),
+        "Demand (MW)":1200.})
+    path=tmp_path/"interior_missing.csv";source.to_csv(path,index=False)
+    with pytest.raises(ValueError,match="missing_hours=8"):
+        from_official_balance_csv(path,"SRP",2024,1,
+            permit_2024_jan_srp_first_seven_absent=True)
