@@ -1,0 +1,42 @@
+name: SRP ECMPS production 2024 monitoring-plan access probe
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-ecmps-production-monitor-plan-access.yml'
+      - 'src/grid_resilience/srp_ecmps_production_access_probe.py'
+      - 'tests/test_srp_ecmps_production_access_probe.py'
+jobs:
+  probe-source-access:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit-test production request and safe evidence semantics
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_ecmps_production_access_probe.py
+      - name: Probe actual EPA production monitoring plan export, without assuming admission
+        env:
+          EPA_CAM_API_KEY: ${{ secrets.EPA_CAM_API_KEY }}
+        run: |
+          python -m grid_resilience.srp_ecmps_production_access_probe --output outputs/ecmps_access
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("outputs/ecmps_access/production_ecmps_access_probe.json").read_text())
+          assert r["environment"]=="production"
+          assert len(r["responses"])==3
+          assert not r["dated_monitoring_plan_relationships_admitted"]
+          assert not r["physical_eia_generator_identity_verified"]
+          assert all(x["admitted_monitoring_plan_rows"]==0 for x in r["responses"])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-ecmps-production-source-access-audit
+          path: outputs/ecmps_access/production_ecmps_access_probe.json
+          if-no-files-found: warn
