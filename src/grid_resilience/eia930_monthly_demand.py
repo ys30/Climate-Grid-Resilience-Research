@@ -41,12 +41,43 @@ def fetch(ba,year,month):
     if int(body["response"].get("total",len(data)))!=len(data):raise ValueError("Pagination required; fail closed")
     return parse_records(data,ba,year,month),url
 
+
+def from_official_balance_csv(csv_path,ba,year,month):
+    """Fail-closed full UTC month from original EIA official hour-ending CSV."""
+    fields={"Balancing Authority","UTC Time at End of Hour","Demand (MW)"}
+    source=pd.read_csv(csv_path,dtype="string")
+    if not fields.issubset(source):
+        raise ValueError("Official EIA930 balance CSV schema incomplete")
+    g=source.loc[source["Balancing Authority"].str.strip().eq(ba),
+                 ["UTC Time at End of Hour","Demand (MW)"]].copy()
+    if g.empty:
+        raise ValueError("No official balance CSV demand for requested BA")
+    g["timestamp"]=hour_ending_to_start(pd.to_datetime(
+        g["UTC Time at End of Hour"],
+        format="%m/%d/%Y %I:%M:%S %p",utc=True,errors="raise"))
+    g=g.loc[g.timestamp.dt.year.eq(year)&g.timestamp.dt.month.eq(month)].copy()
+    g["demand_mw"]=pd.to_numeric(g["Demand (MW)"],errors="coerce")
+    expected=pd.date_range(f"{year}-{month:02d}-01",
+        periods=calendar.monthrange(year,month)[1]*24,freq="h",tz="UTC")
+    if (g.timestamp.duplicated().any() or
+        not pd.DatetimeIndex(g.timestamp.sort_values()).equals(expected) or
+        g.demand_mw.isna().any() or g.demand_mw.le(0).any()):
+        raise ValueError("Official original CSV lacks complete valid UTC model start-hours")
+    return g[["timestamp","demand_mw"]].assign(ba=ba)[
+        ["timestamp","ba","demand_mw"]].sort_values("timestamp").reset_index(drop=True)
+
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--ba",required=True);p.add_argument("--year",type=int,required=True)
     p.add_argument("--month",type=int,required=True);p.add_argument("--output",required=True)
+    p.add_argument("--official-csv",help="Original official EIA930 BALANCE six-month CSV; bypass API 403")
     a=p.parse_args()
-    data,url=fetch(a.ba,a.year,a.month)
+    if a.official_csv:
+        data=from_official_balance_csv(a.official_csv,a.ba,a.year,a.month)
+        url="official EIA930 BALANCE CSV supplied and timestamp/checksum logged by source workflow"
+    else:
+        data,url=fetch(a.ba,a.year,a.month)
     out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
     data.to_csv(out/"hourly_eia930_demand.csv",index=False)
     (out/"demand_manifest.json").write_text(json.dumps({"source_url":url,"ba":a.ba,
