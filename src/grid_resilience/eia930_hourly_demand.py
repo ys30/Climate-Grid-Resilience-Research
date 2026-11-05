@@ -8,6 +8,7 @@ import argparse
 import json
 from pathlib import Path
 import pandas as pd
+from .eia930_hour_convention import hour_ending_to_start
 
 BAS=("CISO","AZPS","BPAT","SRP")
 
@@ -30,7 +31,7 @@ def normalize(api_json, output, start, end, bas=BAS):
         raise ValueError("Null official demand record")
     if not set(frame.respondent).issubset(set(bas)):
         raise ValueError("Unexpected BA respondent")
-    frame["timestamp"]=pd.to_datetime(frame.period,utc=True,errors="raise")
+    frame["timestamp"]=hour_ending_to_start(frame.period)
     frame["demand_mw"]=pd.to_numeric(frame.value,errors="raise")
     if not frame.demand_mw.map(lambda v:0<=float(v)<float("inf")).all():
         raise ValueError("Nonfinite/negative reported demand")
@@ -48,7 +49,9 @@ def normalize(api_json, output, start, end, bas=BAS):
               "bas":list(bas),"hours_per_ba":len(expected_times),
               "records":len(normalized),"original_api_rows":len(rows),
               "historical_calibration_certified":False,
-              "limitations":"UTC hourly labels must be verified against EIA's interval conventions; independently verify source URL/revision and applicability to modeled BA boundaries."}
+              "eia_source_clock":"hour-ending UTC",
+              "normalized_clock":"interval-start UTC; subtract one hour from EIA labels",
+              "limitations":"Source URL/revision, BA applicability and historical calibration must still be verified independently."}
     (out/"hourly_ba_demand_manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
     return manifest
 
