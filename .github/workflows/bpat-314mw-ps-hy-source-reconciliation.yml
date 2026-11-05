@@ -1,0 +1,71 @@
+name: BPAT 314MW PS source-anchored exact 64-row HY replay and climate factorial
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-314mw-ps-hy-source-reconciliation.yml'
+jobs:
+  audit-real-source-ps-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pandas numpy
+      - name: Download original HY baseline and 314MW source-anchored PS model evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/compare/old outputs/compare/new outputs/compare/results
+          gh run download 42122153716 --repo ys30/Climate-Grid-Resilience-Research --name bpat-july2024-672h-intertemporal-hy-pypsa-factorial --dir outputs/compare/old
+          gh run download 42126570062 --repo ys30/Climate-Grid-Resilience-Research --name bpat-july2024-314mw-ps-source-anchored-672h-hy-soc-counterfactual --dir outputs/compare/new
+      - name: Certify no-PS exact source replay and compute all 4 stress interactions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json,numpy as np
+          root=Path("outputs/compare")
+          a=pd.read_csv(root/"old/july_2024_672h_bpat_hy_intertemporal_factorial_by_ba_week.csv")
+          b=pd.read_csv(root/"new/july_2024_672h_bpat_hy_ps_factorial_by_ba_week.csv")
+          a=a.loc[a.resource_scenario.eq("HY_2000MW_598947MWh")]
+          c=b.loc[b.resource_scenario.eq("PS_0MW_0MWh_eta100")]
+          keys=["scenario","ba","week"]
+          assert len(a)==len(c)==64
+          assert not a.duplicated(keys).any() and not c.duplicated(keys).any()
+          joined=a.merge(c,on=keys,validate="one_to_one",suffixes=("_original","_ps_free"))
+          assert len(joined)==64
+          joined["abs_diff_mwh"]=(joined.modeled_unserved_mwh_original-joined.modeled_unserved_mwh_ps_free).abs()
+          assert joined.abs_diff_mwh.max()<.05
+          x=b.groupby(["resource_scenario","scenario"],as_index=False).modeled_unserved_mwh.sum()
+          no_ps=x.loc[x.resource_scenario.eq("PS_0MW_0MWh_eta100")].set_index("scenario").modeled_unserved_mwh
+          rows=[]
+          for label,g in x.groupby("resource_scenario"):
+              q=g.set_index("scenario").modeled_unserved_mwh
+              rows.append({"resource_scenario":label,"baseline_mwh":float(q["baseline"]),
+                  "baseline_shortage_reduction_mwh":float(no_ps["baseline"]-q["baseline"]),
+                  "compound_interaction_mwh":float(q["heat_wind"]-q["heat_only"]-q["wind_only"]+q["baseline"])})
+          out=pd.DataFrame(rows)
+          if not out.baseline_shortage_reduction_mwh.ge(-.05).all():raise ValueError("PS model worsens baseline unexpectedly")
+          out.to_csv(root/"results/bpat_314mw_ps_baseline_reduction_and_factorial.csv",index=False)
+          joined.to_csv(root/"results/bpat_314mw_ps_free_original_hy_64_exact_rows.csv",index=False)
+          manifest={"no_ps_original_64_source_model_rows_reproduced":len(joined),
+              "max_abs_no_ps_original_replay_error_mwh":float(joined.abs_diff_mwh.max()),
+              "source_original_HY_run":42122153716,"source_new_314mw_PS_run":42126570062,
+              "scenario_ps_nameplate_314MW_from_eia860":True,
+              "ps_usable_energy_and_efficiency_inferred_from_eia860":False,
+              "real_outage_eens_calibration":False}
+          (root/"results/bpat_314mw_ps_baseline_replay_manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
+          print("EXACT BPAT SOURCE-ANCHORED PS RECONCILIATION")
+          print(out.to_string(index=False,float_format=lambda z:f"{z:.3f}"))
+          print(json.dumps(manifest,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bpat-314mw-ps-64-exact-hy-controls-and-factorial-comparison
+          path: outputs/compare/results/
+          if-no-files-found: error
