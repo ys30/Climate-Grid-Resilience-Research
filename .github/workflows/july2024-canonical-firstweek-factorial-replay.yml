@@ -41,7 +41,7 @@ jobs:
           assert len(pd.read_csv(root/"new/inputs/week_1/weather.csv"))==672
           assert len(pd.read_csv(root/"new/results/july_four_week_four_scenario_ba_dispatch.csv"))==128
           # Isolated networks have no edges; this is a scenario definition, not a fetched empirical input.
-          (root/"new/inputs/isolated_ba_links.csv").write_text("from_ba,to_ba,capacity_mw\\n")
+          (root/"new/inputs/isolated_ba_links.csv").write_text("from_ba,to_ba,capacity_mw\n")
           PY
       - name: Independently replay 8 first-week PyPSA solves using original exact weather and corrected official demand
         run: |
