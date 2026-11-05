@@ -109,7 +109,7 @@ def run(demand,weather,capacity,hydro_scale,output):
             status,condition=n.optimize(solver_name="highs")
             if (status,condition)!=("ok","optimal"):
                 raise RuntimeError(f"Nonoptimal hydro source study: {label} {scenario}: {status}/{condition}")
-            hydro=np.maximum(n.links_t.p0["BPAT_HY_POWER"].to_numpy(float),0) if power>0 else np.zeros(672)
+            hydro=np.maximum(n.links_t.p0["BPAT_HY_POWER"].to_numpy(float),0)
             if hydro.max()>HY_POWER+.02 or hydro.sum()>HY_BUDGET+.1:
                 raise ValueError("Hydro power or total 28-day energy limit violated")
             if HY_POWER>0:
