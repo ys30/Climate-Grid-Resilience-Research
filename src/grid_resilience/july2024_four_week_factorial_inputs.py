@@ -62,7 +62,7 @@ def admit_july(demand_source,weather,capacity,output):
         c[col]=pd.to_numeric(c[col],errors="coerce")
     if not np.isfinite(c[["gas_mw","wind_mw"]].to_numpy(float)).all() or c[["gas_mw","wind_mw"]].lt(0).any().any():
         raise ValueError("Invalid frozen original capacity source")
-    if d.shape[0]!=w.shape[0]!=4*HOURS:
+    if d.shape[0] != 4*HOURS or w.shape[0] != 4*HOURS:
         raise ValueError("Source 4-BA hourly coverage incomplete")
     z=d.merge(w,on=["timestamp","ba"],how="inner",validate="one_to_one")
     if len(z)!=HOURS*4:
