@@ -52,17 +52,24 @@ def validate_source(demand,weather,capacity,hydro_scale):
     return d,w,c,idx
 
 
-def run(demand,weather,capacity,hydro_scale,output):
+def run(demand,weather,capacity,hydro_scale,output,settings=None):
     import pypsa
     d,w,c,times=validate_source(demand,weather,capacity,hydro_scale)
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
     loads=d.set_index(["timestamp","ba"]).demand_mw
     climate=w.set_index(["timestamp","ba"])
     fleet=c.set_index("ba")
+    specs=SETTINGS if settings is None else tuple(settings)
+    if not specs or len(specs)!=len(set(specs)):
+        raise ValueError("PS sensitivity assumption grid empty or duplicated")
+    for power,energy,eta in specs:
+        if (not np.isfinite([power,energy,eta]).all() or power<0 or energy<0 or
+            (power==0)!=(energy==0) or not 0<eta<=1):
+            raise ValueError("Invalid hypothetical PS power/energy/efficiency setting")
     records=[]
     hourly=[]
     resource=[]
-    for ps_power,ps_energy,ps_roundtrip in SETTINGS:
+    for ps_power,ps_energy,ps_roundtrip in specs:
         if HY_BUDGET>hydro_scale:
             raise ValueError("Observed EIA923 reference scale mismatch")
         label=f"PS_{int(ps_power)}MW_{int(ps_energy)}MWh_eta{int(ps_roundtrip*100)}"
@@ -167,7 +174,7 @@ def run(demand,weather,capacity,hydro_scale,output):
     f=pd.DataFrame(records)
     h=pd.DataFrame(hourly)
     z=pd.DataFrame(resource)
-    if len(f)!=len(SETTINGS)*4*4*4 or len(h)!=len(SETTINGS)*4*672:
+    if len(f)!=len(specs)*4*4*4 or len(h)!=len(specs)*4*672:
         raise ValueError("Incomplete source by scenario outputs")
     control=f.loc[f.resource_scenario.eq("PS_0MW_0MWh_eta100")&f.scenario.eq("baseline")]
     if len(control)!=16:
@@ -192,7 +199,7 @@ def run(demand,weather,capacity,hydro_scale,output):
               "model_hours_single_contiguous_horizon":672,
               "model_weeks":4,
               "source_ba_count":4,
-              "model_optimization_scenarios":len(SETTINGS)*4,
+              "model_optimization_scenarios":len(specs)*4,
               "isolated_only_no_hypothetical_interties":True,
               "supply_base_unchanged_2024_eia860_partial_gas_wind":True,
               "hydro_capacity_all_assumed_not_verified_eia860":True,
@@ -200,6 +207,7 @@ def run(demand,weather,capacity,hydro_scale,output):
               "budget_from_measured_net_mwh_is_assumed_not_measured_water_availability":True,
               "pumped_storage_separate_closed_zero_soc":True,
               "ps_power_energy_efficiencies_only_assumptions":True,
+              "ps_sensitivity_configurations":[list(x) for x in specs],
               "physical_ps_eia860_ba_roster_verified":False,
               "source_hydro_hourly_generation_not_known":True,
               "historically_calibrated_capacity_or_outage_or_eens":False}
