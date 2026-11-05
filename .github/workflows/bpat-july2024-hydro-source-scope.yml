@@ -1,0 +1,73 @@
+name: BPAT July 2024 EIA923 HY PS monthly vs official EIA930 hydro scope
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-july2024-hydro-source-scope.yml'
+      - 'src/grid_resilience/bpat_july2024_hydro_cross_source_scope.py'
+      - 'tests/test_bpat_july2024_hydro_cross_source_scope.py'
+jobs:
+  authentic-hydro-scope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify no-imputation, reported HY PS identity and source-hour admission
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_bpat_july2024_hydro_cross_source_scope.py
+      - name: Restore EIA923 official Page1 HY PS, EIA930 July original and partial EIA860 model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/bpat_hydro/hy_ps outputs/bpat_hydro/eia930 outputs/bpat_hydro/model outputs/bpat_hydro/results
+          gh run download 41263007401 --repo ys30/Climate-Grid-Resilience-Research --name eia923-2024-intake-manifests --dir outputs/bpat_hydro/hy_ps
+          gh run download 41325415594 --repo ys30/Climate-Grid-Resilience-Research --name JULY2024-EIA930-OFFICIAL-RAW-ADJUSTED-BALANCE --dir outputs/bpat_hydro/eia930
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/bpat_hydro/model
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          p=Path("outputs/bpat_hydro")
+          src=p/"hy_ps/eia923_hy_ps_ba_month_observed_2024.csv"
+          eia=p/"eia930/official_2024_july_combined.csv"
+          cap=p/"model/inputs/frozen_partial_eia860_capacity.csv"
+          assert src.is_file() and eia.is_file() and cap.is_file()
+          x=pd.read_csv(src)
+          assert len(x)==96
+          assert len(pd.read_csv(eia))==2976
+          assert len(pd.read_csv(cap))==4
+          print("AUTHENTIC HYPS July BPAT source rows")
+          print(x.loc[x.reported_ba.eq("BPAT") & x.period.eq("2024-07")].to_string(index=False))
+          PY
+      - name: Compute BPAT 2024 July HY PS source-scope and official full month cross-report diagnostic
+        run: |
+          python -m grid_resilience.bpat_july2024_hydro_cross_source_scope \
+            --eia923-month outputs/bpat_hydro/hy_ps/eia923_hy_ps_ba_month_observed_2024.csv \
+            --official-eia930 outputs/bpat_hydro/eia930/official_2024_july_combined.csv \
+            --partial-capacity outputs/bpat_hydro/model/inputs/frozen_partial_eia860_capacity.csv \
+            --output outputs/bpat_hydro/results
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/bpat_hydro/results")
+          m=json.loads((p/"bpat_july2024_hydro_reporting_scope_manifest.json").read_text())
+          assert m["official_eia930_complete_july_hour_count"]==744
+          assert not m["source_reporting_grains_equivalent_certified"]
+          assert not m["historical_blackouts_or_eens_identified"]
+          print("VERIFIED BPAT JULY REPORTING SCOPE",json.dumps(m,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-2024-july-source-eia923-hyps-eia930-hour-group-scope
+          path: outputs/bpat_hydro/results/
+          if-no-files-found: warn
