@@ -1,0 +1,75 @@
+name: EIA930 canonical UTC hour-start intake and archived four BA source parity
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/eia930-hour-ending-normalization-source-ci.yml'
+      - 'src/grid_resilience/eia930_hour_convention.py'
+      - 'src/grid_resilience/eia930_hourly.py'
+      - 'src/grid_resilience/eia930_monthly_demand.py'
+      - 'src/grid_resilience/eia930_hourly_demand.py'
+      - 'tests/test_eia930_hourly.py'
+      - 'tests/test_eia930_monthly_demand.py'
+      - 'tests/test_eia930_hourly_demand.py'
+jobs:
+  source-backed-hour-start:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate all three EIA930 API intake paths
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_eia930_hourly.py tests/test_eia930_monthly_demand.py tests/test_eia930_hourly_demand.py
+      - name: Recover authentic archived legacy API and official July CSV-source inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/clock/old outputs/clock/new outputs/clock/results
+          gh run download 41102363806 --repo ys30/Climate-Grid-Resilience-Research --name MATCHED-OBSERVED-EIA930-ERA5-2024 --dir outputs/clock/old
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/clock/new
+      - name: Real source overlap conservation and exact first-week BA demand parity after conversion
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import numpy as np
+          import pandas as pd
+          from grid_resilience.eia930_hour_convention import hour_ending_to_start
+          base=Path('outputs/clock')
+          old=pd.read_csv(base/'old/demand.csv')
+          new=pd.read_csv(base/'new/inputs/week_1/demand.csv')
+          old['timestamp']=hour_ending_to_start(old.timestamp)
+          new['timestamp']=pd.to_datetime(new.timestamp,utc=True,errors='raise')
+          assert len(old)==len(new)==672
+          assert old.duplicated(['ba','timestamp']).sum()==0
+          common=old.merge(new,on=['ba','timestamp'],how='inner',suffixes=('_old','_official'),validate='one_to_one')
+          assert len(common)==4*167
+          assert common.groupby('ba').size().eq(167).all()
+          assert np.array_equal(common.demand_mw_old.to_numpy(),common.demand_mw_official.to_numpy())
+          dropped_old=old.merge(new[['timestamp','ba']],on=['timestamp','ba'],how='left',indicator=True)
+          dropped_new=new.merge(old[['timestamp','ba']],on=['timestamp','ba'],how='left',indicator=True)
+          assert dropped_old._merge.eq('left_only').sum()==4
+          assert dropped_new._merge.eq('left_only').sum()==4
+          report={'source_legacy_github_run':41102363806,'source_official_github_run':42104106361,
+            'ba_count':4,'source_input_hours_per_ba':168,
+            'matched_original_observed_hour_pairs_per_ba':167,
+            'exact_value_matches_after_eia_hour_ending_to_start':668,
+            'missing_boundary_hour_legacy':4,'missing_boundary_hour_official':4,
+            'unmatched_endpoints_never_imputed':True,
+            'source_hour_end_converted_to_start':True,
+            'model_physical_calibration':False}
+          (base/'results/eia930_hour_start_corrected_legacy_vs_official.json').write_text(json.dumps(report,indent=2)+'\n')
+          print('SOURCE VERIFIED EIA UTC HOUR END TO START',json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eia930-canonical-hour-start-old-vs-official-source-parity
+          path: outputs/clock/results/
+          if-no-files-found: error
