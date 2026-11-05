@@ -1,5 +1,16 @@
 # Research V2: Independent paper C — Compound climate extremes and electricity adequacy
 
+## Verified progress correction — 5 November 2026
+
+The initial Gate 1 milestone in this plan was written before later CI-verified research. **The full baseline/heat-only/wind-only/heat+wind four-case PyPSA experiment HAS BEEN COMPLETED for one 168-hour July 2024 observed-input window across CISO, AZPS, BPAT, SRP**, including explicit nonadditivity (**+23,306.936668 MWh**, hypothetical 10%-peak linked network), isolated/no-link comparison and 5/10/20% assumed rating sensitivity. These are uncalibrated screening outcomes, not true physical loss or measured outage energy. See [completed factorial analysis](../docs/results/july2024_factorial_interaction_by_ba.md), [paired network analysis](../docs/results/july2024_paired_network_factorial_interaction.md), and [network-rating sensitivity](../docs/results/july2024_network_rating_factorial_sensitivity.md). A separate SRP-only January 744-hour assumed six-technology four-case experiment was completed and produced **zero shortage in all four scenarios**; it is NOT a matched independent replica of July's four-BA partial-fleet analysis.
+
+**New original-source event audit CI [42103046067](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42103046067)**: the archived July four-BA matched data provide **672 BA-hour rows but only 168 unique hourly timestamps**, i.e. **ONE independent 168-hour event**, not four events. Source gate and results: [report](PROJECT_C_2024_FACTORIAL_SOURCE_EVENT_COVERAGE_CI_VERIFIED.md). Consequently **Gate 1 is PARTIAL: scenario factorial complete, independent event replication incomplete**. Data acquisition for additional genuine matching 4-BA source windows is required before claiming multi-event validation.
+
+**Observed source diagnostics:** separately verified Arizona source-unit EPA/ERA5/EIA930 June↔July common-support and month-transfer assessments, including the finding that observed ERA5 temperature did not consistently improve held-out month forecast skill. These cannot be used to calibrate available generator MW or convert the modeled gaps into actual EENS. See [month transfer](SRP_2024_EPA_JUNE_JULY_OBSERVED_COVARIATE_TRANSFER_CI_VERIFIED.md) and [longer-block robustness](SRP_2024_JUNE_JULY_COMMON_CELL_MULTIDAY_DIFFERENCE_CI_VERIFIED.md).
+
+**Revised execution order:** (i) source-certified additional 4-BA event hours; (ii) four-case exactly matched re-solves and event interaction heterogeneity; (iii) feasible technology/storage and genuine transmission rating evidence; (iv) independent generator dispatch/availability calibration; (v) integrated private manuscript and figures. No manuscript can claim multi-event generalization yet.
+
+
 **Status:** preregistered-style analysis plan; **not** a calibrated reliability study or confirmed manuscript findings.
 
 ## Central question
