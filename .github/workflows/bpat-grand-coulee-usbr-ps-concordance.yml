@@ -1,0 +1,56 @@
+name: Grand Coulee BPAT PS EIA860 to USBR facility irrigation concordance
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-grand-coulee-usbr-ps-concordance.yml'
+      - 'src/grid_resilience/bpat_grand_coulee_ps_usbr_concordance.py'
+      - 'tests/test_bpat_grand_coulee_ps_usbr_concordance.py'
+jobs:
+  original-generator-and-facility-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test exact generator and boundary checks
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_bpat_grand_coulee_ps_usbr_concordance.py
+      - name: Restore independently archived official EIA860 2024 PS six unit identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/usbr/official outputs/usbr/results
+          gh run download 42126016886 --repo ys30/Climate-Grid-Resilience-Research --name bpat-2024-eia860-ps-prime-mover-exact-storage-power-energy-evidence --dir outputs/usbr/official
+          find outputs/usbr/official -name 'bpat_2024_pumped_hydro_generator_source_identity.csv'
+      - name: Audit Grand Coulee PG7–PG12 against USBR facility function and missing electrical energy ratings
+        run: |
+          python -m grid_resilience.bpat_grand_coulee_ps_usbr_concordance \
+            --eia860-ps outputs/usbr/official/results/bpat_2024_pumped_hydro_generator_source_identity.csv \
+            --output outputs/usbr/results
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          p=Path('outputs/usbr/results')
+          x=pd.read_csv(p/'bpat_grand_coulee_eia860_ps_six_generator_usbr_concordance.csv')
+          m=json.loads((p/'grand_coulee_usbr_2024_ps_operational_admission.json').read_text())
+          assert len(x)==6 and abs(x.nameplate_capacity_mw.sum()-314)<.01
+          assert set(x.generator_id)=={'PG7','PG8','PG9','PG10','PG11','PG12'}
+          assert m['Banks_Lake_upper_reservoir_and_irrigation_water_storage']
+          assert not m['PS_usable_MWh_verified']
+          assert not m['PS_pumping_electrical_MW_verified_from_source']
+          print('SOURCE IDENTITIES VERIFIED; USABLE HYDRO STORAGE ENERGY NOT CERTIFIED')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-grand-coulee-six-ps-usbr-irrigation-evidence-scope
+          path: outputs/usbr/results/
+          if-no-files-found: warn
