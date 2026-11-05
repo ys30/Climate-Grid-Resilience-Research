@@ -1,0 +1,32 @@
+name: USBR RISE original 2024 Banks Lake daily plus Keys III monthly upper pond source
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/usbr-rise-banks-lake-2024-original-source.yml'
+      - 'src/grid_resilience/usbr_rise_banks_lake_july2024_discovery.py'
+      - 'tests/test_usbr_rise_banks_lake_july2024_discovery.py'
+jobs:
+  authoritative-daily-and-monthly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run source provenance and strict original CSV response tests
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_usbr_rise_banks_lake_july2024_discovery.py
+      - name: Fetch two original RISE catalog time series with source SHA256
+        run: |
+          python -m grid_resilience.usbr_rise_banks_lake_july2024_discovery --output outputs/RISE_original
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: usbr-rise-bnk-daily-and-keys3-upperpond-monthly-2024-original-source
+          path: outputs/RISE_original/
+          if-no-files-found: warn
