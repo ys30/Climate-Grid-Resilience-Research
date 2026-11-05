@@ -1,0 +1,108 @@
+name: July 2024 four distinct observed-week factorial PyPSA replication
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/july2024-four-week-factorial-replication.yml'
+      - 'src/grid_resilience/july2024_four_week_factorial_inputs.py'
+      - 'src/grid_resilience/july2024_four_week_factorial_replication.py'
+      - 'tests/test_july2024_four_week_factorial_inputs.py'
+      - 'tests/test_july2024_four_week_factorial_replication.py'
+jobs:
+  four-observed-source-weeks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate exact observed weeks and factorial accounting guards
+        run: |
+          python -m pip install -e '.[model,dev]'
+          python -m pytest -q tests/test_july2024_four_week_factorial_inputs.py tests/test_july2024_four_week_factorial_replication.py
+      - name: Restore official audited 744-hour EIA930 July and original EIA860 partial fleet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/july4/source_eia outputs/july4/source_capacity outputs/july4/source_weather outputs/july4/inputs outputs/july4/results
+          gh run download 41325415594 --repo ys30/Climate-Grid-Resilience-Research --name JULY2024-EIA930-OFFICIAL-RAW-ADJUSTED-BALANCE --dir outputs/july4/source_eia
+          gh run download 41107169962 --repo ys30/Climate-Grid-Resilience-Research --name EIA860-2024-FOUR-BA-EXPLICIT-PARTIAL-FLEET --dir outputs/july4/source_capacity
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          root=Path("outputs/july4")
+          files=list((root/"source_capacity").rglob("capacity.csv"))
+          assert len(files)==1,files
+          c=pd.read_csv(files[0])
+          assert len(c)==4 and c.capacity_source.str.contains("GENERIC_THERMAL_PROXY").all()
+          d=pd.read_csv(root/"source_eia/official_2024_july_combined.csv")
+          assert len(d)==4*744
+          print("Original 2024 BA demand and partial EIA860 source rows verified")
+          PY
+      - name: Fetch four BA ERA5 representative point weather for genuine 28 July days
+        run: |
+          python -m grid_resilience.era5_proxy --bas AZPS BPAT CISO SRP --start 2024-07-01T00:00:00Z --end 2024-07-29T00:00:00Z --output outputs/july4/source_weather/era5_2024_july_28days.csv
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          p=Path("outputs/july4/source_weather/era5_2024_july_28days.csv")
+          w=pd.read_csv(p)
+          assert len(w)==4*672 and w.groupby("ba").size().eq(672).all()
+          assert w.wind_availability.between(0,1).all()
+          PY
+      - name: Admit truly disjoint 4 x 168h source windows under frozen fleet and links
+        run: |
+          CAPACITY_FILE=$(find outputs/july4/source_capacity -name capacity.csv | head -n 1)
+          test -n "$CAPACITY_FILE"
+          python -m grid_resilience.july2024_four_week_factorial_inputs --eia930-july outputs/july4/source_eia/official_2024_july_combined.csv --era5-fourba-672 outputs/july4/source_weather/era5_2024_july_28days.csv --capacity "$CAPACITY_FILE" --output outputs/july4/inputs
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          m=json.loads(Path("outputs/july4/inputs/four_week_source_manifest.json").read_text())
+          x=pd.read_csv("outputs/july4/inputs/four_distinct_july_weeks_source_coverage.csv")
+          assert m["nonoverlapping_168h_windows"]==4 and m["source_distinct_hourly_timestamps"]==672
+          assert len(x)==4 and x.distinct_hours.eq(168).all()
+          assert not m["physical_eens_or_historical_outages_estimated"]
+          PY
+      - name: Run actual matched four-case PyPSA across four observed weeks and fixed assumed network variants
+        run: |
+          python -m grid_resilience.july2024_four_week_factorial_replication --prepared outputs/july4/inputs --output outputs/july4/results
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          p=Path("outputs/july4/results")
+          f=pd.read_csv(p/"july_four_week_four_scenario_ba_dispatch.csv")
+          i=pd.read_csv(p/"july_four_week_factorial_interaction_by_ba.csv")
+          s=pd.read_csv(p/"july_four_week_isolated_vs_links_interaction.csv")
+          m=json.loads((p/"july_four_week_replication_scope.json").read_text())
+          assert len(f)==128 and len(i)==40 and len(s)==4
+          assert set(f.scenario)=={"baseline","heat_only","wind_only","heat_wind"}
+          assert m["scenario_solves"]==32
+          assert not m["modeled_shortage_is_observed_eens"]
+          print("REAL JULY FOUR WEEK FACTORIAL INTERACTIONS")
+          print(s.to_string(index=False))
+          print("REAL JULY FOUR WEEK SYSTEM AND BA INTERACTION")
+          print(i.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: july2024-4-disjoint-real-week-factorial-source-results
+          path: |
+            outputs/july4/inputs/four_distinct_july_weeks_source_coverage.csv
+            outputs/july4/inputs/four_week_source_manifest.json
+            outputs/july4/inputs/frozen_hypothetical_links.csv
+            outputs/july4/results/july_four_week_four_scenario_ba_dispatch.csv
+            outputs/july4/results/july_four_week_factorial_interaction_by_ba.csv
+            outputs/july4/results/july_four_week_isolated_vs_links_interaction.csv
+            outputs/july4/results/july_four_week_replication_scope.json
+            outputs/july4/source_weather/era5_2024_july_28days.manifest.json
+          if-no-files-found: warn
