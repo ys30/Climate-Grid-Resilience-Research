@@ -59,10 +59,19 @@ def from_official_balance_csv(csv_path,ba,year,month):
     g["demand_mw"]=pd.to_numeric(g["Demand (MW)"],errors="coerce")
     expected=pd.date_range(f"{year}-{month:02d}-01",
         periods=calendar.monthrange(year,month)[1]*24,freq="h",tz="UTC")
-    if (g.timestamp.duplicated().any() or
-        not pd.DatetimeIndex(g.timestamp.sort_values()).equals(expected) or
+    observed=pd.DatetimeIndex(g.timestamp.sort_values())
+    missing=expected.difference(observed)
+    extra=observed.difference(expected)
+    if (g.timestamp.duplicated().any() or not observed.equals(expected) or
         g.demand_mw.isna().any() or g.demand_mw.le(0).any()):
-        raise ValueError("Official original CSV lacks complete valid UTC model start-hours")
+        raise ValueError(
+            "Official original CSV lacks complete valid UTC model start-hours: "
+            f"rows={len(g)}, expected={len(expected)}, "
+            f"missing_hours={len(missing)}, extra_hours={len(extra)}, "
+            f"missing_first={list(missing[:3])}, extra_first={list(extra[:3])}, "
+            f"duplicate_hours={int(g.timestamp.duplicated().sum())}, "
+            f"null_demand={int(g.demand_mw.isna().sum())}, "
+            f"nonpositive_demand={int(g.demand_mw.le(0).sum())}")
     return g[["timestamp","demand_mw"]].assign(ba=ba)[
         ["timestamp","ba","demand_mw"]].sort_values("timestamp").reset_index(drop=True)
 
