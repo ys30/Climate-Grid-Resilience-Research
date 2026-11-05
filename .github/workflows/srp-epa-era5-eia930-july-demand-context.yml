@@ -1,0 +1,67 @@
+name: SRP 2024 July EIA930 BA demand and EPA ERA5 source-hour context
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-era5-eia930-july-demand-context.yml'
+      - 'src/grid_resilience/srp_epa_era5_eia930_demand_context.py'
+      - 'tests/test_srp_epa_era5_eia930_demand_context.py'
+jobs:
+  actual-srp-demand-context:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run UTC, source coverage, weather deduplication tests
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_era5_eia930_demand_context.py
+      - name: Retrieve independently verified EPA ERA5 July panel and official EIA-930 H1 H2 July join
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_eia930_context/epa outputs/srp_eia930_context/eia outputs/srp_eia930_context/results
+          gh run download 41961038085 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-local-july744-real-august-era5 --dir outputs/srp_eia930_context/epa
+          gh run download 41325415594 --repo ys30/Climate-Grid-Resilience-Research \
+            --name JULY2024-EIA930-OFFICIAL-RAW-ADJUSTED-BALANCE --dir outputs/srp_eia930_context/eia
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          e=Path("outputs/srp_eia930_context/eia")
+          m=json.loads((e/"july_combined_source_manifest.json").read_text())
+          assert m["month"]=="2024-07"
+          assert m["rows_per_ba"]["SRP"]==744
+          assert not m["values_imputed"]
+          PY
+      - name: Join source-exact UTC hours and compute descriptive SRP demand heat context
+        run: |
+          python -m grid_resilience.srp_epa_era5_eia930_demand_context \
+            --epa-era5-panel outputs/srp_eia930_context/epa/completed/epa_local_july_744h_observed_era5.csv \
+            --eia930-july outputs/srp_eia930_context/eia/official_2024_july_combined.csv \
+            --output outputs/srp_eia930_context/results
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          root=Path("outputs/srp_eia930_context/results")
+          s=pd.read_csv(root/"srp_demand_by_site_era5_heat_bin_descriptive.csv")
+          j=pd.read_csv(root/"srp_demand_era5_site_hour_intersection.csv")
+          m=json.loads((root/"srp_demand_era5_site_hour_manifest.json").read_text())
+          assert len(j)==3*744 and j.srp_demand_source_matched.sum()==3*737
+          assert s.groupby("facility_id").unique_site_weather_hours.sum().eq(737).all()
+          assert not m["dispatch_or_outage_causal_control_estimated"]
+          assert not m["thermal_derating_calibrated"]
+          print(s.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-july-eia930-epa-era5-observed-demand-context
+          path: outputs/srp_eia930_context/results/
+          if-no-files-found: warn
