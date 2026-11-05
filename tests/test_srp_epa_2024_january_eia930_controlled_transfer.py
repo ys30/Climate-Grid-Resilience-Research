@@ -43,6 +43,9 @@ def test_winter_zero_run_does_not_make_gross_load_zero():
     out,_=analyze(ep,d,j)
     r=out.loc[out.epa_unit_id.eq("1")].iloc[0]
     assert r.source_conditional_gross_valid_hours==0
+    assert r.january_operation_model_status=="constant_outcome_no_operational_variation"
+    assert pd.isna(r.january_operation_temperature_lpm_per_c)
+    assert pd.isna(r.winter_summer_operating_slope_same_sign_descriptively)
     assert r.january_gross_model_status=="insufficient_outcome_records"
     assert pd.isna(r.january_gross_temperature_mw_per_c)
 
@@ -69,3 +72,11 @@ def test_july_unit_mismatch_rejected():
     j.loc[0,"epa_unit_id"]="FAKE"
     with pytest.raises(ValueError,match="cohorts not identical"):
         analyze(ep,d,j)
+
+def test_all_one_source_outcome_has_no_meaningful_temperature_slope():
+    ep,d,j=inputs()
+    ep.loc[ep.unit_id.eq("2"),"operating_time"]=1.
+    out,_=analyze(ep,d,j)
+    row=out.loc[out.epa_unit_id.eq("2")].iloc[0]
+    assert row.january_operation_model_status=="constant_outcome_no_operational_variation"
+    assert pd.isna(row.january_operation_temperature_lpm_per_c)
