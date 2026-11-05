@@ -33,3 +33,12 @@ The ability to join full weather source hours is an **exposure-data completeness
 ## Next acquisition action
 
 Retrieve and archive the true Aug 1 2024 00–06 UTC ERA5 source with original coordinate/site metadata and source checksums; verify the 3 × 7 source-unique plant-hour rows before running this gate. After successful execution, record full workflow run SHA, weather provenance, output artifact and summary counts here. **Do not overwrite the earlier 737-hour certified result**; retain both as separate provenance stages.
+
+
+## 2026-11-04 executed source completion — CI verified
+
+The independent [source-fetch and completion workflow](../.github/workflows/srp-epa-july744-real-august-era5.yml) has now **SUCCEEDED**: [GitHub Actions run 41961038085](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41961038085) on commit `59b03c67257e1d6ef6e3b08fe8f7241db27adba6`. Its Python regression tests, retrieval of the previous certified July artifacts, actual ERA5 August 2024 site-point requests, source provenance checks, exact 21 plant-weather-hour extraction, and strict 744-hour join assertions all completed successfully.
+
+The [uploaded artifact 13385277887](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41961038085/artifacts/13385277887) is named `srp-epa-local-july744-real-august-era5`. It includes `observed_aug1_utc_7h_by_site.csv`, the request/response provenance manifest, the completed unit-hour panel and the summary/manifest. The CI asserted exactly **10 source EPA units × 744 fully matched hours = 7,440 unit-hours** across the same three sites: **737 prior July-UTC source hours plus 7 genuinely observed August-UTC source hours per unit**. The 21 August source site-hours correspond to **three sites × seven UTC hours**; they are shared across colocated EPA units, not 70 independent weather samples.
+
+This confirms hourly **meteorological exposure coverage**, not an independent audit of equipment availability or dispatch. It does not verify EPA–EIA unit identity, net electric output, causal thermal derating, EENS or outages. The original 737-hour result and the new 744-hour result remain separately archived for provenance.
