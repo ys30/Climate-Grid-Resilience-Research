@@ -1,0 +1,55 @@
+name: SRP EPA June July actual month prediction transfer
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-june-july-month-transfer.yml'
+      - 'src/grid_resilience/srp_epa_june_july_month_predictive_transfer.py'
+      - 'tests/test_srp_epa_june_july_month_predictive_transfer.py'
+jobs:
+  source-month-transfer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate no-date-leakage month-transfer tests
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_june_july_month_predictive_transfer.py
+      - name: Recover certified source EPA ERA5 EIA930 hour cohorts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_transfer/source outputs/srp_transfer/results
+          gh run download 42092282072 --repo ys30/Climate-Grid-Resilience-Research --name srp-2024-epa-june-july-real-source-common-support --dir outputs/srp_transfer/source
+      - name: Fit baseline and temperature models in each direction on observed common cells
+        run: |
+          python -m grid_resilience.srp_epa_june_july_month_predictive_transfer --june-panel outputs/srp_transfer/source/results/june_2024_epa_era5_eia930_verified_unit_hours.csv --july-panel outputs/srp_transfer/source/results/july_2024_epa_era5_eia930_verified_unit_hours.csv --output outputs/srp_transfer/results
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path('outputs/srp_transfer/results')
+          r=pd.read_csv(p/'epa_june_july_observed_covariate_month_transfer_scores.csv')
+          m=json.loads((p/'epa_june_july_observed_covariate_month_transfer_manifest.json').read_text())
+          assert len(r)==32
+          assert set(r.training_to_validation)=={'June_to_July','July_to_June'}
+          assert not m['predictive_evaluation_is_not_operational_ex_ante_forecast'] is False
+          assert m['not_usable_as_calibrated_pypsa_temperature_capacity_curve']
+          print('VERIFIED SOURCE OUT-OF-MONTH OBSERVED-COVARIATE SCORES')
+          print(r.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-june-july-observed-covariate-prediction-transfer
+          path: outputs/srp_transfer/results/
+          if-no-files-found: warn
