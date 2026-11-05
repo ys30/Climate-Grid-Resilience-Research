@@ -1,0 +1,72 @@
+name: July 2024 first-week canonical EIA930 hour-start factorial exact replay
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/july2024-canonical-firstweek-factorial-replay.yml'
+      - 'src/grid_resilience/july2024_firstweek_canonical_replay.py'
+      - 'tests/test_july2024_firstweek_canonical_replay.py'
+jobs:
+  exact-hour-start-source-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test source timestamps and exact weather, input coverage safeguards
+        run: |
+          python -m pip install -e '.[model,dev]'
+          python -m pytest -q tests/test_july2024_firstweek_canonical_replay.py
+      - name: Download independently archived legacy weather and canonical four-week source evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/canonical_replay/old outputs/canonical_replay/new outputs/canonical_replay/results
+          gh run download 41102363806 --repo ys30/Climate-Grid-Resilience-Research --name MATCHED-OBSERVED-EIA930-ERA5-2024 --dir outputs/canonical_replay/old
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/canonical_replay/new
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          root=Path("outputs/canonical_replay")
+          assert len(pd.read_csv(root/"old/weather.csv"))==672
+          assert len(pd.read_csv(root/"new/inputs/week_1/demand.csv"))==672
+          assert len(pd.read_csv(root/"new/inputs/week_1/weather.csv"))==672
+          assert len(pd.read_csv(root/"new/results/july_four_week_four_scenario_ba_dispatch.csv"))==128
+          PY
+      - name: Independently replay 8 first-week PyPSA solves using original exact weather and corrected official demand
+        run: |
+          python -m grid_resilience.july2024_firstweek_canonical_replay \
+            --legacy-weather outputs/canonical_replay/old/weather.csv \
+            --canonical-weather outputs/canonical_replay/new/inputs/week_1/weather.csv \
+            --canonical-demand outputs/canonical_replay/new/inputs/week_1/demand.csv \
+            --capacity outputs/canonical_replay/new/inputs/frozen_partial_eia860_capacity.csv \
+            --isolated-links outputs/canonical_replay/new/inputs/isolated_ba_links.csv \
+            --linked-links outputs/canonical_replay/new/inputs/frozen_hypothetical_links.csv \
+            --baseline outputs/canonical_replay/new/results/july_four_week_four_scenario_ba_dispatch.csv \
+            --output outputs/canonical_replay/results
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/canonical_replay/results")
+          m=json.loads((p/"canonical_firstweek_factorial_replay_manifest.json").read_text())
+          assert m["all_scenario_unserved_energy_replayed_within_0_01_mwh"]
+          assert m["factorial_scenario_ba_results_compared"]==32
+          assert not m["results_are_historical_observed_eens"]
+          print("VERIFIED FIRSTWEEK CANONICAL SOURCE REPLAY",m)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: july2024-canonical-firstweek-pypsa-exact-replay
+          path: |
+            outputs/canonical_replay/results/canonical_firstweek_factorial_replay_manifest.json
+            outputs/canonical_replay/results/corrected_legacy_weather_vs_official_source_firstweek_replay.csv
+          if-no-files-found: warn
