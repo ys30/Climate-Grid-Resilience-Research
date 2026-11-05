@@ -110,6 +110,11 @@ jobs:
           r=pd.read_csv(p/"srp_epa_june_july_joint_common_support.csv")
           m=json.loads((p/"srp_epa_june_july_common_support_manifest.json").read_text())
           assert len(r)==10 and r.june_hours.eq(713).all() and r.july_hours.eq(737).all()
+          source_june=pd.read_csv(p/"june_2024_epa_era5_eia930_verified_unit_hours.csv")
+          source_july=pd.read_csv(p/"july_2024_epa_era5_eia930_verified_unit_hours.csv")
+          assert len(source_june)==7130 and len(source_july)==7370
+          assert source_june.srp_ba_demand_mw.notna().all()
+          assert source_july.srp_ba_demand_mw.notna().all()
           assert not m["generator_thermal_derating_or_eens_inferred"]
           assert not m["unobserved_utc_boundary_demand_imputed"]
           print("VERIFIED JUNE-JULY OBSERVED SUPPORT")
