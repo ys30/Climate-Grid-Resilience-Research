@@ -1,0 +1,50 @@
+name: July four BA original versus refreshed source inputs audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/july-four-ba-input-version-reconciliation.yml'
+      - 'src/grid_resilience/july2024_four_week_source_version_reconciliation.py'
+      - 'tests/test_july2024_four_week_source_version_reconciliation.py'
+jobs:
+  audit-original-vs-refetched:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_july2024_four_week_source_version_reconciliation.py
+      - name: Read pinned first-week and refreshed first-week archived source inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/firstweek/old outputs/firstweek/new outputs/firstweek/results
+          gh run download 41102363806 --repo ys30/Climate-Grid-Resilience-Research --name MATCHED-OBSERVED-EIA930-ERA5-2024 --dir outputs/firstweek/old
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/firstweek/new
+      - name: Reconcile genuine observed source inputs hour by hour
+        run: |
+          python -m grid_resilience.july2024_four_week_source_version_reconciliation --old-demand outputs/firstweek/old/demand.csv --old-weather outputs/firstweek/old/weather.csv --new-demand outputs/firstweek/new/inputs/week_1/demand.csv --new-weather outputs/firstweek/new/inputs/week_1/weather.csv --output outputs/firstweek/results
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          p=Path("outputs/firstweek/results")
+          x=pd.read_csv(p/"july_first_week_original_vs_refetched_source_differences.csv")
+          m=json.loads((p/"july_first_week_original_vs_refetched_manifest.json").read_text())
+          assert len(x)==12 and x.utc_source_hours_compared.eq(168).all()
+          assert m["source_hour_keys_identical"]
+          assert not m["generator_or_transmission_physical_calibration_claimed"]
+          print("FIRST WEEK SOURCE VERSION DIFFERENCES")
+          print(x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: july2024-four-ba-original-vs-refetched-168h-input-comparison
+          path: outputs/firstweek/results/
+          if-no-files-found: error
