@@ -17,9 +17,35 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -e '.[dev]'
       - run: python -m pytest -q tests/test_eia930_monthly_demand.py
-      - name: Retrieve official full January 2024 EIA-930 demand
+      - name: Retrieve original official EIA930 January-June 2024 CSV with source SHA256
         run: |
-          python -m grid_resilience.eia930_monthly_demand --ba SRP --year 2024 --month 1 --output outputs/eia930_srp_2024_01
+          mkdir -p outputs/eia930_srp_2024_01
+          python - <<'PY'
+          import urllib.request,hashlib,json
+          from pathlib import Path
+          url="https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv"
+          req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+          with urllib.request.urlopen(req,timeout=150) as response:
+              raw=response.read()
+          if len(raw)<1000:
+              raise ValueError("Official EIA source file unexpectedly empty")
+          p=Path("outputs/eia930_srp_2024_01")
+          (p/"official_eia930_2024_h1.csv").write_bytes(raw)
+          (p/"original_source_sha256.json").write_text(
+              json.dumps({"url":url,"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest()},indent=2)+"\\n")
+          PY
+      - name: Admit full January 2024 SRP hour-start demand from official CSV
+        run: |
+          python -m grid_resilience.eia930_monthly_demand --ba SRP --year 2024 --month 1 --official-csv outputs/eia930_srp_2024_01/official_eia930_2024_h1.csv --output outputs/eia930_srp_2024_01
+          python - <<'PY'
+          import pandas as pd
+          d=pd.read_csv("outputs/eia930_srp_2024_01/hourly_eia930_demand.csv")
+          assert len(d)==744
+          assert pd.Timestamp(d.timestamp.iloc[0])==pd.Timestamp("2024-01-01T00:00:00Z")
+          assert pd.Timestamp(d.timestamp.iloc[-1])==pd.Timestamp("2024-01-31T23:00:00Z")
+          assert d.demand_mw.notna().all()
+          print("SOURCE VERIFIED official CSV January BA hours:",len(d))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
