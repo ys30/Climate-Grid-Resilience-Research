@@ -18,7 +18,7 @@ def audit(eia923,eia930,partial_capacity):
     required_923={"reported_ba","prime_mover","period","net_generation_mwh",
                   "plant_month_rows","coverage_status"}
     required_930={"Balancing Authority","UTC Time at End of Hour",
-                  "Net Generation (MW)",HYFIELD}
+                  "Net Generation (MW)"}
     required_cap={"ba","gas_mw","wind_mw","capacity_source"}
     for name,x,needed in [("EIA923",eia923,required_923),
                           ("EIA930",eia930,required_930),
@@ -43,12 +43,19 @@ def audit(eia923,eia930,partial_capacity):
     b=b.loc[b.timestamp.ge(HOURS[0])&b.timestamp.le(HOURS[-1])].copy()
     if b.timestamp.duplicated().any() or not pd.DatetimeIndex(b.timestamp.sort_values()).equals(HOURS):
         raise ValueError("Official EIA930 BPAT July UTC hour-start grid incomplete")
-    b["mixed_hydro_pumped_mw"]=pd.to_numeric(
-        b[HYFIELD].astype("string").str.strip().replace("",pd.NA),errors="coerce")
+    # EIA930 BALANCE source may expose total BA generation without the
+    # separate fuel-group fields. Preserve unavailable rather than inventing
+    # a hydro group by subtracting modeled supply from reported totals.
+    fuel_group_reported=HYFIELD in b.columns
+    if fuel_group_reported:
+        b["mixed_hydro_pumped_mw"]=pd.to_numeric(
+            b[HYFIELD].astype("string").str.strip().replace("",pd.NA),errors="coerce")
+        if b.mixed_hydro_pumped_mw.isna().any() or not np.isfinite(
+                b.mixed_hydro_pumped_mw.to_numpy(float)).all():
+            raise ValueError("Missing/blank/invalid original EIA930 mixed hydro hourly gen")
     b["total_net_mw"]=pd.to_numeric(b["Net Generation (MW)"],errors="coerce")
-    if b.mixed_hydro_pumped_mw.isna().any() or b.total_net_mw.isna().any() or not np.isfinite(
-        b[["mixed_hydro_pumped_mw","total_net_mw"]].to_numpy(float)).all():
-        raise ValueError("Missing/blank/invalid original EIA930 mixed hydro or total hourly net gen")
+    if b.total_net_mw.isna().any() or not np.isfinite(b.total_net_mw.to_numpy(float)).all():
+        raise ValueError("Missing/blank/invalid original EIA930 total hourly net gen")
     cap=partial_capacity.loc[partial_capacity.ba.astype("string").str.strip().eq("BPAT")].copy()
     if len(cap)!=1 or not cap.capacity_source.astype(str).str.contains("GENERIC_THERMAL_PROXY").all():
         raise ValueError("Expected original partial gas/wind capacity proxy")
@@ -58,7 +65,7 @@ def audit(eia923,eia930,partial_capacity):
         raise ValueError("Invalid original BPAT partial nameplate")
     values={r.prime_mover:float(r.net_generation_mwh) for r in p.itertuples(index=False)}
     monthly_eia923=float(sum(values.values()))
-    eia930_hy=float(b.mixed_hydro_pumped_mw.sum())
+    eia930_hy=float(b.mixed_hydro_pumped_mw.sum()) if fuel_group_reported else None
     eia930_all=float(b.total_net_mw.sum())
     details={
         "ba":"BPAT","period":"2024-07","eia923_observed_hy_mwh":values["HY"],
@@ -69,11 +76,14 @@ def audit(eia923,eia930,partial_capacity):
         "eia930_observed_hydro_plus_pumped_group_net_mwh":eia930_hy,
         "eia930_observed_ba_total_net_generation_mwh":eia930_all,
         "eia930_hydro_pumped_fraction_of_ba_total_net_generation":(
-            eia930_hy/eia930_all if eia930_all else None),
-        "eia923_minus_eia930_mixed_group_source_scope_difference_mwh":monthly_eia923-eia930_hy,
+            eia930_hy/eia930_all if fuel_group_reported and eia930_all else None),
+        "eia923_minus_eia930_mixed_group_source_scope_difference_mwh":(
+            monthly_eia923-eia930_hy if fuel_group_reported else None),
         "eia923_to_eia930_mixed_group_reported_energy_ratio":(
-            monthly_eia923/eia930_hy if eia930_hy else None),
+            monthly_eia923/eia930_hy if fuel_group_reported and eia930_hy else None),
         "official_eia930_complete_july_hour_count":len(b),
+        "eia930_mixed_hydro_fuel_group_reported_in_supplied_source":fuel_group_reported,
+        "eia930_hydro_group_missing_must_not_be_imputed":True,
         "model_partial_gas_nameplate_mw":float(cap.gas_mw.iloc[0]),
         "model_partial_wind_nameplate_mw":float(cap.wind_mw.iloc[0]),
         "source_reporting_grains_equivalent_certified":False,
