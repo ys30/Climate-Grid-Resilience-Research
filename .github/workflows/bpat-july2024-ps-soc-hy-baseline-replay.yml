@@ -1,0 +1,65 @@
+name: BPAT July PS SOC no-storage exact 64-row HY control replay
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-july2024-ps-soc-hy-baseline-replay.yml'
+jobs:
+  exact-original-hy-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pandas numpy
+      - name: Recover real July original HY-only and new PS source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/baseline/old outputs/baseline/new outputs/baseline/result
+          gh run download 42122153716 --repo ys30/Climate-Grid-Resilience-Research --name bpat-july2024-672h-intertemporal-hy-pypsa-factorial --dir outputs/baseline/old
+          gh run download 42124423838 --repo ys30/Climate-Grid-Resilience-Research --name bpat-july2024-672h-ps-soc-hy-verified-sensitivity --dir outputs/baseline/new
+      - name: Independently verify zero-PS PyPSA exactly replays original fixed HY control at every BA, week, climate case
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import numpy as np
+          import pandas as pd
+          root=Path("outputs/baseline")
+          old=pd.read_csv(root/"old/july_2024_672h_bpat_hy_intertemporal_factorial_by_ba_week.csv")
+          new=pd.read_csv(root/"new/july_2024_672h_bpat_hy_ps_factorial_by_ba_week.csv")
+          a=old.loc[old.resource_scenario.eq("HY_2000MW_598947MWh")].copy()
+          b=new.loc[new.resource_scenario.eq("PS_0MW_0MWh_eta100")].copy()
+          keys=["week","ba","scenario"]
+          assert len(a)==len(b)==64
+          assert not a.duplicated(keys).any() and not b.duplicated(keys).any()
+          j=a.merge(b,on=keys,validate="one_to_one",suffixes=("_previous","_replayed"))
+          assert len(j)==64
+          j["absolute_model_shortage_difference_mwh"]=(
+              j.modeled_unserved_mwh_previous-j.modeled_unserved_mwh_replayed).abs()
+          maximum=float(j.absolute_model_shortage_difference_mwh.max())
+          assert maximum<.05, f"Hydro-only source baseline does not replay: {maximum}"
+          j.to_csv(root/"result/64-row-ps-free-original-hy-exact-replay.csv",index=False)
+          report={"old_672h_actual_pypsa_run":42122153716,
+                  "new_672h_actual_pypsa_run":42124423838,
+                  "matched_original_hour_start_ba_week_four_climate_outcomes":len(j),
+                  "maximum_absolute_shortage_difference_mwh":maximum,
+                  "same_original_672h_ba_source_and_hy_reference":True,
+                  "ps_zero_resource_is_exact_original_hy_only_control":True,
+                  "historical_physical_storage_calibration":False,
+                  "model_solved_missing_outages_or_eens":False}
+          (root/"result/ps-free-hy-replay-source-manifest.json").write_text(json.dumps(report,indent=2)+"\n")
+          print("EXACT SOURCE HY CONTROL REPLAY",json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-july-672h-ps-free-64-original-hy-controls-exact-replay
+          path: outputs/baseline/result/
+          if-no-files-found: warn
