@@ -29,6 +29,7 @@ def test_original_scoped_hydro_coverage_and_signed_ps():
 
 def test_missing_eia930_hydro_hour_not_filled():
     a,b,c=inputs()
+    b[HYFIELD]=b[HYFIELD].astype(object)
     b.loc[0,HYFIELD]=""
     with pytest.raises(ValueError,match="Missing/blank"):
         audit(a,b,c)
@@ -51,6 +52,7 @@ def test_no_fabricated_full_fleet_label():
 
 def test_malformed_monthly_number_rejected():
     a,b,c=inputs()
+    a["net_generation_mwh"]=a["net_generation_mwh"].astype(object)
     a.loc[0,"net_generation_mwh"]="not numeric"
     with pytest.raises(ValueError):
         audit(a,b,c)
