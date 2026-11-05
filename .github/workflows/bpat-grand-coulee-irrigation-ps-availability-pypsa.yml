@@ -53,7 +53,7 @@ jobs:
           pd.concat(ds,ignore_index=True).to_csv(r/"inputs/demand.csv",index=False)
           pd.concat(ws,ignore_index=True).to_csv(r/"inputs/weather.csv",index=False)
           PY
-      - name: Run 16 model optimizations: unmeasured Grand Coulee PS operating share 0 25 50 100 percent
+      - name: 'Run 16 model optimizations: hypothetical Grand Coulee PS availability share 0 25 50 100 percent'
         run: |
           python -m grid_resilience.bpat_grand_coulee_ps_irrigation_access_sensitivity \
             --usbr-gate outputs/irrigation/inputs/usbr.json \
