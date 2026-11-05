@@ -44,7 +44,7 @@ def test_exact_ps_source_verified_not_battery(tmp_path):
     assert m["bpat_ps_prime_mover_records"]==1
     assert m["bpat_ps_source_complete_mw_mwh_records"]==1
     assert m["bpat_ps_source_complete_reported_energy_mwh"]==500
-    assert m["bpat_storage_sheet_all_technologies_rows"]==2
+    assert m["bpat_eia860_storage_sheet_all_technologies_rows"]==2
     assert m["physical_ps_672h_dispatch_parameters_admitted"]
     assert not m["initial_soc_verified"]
 
