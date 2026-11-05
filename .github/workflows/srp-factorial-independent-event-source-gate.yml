@@ -1,0 +1,55 @@
+name: Existing 2024 four-BA factorial independent-event source admission
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-factorial-independent-event-source-gate.yml'
+      - 'src/grid_resilience/srp_2024_factorial_multiwindow_admission.py'
+      - 'tests/test_srp_2024_factorial_multiwindow_admission.py'
+jobs:
+  verify-observed-event-count:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_2024_factorial_multiwindow_admission.py
+      - name: Recover the originally archived matched four-BA 2024 source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/event_gate/input outputs/event_gate/capacity outputs/event_gate/results
+          gh run download 41102363806 --repo ys30/Climate-Grid-Resilience-Research --name MATCHED-OBSERVED-EIA930-ERA5-2024 --dir outputs/event_gate/input
+          gh run download 41107169962 --repo ys30/Climate-Grid-Resilience-Research --name EIA860-2024-FOUR-BA-EXPLICIT-PARTIAL-FLEET --dir outputs/event_gate/capacity
+      - name: Verify true distinct hourly dates instead of BA multiplied rows
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          from grid_resilience.srp_2024_factorial_multiwindow_admission import source_audit
+          root=Path("outputs/event_gate")
+          demand=pd.read_csv(root/"input/demand.csv")
+          weather=pd.read_csv(root/"input/weather.csv")
+          files=list((root/"capacity").rglob("capacity.csv"))
+          assert len(files)==1,files
+          capacity=pd.read_csv(files[0])
+          scope=source_audit(demand,weather,capacity)
+          assert scope["source_four_ba_hourly_rows"]==672
+          assert scope["source_distinct_utc_hours"]==168
+          assert scope["complete_disjoint_168h_windows_possible"]==1
+          assert not scope["four_week_replication_supported_by_this_source"]
+          print("SOURCE-AUDITED ORIGINAL FOUR-BA EVENT CAPACITY",scope)
+          PY
+          python -m grid_resilience.srp_2024_factorial_multiwindow_admission --demand outputs/event_gate/input/demand.csv --weather outputs/event_gate/input/weather.csv --capacity $(find outputs/event_gate/capacity -name capacity.csv | head -n 1) --output outputs/event_gate/results
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srp-2024-original-four-ba-event-count-audit
+          path: outputs/event_gate/results/
+          if-no-files-found: error
