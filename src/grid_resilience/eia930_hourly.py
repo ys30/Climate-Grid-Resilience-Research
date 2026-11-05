@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 import pandas as pd
+from .eia930_hour_convention import hour_ending_to_start, api_hour_ending_bounds
 
 ENDPOINT="https://api.eia.gov/v2/electricity/rto/region-data/data/"
 
@@ -19,7 +20,7 @@ def normalize(rows,bas,start,end,data_type='D'):
     if not required.issubset(frame.columns):raise ValueError("EIA-930 fields missing")
     frame=frame.rename(columns={"respondent":"ba","value":"demand_mw","period":"timestamp"})
     frame=frame[["timestamp","ba","demand_mw"]]
-    frame["timestamp"]=pd.to_datetime(frame.timestamp,utc=True,errors="raise")
+    frame["timestamp"]=hour_ending_to_start(frame.timestamp)
     frame["demand_mw"]=pd.to_numeric(frame.demand_mw,errors="coerce")
     if frame.duplicated(["ba","timestamp"]).any():raise ValueError("Duplicate EIA BA-hour")
     expected_hours=pd.date_range(start,end,freq="h",inclusive="left",tz="UTC")
@@ -42,12 +43,10 @@ def fetch(bas,start,end,api_key,length=5000,data_type='D'):
     if st.tzinfo is None or en.tzinfo is None:raise ValueError("Use timezone-aware UTC bounds")
     st=st.tz_convert("UTC");en=en.tz_convert("UTC")
     if en<=st:raise ValueError("End must follow start")
-    # EIA API upper bound inclusive: use last requested hour.
-    last=en-pd.Timedelta(hours=1)
-    if last.minute or last.second or st.minute or st.second:
-        raise ValueError("Whole UTC hours only")
+    # EIA reports hour ending; API limits are inclusive hour-ending labels.
+    first_label,last=api_hour_ending_bounds(st,en)
     params=[("api_key",api_key),("frequency","hourly"),("data[0]","value"),
-            ("facets[type][]",data_type),("start",st.strftime("%Y-%m-%dT%H")),
+            ("facets[type][]",data_type),("start",first_label.strftime("%Y-%m-%dT%H")),
             ("end",last.strftime("%Y-%m-%dT%H")),("length",str(length)),
             ("sort[0][column]","period"),("sort[0][direction]","asc"),
             ("sort[1][column]","respondent"),("sort[1][direction]","asc")]
@@ -77,7 +76,9 @@ def main():
     manifest={"source":"EIA-930 API reported BA demand, type D",
               "type":"observed hourly demand, not historical generation or transmission capacity",
               "bas":a.bas,"start":a.start,"end_exclusive":a.end,
-              "observations":len(frame),**meta,"imputation":"none"}
+              "observations":len(frame),**meta,"imputation":"none",
+              "source_hour_convention":"EIA hour-ending UTC",
+              "output_hour_convention":"model hour-start UTC; EIA labels minus one hour"}
     out.with_suffix(".manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
     print(json.dumps(manifest,indent=2))
 if __name__=="__main__":main()
