@@ -1,0 +1,127 @@
+name: SRP June July 2024 independent EPA ERA5 EIA930 common support
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-june-july-common-support.yml'
+      - 'src/grid_resilience/srp_epa_june_july_2024_common_support.py'
+      - 'tests/test_srp_epa_june_july_2024_common_support.py'
+jobs:
+  genuine-june-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Enforce original source hour, demand, and no-imputation tests
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_june_july_2024_common_support.py
+      - name: Fetch certified July EPA, EIA930, and EIA860 plant coordinate records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_june/epa outputs/srp_june/h1 outputs/srp_june/july outputs/srp_june/sites outputs/srp_june/weather outputs/srp_june/results
+          gh run download 41961038085 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-local-july744-real-august-era5 --dir outputs/srp_june/july
+          gh run download 41325415594 --repo ys30/Climate-Grid-Resilience-Research \
+            --name JULY2024-EIA930-OFFICIAL-RAW-ADJUSTED-BALANCE --dir outputs/srp_june/h1
+          gh run download 41773763147 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-july2024-fullfleet-thermal-era5 --dir outputs/srp_june/sites
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          a=Path("outputs/srp_june")
+          s=pd.read_csv(a/"sites/srp_thermal_era5_site_selection.csv",dtype={"plant_id":"string"})
+          t=s.loc[s.plant_id.isin(["141","147","55129"]) & s.technology.eq("gas")]
+          assert len(t)==3 and set(t.plant_id)=={"141","147","55129"}
+          t.to_csv(a/"weather/selected_three_eia860_2024_sites.csv",index=False)
+          j=pd.read_csv(a/"july/completed/epa_local_july_744h_observed_era5.csv")
+          assert len(j)==7440
+          PY
+      - name: Download actual June ERA5 from Open-Meteo archive with source SHA256
+        run: |
+          python -m grid_resilience.srp_thermal_era5_temperature_intake \
+            --sites outputs/srp_june/weather/selected_three_eia860_2024_sites.csv \
+            --year 2024 --month 6 --output outputs/srp_june/weather
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          p=Path("outputs/srp_june/weather")
+          m=json.loads((p/"srp_thermal_era5_manifest.json").read_text())
+          w=pd.read_csv(p/"srp_thermal_era5_plant_hourly.csv")
+          assert m["period"]=="2024-06" and m["selected_site_count"]==3
+          assert len(w)==3*720 and all(len(x["sha256"])==64 for x in m["plant_provenance"])
+          PY
+      - name: Retrieve MD5-pinned original 2024 AZ EPA archive and official EIA930 H1
+        run: |
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from grid_resilience.srp_epa_2024_az_hourly_admission import SNAPSHOT_URL,EXPECTED_MD5
+          root=Path("outputs/srp_june")
+          sources=[("epa/epa_2024_az.csv",SNAPSHOT_URL,250_000_000),
+                   ("h1/official_EIA930_2024_Jan_Jun.csv",
+                    "https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv",
+                    250_000_000)]
+          meta=[]
+          for name,url,cap in sources:
+              out=root/name
+              md5=hashlib.md5();sha256=hashlib.sha256()
+              with urlopen(Request(url,headers={"User-Agent":"GridResilienceResearch/1.0"}),timeout=180) as stream,out.open("wb") as sink:
+                  while True:
+                      chunk=stream.read(1024*1024)
+                      if not chunk:break
+                      md5.update(chunk);sha256.update(chunk);sink.write(chunk)
+                      if sink.tell()>cap:raise ValueError("Source archive too large")
+              if name.startswith("epa/") and md5.hexdigest()!=EXPECTED_MD5:
+                  raise ValueError("EPA original Zenodo archive checksum mismatched")
+              assert out.stat().st_size>1000
+              meta.append({"source_url":url,"bytes":out.stat().st_size,
+                           "sha256":sha256.hexdigest(),"epa_md5":md5.hexdigest() if name.startswith("epa/") else None})
+              print("SOURCE CHECKED",name,out.stat().st_size,flush=True)
+          (root/"results/source_archive_checksums.json").write_text(json.dumps(meta,indent=2)+"\n")
+          PY
+      - name: Execute genuine June-to-July common support audit
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python -m grid_resilience.srp_epa_june_july_2024_common_support \
+            --epa-original outputs/srp_june/epa/epa_2024_az.csv \
+            --june-era5 outputs/srp_june/weather/srp_thermal_era5_plant_hourly.csv \
+            --june-eia930-h1 outputs/srp_june/h1/official_EIA930_2024_Jan_Jun.csv \
+            --july-panel outputs/srp_june/july/completed/epa_local_july_744h_observed_era5.csv \
+            --july-demand outputs/srp_june/h1/official_2024_july_combined.csv \
+            --output outputs/srp_june/results
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          p=Path("outputs/srp_june/results")
+          r=pd.read_csv(p/"srp_epa_june_july_joint_common_support.csv")
+          m=json.loads((p/"srp_epa_june_july_common_support_manifest.json").read_text())
+          assert len(r)==10 and r.june_hours.eq(713).all() and r.july_hours.eq(737).all()
+          assert not m["generator_thermal_derating_or_eens_inferred"]
+          assert not m["unobserved_utc_boundary_demand_imputed"]
+          print("VERIFIED JUNE-JULY OBSERVED SUPPORT")
+          print(r.to_string(index=False))
+          PY
+          rm -f outputs/srp_june/epa/epa_2024_az.csv outputs/srp_june/h1/official_EIA930_2024_Jan_Jun.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-june-july-real-source-common-support
+          path: |
+            outputs/srp_june/results/
+            outputs/srp_june/weather/srp_thermal_era5_manifest.json
+            outputs/srp_june/weather/selected_three_eia860_2024_sites.csv
+          if-no-files-found: warn
