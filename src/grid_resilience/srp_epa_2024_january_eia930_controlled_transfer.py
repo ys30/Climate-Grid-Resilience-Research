@@ -78,6 +78,12 @@ def analyze(january, demand, july_coefficients):
         operation=np.where(g.operating_time.notna(),(g.operating_time>0).astype(float),np.nan)
         gross=np.where(g.operating_time.gt(0),g.gross_load_mw,np.nan).astype(float)
         a,b=fit(operation,controls,temp),fit(gross,controls,temp)
+        # An all-zero/all-one outcome has no winter operational variation.
+        # A numerical zero OLS slope is not an estimable temperature response.
+        eligible=operation[np.isfinite(operation)]
+        if len(eligible) and np.unique(eligible).size==1:
+            a={"status":"constant_outcome_no_operational_variation",
+               "temp_coef":None,"r2":None}
         rows.append({
             "facility_id":str(plant),"epa_unit_id":str(unit),
             "source_matched_hours":len(g),
