@@ -34,17 +34,17 @@ jobs:
           (p/"original_source_sha256.json").write_text(
               json.dumps({"url":url,"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest()},indent=2)+"\\n")
           PY
-      - name: Admit full January 2024 SRP hour-start demand from official CSV
+      - name: Admit boundary-limited 737 genuine January SRP UTC start-hour demand from official CSV
         run: |
-          python -m grid_resilience.eia930_monthly_demand --ba SRP --year 2024 --month 1 --official-csv outputs/eia930_srp_2024_01/official_eia930_2024_h1.csv --output outputs/eia930_srp_2024_01
+          python -m grid_resilience.eia930_monthly_demand --ba SRP --year 2024 --month 1 --permit-2024-jan-srp-first-seven-absent --official-csv outputs/eia930_srp_2024_01/official_eia930_2024_h1.csv --output outputs/eia930_srp_2024_01
           python - <<'PY'
           import pandas as pd
           d=pd.read_csv("outputs/eia930_srp_2024_01/hourly_eia930_demand.csv")
-          assert len(d)==744
-          assert pd.Timestamp(d.timestamp.iloc[0])==pd.Timestamp("2024-01-01T00:00:00Z")
+          assert len(d)==737
+          assert pd.Timestamp(d.timestamp.iloc[0])==pd.Timestamp("2024-01-01T07:00:00Z")
           assert pd.Timestamp(d.timestamp.iloc[-1])==pd.Timestamp("2024-01-31T23:00:00Z")
           assert d.demand_mw.notna().all()
-          print("SOURCE VERIFIED official CSV January BA hours:",len(d))
+          print("SOURCE VERIFIED official CSV January BA 737 hours; first UTC 7 boundary hours unavailable:",len(d))
           PY
       - uses: actions/upload-artifact@v4
         if: always()
