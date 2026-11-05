@@ -1,0 +1,70 @@
+name: SRP 2024 full local July 744h observed EPA ERA5 descriptive heat strata
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-july744-observed-heat-strata.yml'
+      - 'src/grid_resilience/srp_epa_era5_full_july_heat_strata.py'
+      - 'tests/test_srp_epa_era5_full_july_heat_strata.py'
+jobs:
+  source-descriptive-744h:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate descriptive source controls and noncausal reporting
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_era5_full_july_heat_strata.py
+      - name: Download immutable source-completed EPA ERA5 panel artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_epa_july744_strata/source outputs/srp_epa_july744_strata/results
+          gh run download 41961038085 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-local-july744-real-august-era5 --dir outputs/srp_epa_july744_strata/source
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          root=Path("outputs/srp_epa_july744_strata/source")
+          s=pd.read_csv(root/"epa_local_july_744h_observed_summary.csv")
+          m=json.loads((root/"epa_local_july_744h_source_manifest.json").read_text())
+          assert len(s)==10
+          assert s.source_local_july_hours.eq(744).all()
+          assert s.complete_matched_hours.eq(744).all()
+          assert s.aug_utc_observed_boundary_matched.eq(7).all()
+          assert not m["weather_interpolation_or_imputation_used"]
+          PY
+      - name: Calculate site-deduplicated heat strata and source-unit operating descriptors
+        run: |
+          python -m grid_resilience.srp_epa_era5_full_july_heat_strata \
+            --panel outputs/srp_epa_july744_strata/source/epa_local_july_744h_observed_era5.csv \
+            --output outputs/srp_epa_july744_strata/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          root=Path("outputs/srp_epa_july744_strata/results")
+          a=pd.read_csv(root/"epa_744h_unit_heat_strata_descriptive.csv")
+          b=pd.read_csv(root/"era5_744h_unique_site_heat_hours.csv")
+          m=json.loads((root/"epa_744h_heat_strata_manifest.json").read_text())
+          assert a.groupby(["facility_id","epa_unit_id"]).source_hours.sum().eq(744).all()
+          assert len(a.groupby(["facility_id","epa_unit_id"]))==10
+          assert b.groupby("facility_id").distinct_site_weather_hours.sum().eq(744).all()
+          assert b.distinct_site_weather_hours.sum()==3*744
+          assert not m["statistical_significance_or_causal_derating_estimated"]
+          assert not m["epa_gross_load_equals_eia_net_mw"]
+          print("Unique weather hours and unit source summaries verified")
+          print(b.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-epa-july744-observed-descriptive-heat-strata
+          path: outputs/srp_epa_july744_strata/results/
+          if-no-files-found: warn
