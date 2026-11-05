@@ -32,8 +32,8 @@ jobs:
       - name: Verify 64 exact original hydro-free BA week climate cases and classify 16 scenarios
         run: |
           python -m grid_resilience.bpat_july2024_hy_672h_model_reconciliation \
-            --new-factorial outputs/reconcile/hydro/results/july_2024_672h_bpat_hy_intertemporal_factorial_by_ba_week.csv \
-            --hydro-dispatch outputs/reconcile/hydro/results/july_2024_672h_hypothetical_hy_by_week.csv \
+            --new-factorial outputs/reconcile/hydro/july_2024_672h_bpat_hy_intertemporal_factorial_by_ba_week.csv \
+            --hydro-dispatch outputs/reconcile/hydro/july_2024_672h_hypothetical_hy_by_week.csv \
             --original-factorial outputs/reconcile/original/results/july_four_week_four_scenario_ba_dispatch.csv \
             --output outputs/reconcile/results
           python - <<'PY'
