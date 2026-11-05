@@ -1,0 +1,80 @@
+name: BPAT July 672h independent PS SOC and HY factorial source CI
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-july2024-672h-ps-soc-pypsa.yml'
+      - 'src/grid_resilience/bpat_july2024_hy_ps_soc_pypsa.py'
+      - 'tests/test_bpat_july2024_hy_ps_soc_pypsa.py'
+jobs:
+  run-source-matched-ps:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    permissions:
+      contents: read
+      actions: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test actual-source gate and assumed PS grid
+        run: |
+          python -m pip install -e '.[model,dev]'
+          python -m pytest -q tests/test_bpat_july2024_hy_ps_soc_pypsa.py
+      - name: Restore source-verified original July hour-start inputs and real HY source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/ps/model outputs/ps/scope outputs/ps/input outputs/ps/results
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/ps/model
+          gh run download 42117378382 --repo ys30/Climate-Grid-Resilience-Research --name bpat-2024-july-source-eia923-hyps-eia930-hour-group-scope --dir outputs/ps/scope
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          root=Path("outputs/ps")
+          d=[];w=[]
+          for week in range(1,5):
+              dx=pd.read_csv(root/f"model/inputs/week_{week}/demand.csv")
+              wx=pd.read_csv(root/f"model/inputs/week_{week}/weather.csv")
+              assert len(dx)==len(wx)==672
+              d.append(dx);w.append(wx)
+          ds=pd.concat(d,ignore_index=True);ws=pd.concat(w,ignore_index=True)
+          assert len(ds)==len(ws)==2688
+          assert ds.timestamp.nunique()==ws.timestamp.nunique()==672
+          ds.to_csv(root/"input/demand.csv",index=False)
+          ws.to_csv(root/"input/weather.csv",index=False)
+          PY
+      - name: Optimize 16 continuous source observed July HY plus assumed PS cases and verify SOC
+        run: |
+          python -m grid_resilience.bpat_july2024_hy_ps_soc_pypsa \
+            --demand outputs/ps/input/demand.csv \
+            --weather outputs/ps/input/weather.csv \
+            --capacity outputs/ps/model/inputs/frozen_partial_eia860_capacity.csv \
+            --source-scope outputs/ps/scope/bpat_july2024_eia923_page1_hy_ps_vs_eia930_mixed_hydro.csv \
+            --output outputs/ps/results
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          r=Path("outputs/ps/results")
+          s=pd.read_csv(r/"july_2024_672h_hy_ps_factorial_system.csv")
+          x=pd.read_csv(r/"july_2024_672h_hy_ps_hourly.csv")
+          y=pd.read_csv(r/"july_2024_672h_hy_ps_by_week.csv")
+          m=json.loads((r/"july_2024_672h_hy_ps_scope.json").read_text())
+          assert len(s)==16 and len(x)==16*672 and len(y)==16*4
+          assert m["pumped_storage_separate_closed_zero_soc"]
+          assert not m["historically_calibrated_capacity_or_outage_or_eens"]
+          assert x.groupby(["resource_scenario","scenario"]).tail(1).ps_soc_mwh.abs().lt(.1).all()
+          print("VERIFIED PS SOC CHARGED AND DISCHARGED SOURCE-MATCHED PYPSA")
+          print(s.to_string(index=False))
+          print(y.groupby(["resource_scenario","scenario"])[["ps_charging_mwh","ps_discharge_delivered_mwh"]].sum().to_string())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-july2024-672h-ps-soc-hy-verified-sensitivity
+          path: outputs/ps/results/
+          if-no-files-found: warn
