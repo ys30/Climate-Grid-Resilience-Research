@@ -1,0 +1,59 @@
+name: BPAT July 672h actual-source HY PyPSA model outcome and baseline reconciliation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-july2024-hy-672h-model-reconciliation.yml'
+      - 'src/grid_resilience/bpat_july2024_hy_672h_model_reconciliation.py'
+      - 'tests/test_bpat_july2024_hy_672h_model_reconciliation.py'
+jobs:
+  reproduce-and-decompose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify source-run comparison invariants
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_bpat_july2024_hy_672h_model_reconciliation.py
+      - name: Restore actual-source independent 672h solved optimization and original four-week baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/reconcile/hydro outputs/reconcile/original outputs/reconcile/results
+          gh run download 42122153716 --repo ys30/Climate-Grid-Resilience-Research --name bpat-july2024-672h-intertemporal-hy-pypsa-factorial --dir outputs/reconcile/hydro
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/reconcile/original
+      - name: Verify 64 exact original hydro-free BA week climate cases and classify 16 scenarios
+        run: |
+          python -m grid_resilience.bpat_july2024_hy_672h_model_reconciliation \
+            --new-factorial outputs/reconcile/hydro/results/july_2024_672h_bpat_hy_intertemporal_factorial_by_ba_week.csv \
+            --hydro-dispatch outputs/reconcile/hydro/results/july_2024_672h_hypothetical_hy_by_week.csv \
+            --original-factorial outputs/reconcile/original/results/july_four_week_four_scenario_ba_dispatch.csv \
+            --output outputs/reconcile/results
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          p=Path("outputs/reconcile/results")
+          x=pd.read_csv(p/"hydro_intertemporal_all_16_aggregated_shortage_vs_hy.csv")
+          y=pd.read_csv(p/"hydro_intertemporal_factorial_interaction_by_scenario.csv")
+          z=pd.read_csv(p/"hydro_free_original_fourweek_64_row_exact_replay.csv")
+          m=json.loads((p/"hydro_672h_reproducibility_and_interaction_manifest.json").read_text())
+          assert len(x)==16 and len(y)==4 and len(z)==64
+          assert m["max_absolute_hydro_free_control_replay_error_mwh"]<0.05
+          assert not m["observed_historical_outages_or_eens"]
+          assert (x.simulated_shortage_reduction_mwh>=-0.01).all()
+          print(y.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-july-672h-hy-pypsa-original-baseline-64-replay-and-interaction
+          path: outputs/reconcile/results/
+          if-no-files-found: warn
