@@ -78,11 +78,11 @@ def test_duplicate_epa_hour_fails():
 def test_missing_utc_demand_fails_without_fill():
     jan,jand,jul,juld=sources()
     jand=jand.iloc[:-1]
-    with pytest.raises(ValueError,match="744 UTC"):
+    with pytest.raises(ValueError,match="official January BA source"):
         audit(jan,jand,jul,juld)
 
 
 def test_partial_epa_month_rejected():
     jan,jand,jul,juld=sources()
     with pytest.raises(ValueError,match="source-unit cohort"):
-        audit(jan.iloc[:-1],jand,jul,juld)
+        audit(jan.drop(index=jan.index[0]),jand,jul,juld)
