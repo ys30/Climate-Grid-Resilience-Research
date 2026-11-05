@@ -1,0 +1,81 @@
+name: SRP June July source joint-cell observational control models
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-june-july-joint-cell-models.yml'
+      - 'src/grid_resilience/srp_epa_june_july_overlap_models.py'
+      - 'tests/test_srp_epa_june_july_overlap_models.py'
+jobs:
+  matched-cell-exploratory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test support screen, nonoperation, and source hour conservation
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_june_july_overlap_models.py
+      - name: Restore genuine joined June and July EPA ERA5 EIA930 source hours
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_joint_cells/input outputs/srp_joint_cells/results
+          gh run download 42092282072 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-2024-epa-june-july-real-source-common-support \
+            --dir outputs/srp_joint_cells/input
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          root=Path("outputs/srp_joint_cells/input")
+          june=pd.read_csv(root/"results/june_2024_epa_era5_eia930_verified_unit_hours.csv")
+          july=pd.read_csv(root/"results/july_2024_epa_era5_eia930_verified_unit_hours.csv")
+          src=json.loads((root/"results/source_archive_checksums.json").read_text())
+          assert len(june)==7130 and len(july)==7370
+          assert len(src)==2
+          assert all(len(z["sha256"])==64 for z in src)
+          assert any(z["epa_md5"]=="7123a5070f652890f46e819dcc890ec0" for z in src)
+          assert june.srp_ba_demand_mw.notna().all() and july.srp_ba_demand_mw.notna().all()
+          PY
+      - name: Fit strictly within occupied June July common weather-demand-hour bins
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python -m grid_resilience.srp_epa_june_july_overlap_models \
+            --june-panel outputs/srp_joint_cells/input/results/june_2024_epa_era5_eia930_verified_unit_hours.csv \
+            --july-panel outputs/srp_joint_cells/input/results/july_2024_epa_era5_eia930_verified_unit_hours.csv \
+            --output outputs/srp_joint_cells/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/srp_joint_cells/results")
+          a=pd.read_csv(p/"epa_june_july_joint_support_controlled_ols.csv")
+          s=pd.read_csv(p/"epa_june_july_source_support_recheck.csv")
+          m=json.loads((p/"epa_june_july_joint_support_ols_manifest.json").read_text())
+          assert len(a)==20 and len(s)==10
+          assert s.covariate_screen_pass.all()
+          assert s.operating_gross_screen_pass.sum()==6
+          assert not m["physical_thermal_derating_or_observed_eens_estimated"]
+          assert not m["predictive_out_of_sample_validation_performed"]
+          print("SOURCE-CONDITIONED JUNE JULY EXPLORATORY ASSOCIATIONS")
+          print(a[["facility_id","epa_unit_id","month","observed_joint_source_hours",
+                   "joint_conditional_gross_valid_hours","operating_model_status",
+                   "operating_temperature_lpm_per_c","gross_model_status",
+                   "gross_temperature_mw_per_c"]].to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-june-july-joint-cell-source-ols
+          path: outputs/srp_joint_cells/results/
+          if-no-files-found: warn
