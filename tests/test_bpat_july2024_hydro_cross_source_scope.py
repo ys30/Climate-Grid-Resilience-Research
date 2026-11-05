@@ -56,3 +56,12 @@ def test_malformed_monthly_number_rejected():
     a.loc[0,"net_generation_mwh"]="not numeric"
     with pytest.raises(ValueError):
         audit(a,b,c)
+
+def test_balance_source_without_hydro_column_withholds_comparison():
+    a,b,c=inputs()
+    b=b.drop(columns=[HYFIELD])
+    _,m=audit(a,b,c)
+    assert m["eia930_mixed_hydro_fuel_group_reported_in_supplied_source"] is False
+    assert m["eia930_observed_hydro_plus_pumped_group_net_mwh"] is None
+    assert m["eia923_minus_eia930_mixed_group_source_scope_difference_mwh"] is None
+    assert m["eia923_hy_source_plant_month_rows"]==55
