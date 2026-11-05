@@ -22,8 +22,12 @@ def rows_from_ise(path,location,parameter,frequency):
     rows=[]
     with open(path,encoding="utf-8-sig",newline="") as f:
         raw=list(csv.reader(f))
+    in_series=False
     for r in raw:
-        if len(r)<7 or r[0].startswith("#") or r[0].strip()!=location:
+        if r and r[0].strip()=="#SERIES DATA#":
+            in_series=True
+            continue
+        if not in_series or len(r)<7 or r[0].startswith("#") or r[0].strip()!=location:
             continue
         if r[1].strip()!=parameter or r[3].strip()!="ft" or r[4].strip()!=frequency or r[5].strip()!="instant":
             raise ValueError("RISE location data unexpected unit, frequency or parameter")
@@ -53,12 +57,20 @@ def admit(daily_path,monthly_path):
         raise ValueError("Invalid Banks Lake original reservoir elevation feet")
     m=monthly.loc[monthly.source_record_timestamp.dt.year.eq(2024)&
                   monthly.source_record_timestamp.dt.month.eq(7)].copy()
-    if len(m)!=1 or m.source_record_timestamp.iloc[0].day!=1 or not m.elevation_ft.between(1000,2000).all():
-        raise ValueError("Grand Coulee monthly upper-pond July end-of-month observation not identified")
+    if (m.empty or not m.source_record_timestamp.dt.day.eq(1).all() or
+        not m.elevation_ft.between(1000,2000).all() or
+        m.elevation_ft.nunique()!=1):
+        raise ValueError("Grand Coulee monthly upper-pond July end-of-month observation not uniquely identifiable")
+    monthly_raw_july_rows=len(m)
+    # RISE original CSV has two valid July 1 UTC time-of-day rows
+    # reporting the same month-end measurement. These are one monthly
+    # observation, not two independently observed days.
+    m=m.iloc[[0]].copy()
     d["date"]=d.source_record_timestamp.dt.strftime("%Y-%m-%d")
     result={
       "dataset_129466_Banks_Lake_observed_July_daily_records":31,
-      "dataset_5226_upper_pond_July_source_records":1,
+      "dataset_5226_upper_pond_July_source_raw_rows":monthly_raw_july_rows,
+      "dataset_5226_upper_pond_July_unique_monthly_values":1,
       "dataset_5226_first_of_month_timestamp_semantics":"July 1 source date represents July end-of-month instant per RISE catalog",
       "banks_2024_july_min_elevation_ft":float(d.elevation_ft.min()),
       "banks_2024_july_max_elevation_ft":float(d.elevation_ft.max()),
