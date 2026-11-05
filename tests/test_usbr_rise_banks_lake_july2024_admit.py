@@ -8,12 +8,14 @@ def fixtures(tmp_path,truncate=False):
     with daily.open("w",newline="") as f:
         w=csv.writer(f)
         w.writerow(["#DOWNLOAD URL# x"]+[""]*6)
+        w.writerow(["#SERIES DATA#"]+[""]*6)
         n=30 if truncate else 31
         for i in range(1,n+1):
             w.writerow(["Banks Lake and Dry Falls Dam (BNK)","Lake/Reservoir Elevation",
                         str(1570+i*.1),"ft","daily","instant",f"2024-07-{i:02d} 19:00:00"])
     with monthly.open("w",newline="") as f:
         w=csv.writer(f)
+        w.writerow(["#SERIES DATA#"]+[""]*6)
         w.writerow(["Grand Coulee Pump Generating Plant","Upper Pond Elevation",
                     "1563.2","ft","monthly","instant","2024-07-01 07:00:00"])
     return daily,monthly
@@ -39,4 +41,23 @@ def test_no_monthly_pond_data_not_assumed_equal_banks_daily(tmp_path):
     a,b=fixtures(tmp_path)
     b.write_text("")
     with pytest.raises(ValueError,match="No original RISE"):
+        admit(a,b)
+
+def test_duplicate_identical_monthly_timestamp_not_two_months(tmp_path):
+    a,b=fixtures(tmp_path)
+    with b.open("a",newline="") as f:
+        csv.writer(f).writerow([
+            "Grand Coulee Pump Generating Plant","Upper Pond Elevation",
+            "1563.2","ft","monthly","instant","2024-07-01 06:00:00"])
+    d,m,r=admit(a,b)
+    assert len(m)==1
+    assert r["dataset_5226_upper_pond_July_source_raw_rows"]==2
+
+def test_conflicting_duplicate_monthly_data_fails(tmp_path):
+    a,b=fixtures(tmp_path)
+    with b.open("a",newline="") as f:
+        csv.writer(f).writerow([
+            "Grand Coulee Pump Generating Plant","Upper Pond Elevation",
+            "1560.0","ft","monthly","instant","2024-07-01 06:00:00"])
+    with pytest.raises(ValueError,match="uniquely identifiable"):
         admit(a,b)
