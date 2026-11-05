@@ -32,7 +32,7 @@ jobs:
           python - <<'PY'
           import json,pandas as pd
           from pathlib import Path
-          root=Path("outputs/srp_epa_july744_strata/source")
+          root=Path("outputs/srp_epa_july744_strata/source/completed")
           s=pd.read_csv(root/"epa_local_july_744h_observed_summary.csv")
           m=json.loads((root/"epa_local_july_744h_source_manifest.json").read_text())
           assert len(s)==10
@@ -44,7 +44,7 @@ jobs:
       - name: Calculate site-deduplicated heat strata and source-unit operating descriptors
         run: |
           python -m grid_resilience.srp_epa_era5_full_july_heat_strata \
-            --panel outputs/srp_epa_july744_strata/source/epa_local_july_744h_observed_era5.csv \
+            --panel outputs/srp_epa_july744_strata/source/completed/epa_local_july_744h_observed_era5.csv \
             --output outputs/srp_epa_july744_strata/results
           python - <<'PY'
           import pandas as pd,json
