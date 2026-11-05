@@ -1,0 +1,66 @@
+name: SRP EPA EIA930 leave-one-local-day-out sensitivity
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-eia930-leave-one-day-out.yml'
+      - 'src/grid_resilience/srp_epa_eia930_leave_one_day_out.py'
+      - 'tests/test_srp_epa_eia930_leave_one_day_out.py'
+jobs:
+  real-source-lodo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check date omission and sparse-gross model rules
+        run: |
+          python -m pip install -e '.[dev]'
+          OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q tests/test_srp_epa_eia930_leave_one_day_out.py
+      - name: Restore proven EPA ERA5 source and official H1 H2 EIA-930 July
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_lodo/epa outputs/srp_lodo/eia outputs/srp_lodo/results
+          gh run download 41961038085 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-local-july744-real-august-era5 --dir outputs/srp_lodo/epa
+          gh run download 41325415594 --repo ys30/Climate-Grid-Resilience-Research \
+            --name JULY2024-EIA930-OFFICIAL-RAW-ADJUSTED-BALANCE --dir outputs/srp_lodo/eia
+          python - <<'PY'
+          from pathlib import Path
+          a=Path("outputs/srp_lodo")
+          assert (a/"epa/completed/epa_local_july_744h_observed_era5.csv").exists()
+          assert (a/"eia/official_2024_july_combined.csv").exists()
+          PY
+      - name: Perform 31 date deletions of each source-unit operating and gross load fit
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: |
+          python -m grid_resilience.srp_epa_eia930_leave_one_day_out \
+            --epa-era5-panel outputs/srp_lodo/epa/completed/epa_local_july_744h_observed_era5.csv \
+            --eia930-july outputs/srp_lodo/eia/official_2024_july_combined.csv \
+            --output outputs/srp_lodo/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/srp_lodo/results")
+          a=pd.read_csv(p/"epa_eia930_leave_one_local_day_out.csv")
+          m=json.loads((p/"epa_eia930_lodo_scope.json").read_text())
+          assert len(a)==20 and a.local_days_tested.eq(31).all()
+          assert not m["causal_heat_effect_estimated"]
+          assert not m["power_or_outage_pypsa_calibration_allowed"]
+          print(a[["facility_id","epa_unit_id","outcome","full_sample_coef_per_c",
+                    "min_date_deleted_coef_per_c","max_date_deleted_coef_per_c","status"]].to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-eia930-leave-one-local-day-out
+          path: outputs/srp_lodo/results/
+          if-no-files-found: warn
