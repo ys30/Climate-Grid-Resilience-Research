@@ -3,7 +3,7 @@ import pytest
 from grid_resilience.eia930_monthly_demand import parse_records
 
 def records():
-    hours=pd.date_range("2024-01-01",periods=744,freq="h",tz="UTC")
+    hours=pd.date_range("2024-01-01T01:00:00Z",periods=744,freq="h")
     return [{"period":t.strftime("%Y-%m-%dT%H"),"respondent":"SRP",
              "type":"D","value":"50.5"} for t in hours]
 
@@ -11,6 +11,8 @@ def test_valid_complete_january_utc_month():
     result=parse_records(records(),"SRP",2024,1)
     assert len(result)==744
     assert result.demand_mw.sum()==pytest.approx(744*50.5)
+    assert str(result.timestamp.iloc[0])=="2024-01-01 00:00:00+00:00"
+    assert str(result.timestamp.iloc[-1])=="2024-01-31 23:00:00+00:00"
 
 def test_missing_hour_fails():
     with pytest.raises(ValueError,match="Incomplete UTC"):
