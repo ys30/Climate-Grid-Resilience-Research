@@ -1,0 +1,64 @@
+name: SRP 2024 EPA EIA physical identity evidence admission audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-2024-identity-evidence-audit.yml'
+      - 'src/grid_resilience/srp_epa_2024_identity_evidence_gate.py'
+      - 'tests/test_srp_epa_2024_identity_evidence_gate.py'
+jobs:
+  identity-admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify strict EPA/EIA physical identity evidence tests
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_2024_identity_evidence_gate.py
+      - name: Retrieve original validated annual EPA static-source bridge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/identity_gate/source outputs/identity_gate/results
+          gh run download 41889477040 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-2024-epa-unit-to-eia-source-bridge --dir outputs/identity_gate/source
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          r=Path("outputs/identity_gate/source")
+          a=pd.read_csv(r/"epa_2024_unit_to_eia_static_link_summary.csv")
+          m=json.loads((r/"epa_2024_unit_crosswalk_manifest.json").read_text())
+          assert len(a)==10 and a.source_calendar_hour_rows.eq(8784).all()
+          assert not m["crosswalk_is_verified_2024_generator_mapping"]
+          assert not m["eia_gt_generator_net_mw_inferred"]
+          PY
+      - name: Produce fail-closed evidence-only 2024 unit review queue
+        run: |
+          python -m grid_resilience.srp_epa_2024_identity_evidence_gate \
+            --source-bridge outputs/identity_gate/source/epa_2024_unit_to_eia_static_link_summary.csv \
+            --output outputs/identity_gate/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/identity_gate/results")
+          x=pd.read_csv(p/"epa_eia_2024_unit_identity_evidence_review_queue.csv")
+          m=json.loads((p/"epa_eia_2024_identity_admission_manifest.json").read_text())
+          assert len(x)==10 and x.priority.eq("P0_missing_static_link").sum()==4
+          assert m["epa_units_with_static_crosswalk"]==6
+          assert m["epa_units_with_verified_physical_eia_generator_mapping"]==0
+          assert not x.generator_level_gross_to_net_conversion_allowed.any()
+          assert not x.temperature_derating_calibration_allowed.any()
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-eia-identity-evidence-review-queue
+          path: outputs/identity_gate/results/
+          if-no-files-found: warn
