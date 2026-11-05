@@ -1,0 +1,69 @@
+name: SRP EPA ERA5 EIA930 hour-day demand-controlled exploratory associations
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-era5-eia930-temporal-controls.yml'
+      - 'src/grid_resilience/srp_epa_era5_eia930_temporal_controls.py'
+      - 'tests/test_srp_epa_era5_eia930_temporal_controls.py'
+jobs:
+  source-controlled-exploratory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test time controls and fail-closed source semantics
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_era5_eia930_temporal_controls.py
+      - name: Restore independently verified original EPA ERA5 and EIA930 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_temporal/epa outputs/srp_temporal/eia outputs/srp_temporal/results
+          gh run download 41961038085 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-local-july744-real-august-era5 \
+            --dir outputs/srp_temporal/epa
+          gh run download 41325415594 --repo ys30/Climate-Grid-Resilience-Research \
+            --name JULY2024-EIA930-OFFICIAL-RAW-ADJUSTED-BALANCE \
+            --dir outputs/srp_temporal/eia
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_temporal")
+          s=pd.read_csv(p/"epa/completed/epa_local_july_744h_observed_summary.csv")
+          assert len(s)==10 and s.complete_matched_hours.eq(744).all()
+          assert (p/"eia/official_2024_july_combined.csv").exists()
+          PY
+      - name: Execute original-source 10 EPA unit demand hour/day controlled fits
+        run: |
+          python -m grid_resilience.srp_epa_era5_eia930_temporal_controls \
+            --epa-era5-panel outputs/srp_temporal/epa/completed/epa_local_july_744h_observed_era5.csv \
+            --eia930-july outputs/srp_temporal/eia/official_2024_july_combined.csv \
+            --output outputs/srp_temporal/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/srp_temporal/results")
+          a=pd.read_csv(p/"epa_eia930_hour_day_controlled_exploratory_ols.csv")
+          m=json.loads((p/"epa_eia930_controlled_exploratory_scope.json").read_text())
+          assert len(a)==10 and a.hours_with_ba_demand_context.eq(737).all()
+          assert not m["causal_temperature_derating_or_eia_generator_net_mw_estimated"]
+          assert not m["physical_generator_identity_admitted"]
+          print(a[["facility_id","epa_unit_id","operation_model_status",
+             "operation_model_n","operation_lpm_temperature_coefficient_per_c",
+             "gross_load_model_status","gross_load_model_n",
+             "gross_load_temperature_coefficient_mw_per_c"]].to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-epa-2024-demand-hour-day-controls-exploratory-ols
+          path: outputs/srp_temporal/results/
+          if-no-files-found: warn
