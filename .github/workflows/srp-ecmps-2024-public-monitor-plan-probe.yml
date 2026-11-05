@@ -1,0 +1,43 @@
+name: SRP EPA production ECMPS public monitor plan access probe
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-ecmps-2024-public-monitor-plan-probe.yml'
+      - 'src/grid_resilience/srp_ecmps_public_monitor_plan_probe.py'
+      - 'tests/test_srp_ecmps_public_monitor_plan_probe.py'
+jobs:
+  public-monitor-plan-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test source-response shape and block false generator mappings
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_ecmps_public_monitor_plan_probe.py
+      - name: Query documented production EPA ECMPS public configuration service
+        run: |
+          python -m grid_resilience.srp_ecmps_public_monitor_plan_probe --output outputs/ecmps_public_monitor_plan
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/ecmps_public_monitor_plan")
+          m=json.loads((p/"ecmps_public_configuration_access_manifest.json").read_text())
+          assert m["requested_oris_codes"]==["141","55129","147"]
+          assert not m["physical_eia_generator_mapping_verified"]
+          assert not m["2024_monitoring_plan_verified"]
+          if m["data_admitted"]:
+              assert m["http_status"]==200 and m["source_monitor_plan_count"]>0
+              assert (p/"ecmps_original_public_configurations_response.json").is_file()
+          print("Access status:", m["http_status"], "data admitted:", m["data_admitted"])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-ecmps-public-plan-source-access-evidence
+          path: outputs/ecmps_public_monitor_plan/
+          if-no-files-found: warn
