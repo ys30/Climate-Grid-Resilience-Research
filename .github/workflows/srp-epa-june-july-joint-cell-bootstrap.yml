@@ -1,0 +1,79 @@
+name: SRP June July jointly supported gross coefficient date-block sensitivity
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-june-july-joint-cell-bootstrap.yml'
+      - 'src/grid_resilience/srp_epa_june_july_common_support_bootstrap.py'
+      - 'tests/test_srp_epa_june_july_common_support_bootstrap.py'
+jobs:
+  observed-source-difference-bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and validate date-block resample scientific admission tests
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_june_july_common_support_bootstrap.py
+      - name: Restore 713h June and 737h July certified original source-hour and baseline artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_jj_boot/source outputs/srp_jj_boot/baseline outputs/srp_jj_boot/results
+          gh run download 42092282072 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-2024-epa-june-july-real-source-common-support \
+            --dir outputs/srp_jj_boot/source
+          gh run download 42093112865 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-2024-june-july-joint-cell-source-ols \
+            --dir outputs/srp_jj_boot/baseline
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          root=Path("outputs/srp_jj_boot")
+          x=pd.read_csv(root/"source/results/june_2024_epa_era5_eia930_verified_unit_hours.csv")
+          y=pd.read_csv(root/"source/results/july_2024_epa_era5_eia930_verified_unit_hours.csv")
+          z=pd.read_csv(root/"baseline/epa_june_july_joint_support_controlled_ols.csv")
+          src=json.loads((root/"source/results/source_archive_checksums.json").read_text())
+          assert len(x)==7130 and len(y)==7370 and len(z)==20
+          assert any(q.get("epa_md5")=="7123a5070f652890f46e819dcc890ec0" for q in src)
+          assert x.srp_ba_demand_mw.notna().all() and y.srp_ba_demand_mw.notna().all()
+          PY
+      - name: Recompute actual source month gross slopes and bootstrap July-minus-June differences
+        run: |
+          python -m grid_resilience.srp_epa_june_july_common_support_bootstrap \
+            --june-panel outputs/srp_jj_boot/source/results/june_2024_epa_era5_eia930_verified_unit_hours.csv \
+            --july-panel outputs/srp_jj_boot/source/results/july_2024_epa_era5_eia930_verified_unit_hours.csv \
+            --baseline outputs/srp_jj_boot/baseline/epa_june_july_joint_support_controlled_ols.csv \
+            --replicates 120 --seed 20261105 \
+            --output outputs/srp_jj_boot/results
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_jj_boot/results")
+          x=pd.read_csv(p/"epa_june_july_common_support_gross_coef_difference_bootstrap.csv")
+          m=json.loads((p/"epa_june_july_common_support_difference_manifest.json").read_text())
+          assert len(x)==6
+          assert x.paired_date_block_replicates_requested.eq(120).all()
+          assert x.paired_date_block_replicates_admitted.le(120).all()
+          assert m["source_point_coefficients_fwl_match_prior_ols"]
+          assert not m["causal_thermal_derating_or_generator_available_net_mw_estimated"]
+          assert not m["observed_eens_or_forced_outage_calibration_performed"]
+          print("VERIFIED_JUNE_JULY_COMMON_CELL_PAIRED_DATE_BOOTSTRAP")
+          print(x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-june-july-gross-slope-difference-date-bootstrap
+          path: outputs/srp_jj_boot/results/
+          if-no-files-found: warn
