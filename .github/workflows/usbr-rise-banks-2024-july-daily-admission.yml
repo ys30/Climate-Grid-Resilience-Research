@@ -1,0 +1,53 @@
+name: USBR verified 2024 July 31 observed Banks Lake daily elevations and Keys III month end
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/usbr-rise-banks-2024-july-daily-admission.yml'
+      - 'src/grid_resilience/usbr_rise_banks_lake_july2024_admit.py'
+      - 'tests/test_usbr_rise_banks_lake_july2024_admit.py'
+jobs:
+  admit-original-31-days:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify strict source time, unit and completeness
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_usbr_rise_banks_lake_july2024_admit.py
+      - name: Download archived original USBR RISE CSV and SHA256 from independently successful source run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/rise/raw outputs/rise/verified
+          gh run download 42132553683 --repo ys30/Climate-Grid-Resilience-Research --name usbr-rise-bnk-daily-and-keys3-upperpond-monthly-2024-original-source --dir outputs/rise/raw
+      - name: Verify exactly 31 July daily observations and separate monthly upper pond value
+        run: |
+          python -m grid_resilience.usbr_rise_banks_lake_july2024_admit \
+            --source-dir outputs/rise/raw --output outputs/rise/verified
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import pandas as pd
+          p=Path('outputs/rise/verified')
+          x=pd.read_csv(p/'banks_lake_2024_july_31_original_daily_elevation_ft.csv')
+          y=pd.read_csv(p/'keys_iii_2024_july_one_month_end_upper_pond_elevation_ft.csv')
+          m=json.loads((p/'usbr_2024_july_banks_keys_hydrological_evidence_manifest.json').read_text())
+          assert len(x)==31 and len(y)==1
+          assert m['dataset_129466_Banks_Lake_observed_July_daily_records']==31
+          assert not m['pumped_storage_usable_electric_MWh_verified']
+          print('REAL RISE HYDROLOGICAL OBSERVATION COMPLETE JULY; NO ELECTRIC MWH INFERRED')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: usbr-banks-lake-july-2024-31-observed-daily-elevations-plus-keys-monthend
+          path: outputs/rise/verified/
+          if-no-files-found: warn
