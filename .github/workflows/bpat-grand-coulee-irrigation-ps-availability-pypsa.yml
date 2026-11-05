@@ -1,0 +1,89 @@
+name: Grand Coulee BPAT irrigation competition hypothetical PS availability 672h PyPSA
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-grand-coulee-irrigation-ps-availability-pypsa.yml'
+      - 'src/grid_resilience/bpat_grand_coulee_ps_irrigation_access_sensitivity.py'
+      - 'tests/test_bpat_grand_coulee_ps_irrigation_access_sensitivity.py'
+jobs:
+  four-access-fractions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify scenario-only irrigation competition fractions and source identity
+        run: |
+          python -m pip install -e '.[model,dev]'
+          python -m pytest -q tests/test_bpat_grand_coulee_ps_irrigation_access_sensitivity.py
+      - name: Recover exact EIA860 Grand Coulee identity, USBR scope and original July cohort
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/irrigation/usbr outputs/irrigation/eia860 outputs/irrigation/old outputs/irrigation/hy outputs/irrigation/inputs outputs/irrigation/results
+          gh run download 42129966383 --repo ys30/Climate-Grid-Resilience-Research --name bpat-grand-coulee-six-ps-usbr-irrigation-evidence-scope --dir outputs/irrigation/usbr
+          gh run download 42126016886 --repo ys30/Climate-Grid-Resilience-Research --name bpat-2024-eia860-ps-prime-mover-exact-storage-power-energy-evidence --dir outputs/irrigation/eia860
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/irrigation/old
+          gh run download 42117378382 --repo ys30/Climate-Grid-Resilience-Research --name bpat-2024-july-source-eia923-hyps-eia930-hour-group-scope --dir outputs/irrigation/hy
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          r=Path("outputs/irrigation")
+          for section,name,copy_to in (
+             ("usbr","grand_coulee_usbr_2024_ps_operational_admission.json","usbr.json"),
+             ("eia860","bpat_2024_ps_power_energy_admission_manifest.json","ps.json")):
+              candidates=list((r/section).rglob(name))
+              assert len(candidates)==1,candidates
+              (r/"inputs"/copy_to).write_bytes(candidates[0].read_bytes())
+          ds=[];ws=[]
+          for wk in range(1,5):
+              d=pd.read_csv(r/f"old/inputs/week_{wk}/demand.csv")
+              w=pd.read_csv(r/f"old/inputs/week_{wk}/weather.csv")
+              assert len(d)==len(w)==672
+              ds.append(d);ws.append(w)
+          pd.concat(ds,ignore_index=True).to_csv(r/"inputs/demand.csv",index=False)
+          pd.concat(ws,ignore_index=True).to_csv(r/"inputs/weather.csv",index=False)
+          PY
+      - name: Run 16 model optimizations: unmeasured Grand Coulee PS operating share 0 25 50 100 percent
+        run: |
+          python -m grid_resilience.bpat_grand_coulee_ps_irrigation_access_sensitivity \
+            --usbr-gate outputs/irrigation/inputs/usbr.json \
+            --ps-admission outputs/irrigation/inputs/ps.json \
+            --demand outputs/irrigation/inputs/demand.csv \
+            --weather outputs/irrigation/inputs/weather.csv \
+            --capacity outputs/irrigation/old/inputs/frozen_partial_eia860_capacity.csv \
+            --hy-source-scope outputs/irrigation/hy/bpat_july2024_eia923_page1_hy_ps_vs_eia930_mixed_hydro.csv \
+            --output outputs/irrigation/results
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          p=Path("outputs/irrigation/results")
+          x=pd.read_csv(p/"july_2024_672h_hy_ps_factorial_system.csv")
+          h=pd.read_csv(p/"july_2024_672h_hy_ps_hourly.csv")
+          z=pd.read_csv(p/"july_2024_672h_hy_ps_by_week.csv")
+          m=json.loads((p/"grand_coulee_irrigation_competition_assumptions.json").read_text())
+          assert len(x)==16 and len(h)==10752 and len(z)==64
+          assert m["hypothetical_available_PS_fraction_of_nameplate"]==[0,.25,.5,1]
+          assert not m["historical_Banks_Lake_level_irrigation_flow_or_PS_SOC_observed"]
+          assert h.groupby(["resource_scenario","scenario"]).tail(1).ps_soc_mwh.abs().lt(.1).all()
+          summary=x.pivot(index="resource_scenario",columns="scenario",values="total_model_shortage_mwh")
+          summary["compound_interaction_mwh"]=summary["heat_wind"]-summary["heat_only"]-summary["wind_only"]+summary["baseline"]
+          summary.reset_index().to_csv(p/"grand_coulee_ps_2024_july_fractional_access_hypothetical_interaction.csv",index=False)
+          print(summary.to_string())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-grand-coulee-314mw-irrigation-competing-ps-operating-availability-sensitivity
+          path: outputs/irrigation/results/
+          if-no-files-found: warn
