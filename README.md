@@ -45,6 +45,8 @@
 
 **Run / inspect:** [Jan wind and matched PyPSA workflow](.github/workflows/srp-jan2024-era5-wind-plant-intake.yml) · [July full-fleet thermal ERA5 workflow](.github/workflows/srp-jul2024-fullfleet-era5-thermal.yml). The workflows retain source query URLs, archive/download SHA-256, UTC complete-hour checks, and no-calibration flags. Full identical-site thermal weather exposure across both months is now complete; next gates are independent unit/turbine performance records before physical heat derating or reliability attribution.
 
+**Additional historical ECMPS monitoring-plan evidence validator:** [dated-source unit/stack admission gate](src/grid_resilience/srp_ecmps_2024_plan_evidence_gate.py) and [method note](reports/SRP_2024_ECMPS_MONITOR_PLAN_IDENTITY_ADMISSION_GATE.md) now enforce original-plan provenance, 2024 effective dates and exact EPA unit identities; synthetic regression tests passed in [research CI 41962771283](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/41962771283). **No original ECMPS 2024 monitoring-plan export has yet been admitted** through this gate. Unit/stack monitoring relationships are not independently sufficient to assign EIA generator net MW.
+
 ## Main research question
 
 How do compound climate stresses interact with generation availability and constrained interregional transfers to affect electricity adequacy across selected Western U.S. balancing authorities?
