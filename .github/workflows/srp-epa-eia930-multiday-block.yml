@@ -1,0 +1,80 @@
+name: SRP EPA EIA930 multi-day heatwave block sensitivity
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/srp-epa-eia930-multiday-block.yml'
+      - 'src/grid_resilience/srp_epa_eia930_multiday_block_sensitivity.py'
+      - 'tests/test_srp_epa_eia930_multiday_block_sensitivity.py'
+jobs:
+  multiday-source-robustness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify consecutive-day moving blocks and source evidence protections
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_srp_epa_eia930_multiday_block_sensitivity.py
+      - name: Retrieve source-certified July EPA-ERA5 and official EIA930 H1/H2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/srp_multiday/epa outputs/srp_multiday/eia outputs/srp_multiday/results
+          gh run download 41961038085 --repo ys30/Climate-Grid-Resilience-Research \
+            --name srp-epa-local-july744-real-august-era5 --dir outputs/srp_multiday/epa
+          gh run download 41325415594 --repo ys30/Climate-Grid-Resilience-Research \
+            --name JULY2024-EIA930-OFFICIAL-RAW-ADJUSTED-BALANCE --dir outputs/srp_multiday/eia
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          p=Path("outputs/srp_multiday")
+          s=pd.read_csv(p/"epa/completed/epa_local_july_744h_observed_summary.csv")
+          assert len(s)==10 and s.complete_matched_hours.eq(744).all()
+          assert (p/"eia/official_2024_july_combined.csv").exists()
+          PY
+      - name: Run 120 draws for each of 2, 3, and 5 consecutive local date lengths
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: |
+          python -m grid_resilience.srp_epa_eia930_multiday_block_sensitivity \
+            --epa-era5-panel outputs/srp_multiday/epa/completed/epa_local_july_744h_observed_era5.csv \
+            --eia930-july outputs/srp_multiday/eia/official_2024_july_combined.csv \
+            --replicates 120 --seed 20261105 \
+            --output outputs/srp_multiday/results
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          root=Path("outputs/srp_multiday/results")
+          a=pd.read_csv(root/"epa_eia930_multiday_block_sensitivity.csv")
+          m=json.loads((root/"epa_eia930_multiday_block_manifest.json").read_text())
+          assert len(a)==60
+          assert set(a.block_width_local_days)=={2,3,5}
+          assert a.replicates_requested.eq(120).all()
+          assert a.groupby("block_width_local_days").size().eq(20).all()
+          assert not m["generator_net_mw_or_thermal_derating_causally_identified"]
+          assert not m["pypsa_eens_or_outage_calibration"]
+          assert not m["august_demand_source_filled"]
+          print("REAL SOURCE MULTIDAY BLOCK DIAGNOSTICS")
+          print(a.loc[a.epa_unit_id.isin(["1","K-7","DBG1","DBG4"]),
+            ["facility_id","epa_unit_id","outcome","block_width_local_days",
+             "point_estimate_per_c","replicates_admitted",
+             "sensitivity_low_2_5","sensitivity_high_97_5",
+             "percentile_reportable"]].to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srp-2024-epa-eia930-multiday-moving-block-sensitivity
+          path: outputs/srp_multiday/results/
+          if-no-files-found: warn
