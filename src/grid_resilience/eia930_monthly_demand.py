@@ -42,7 +42,7 @@ def fetch(ba,year,month):
     return parse_records(data,ba,year,month),url
 
 
-def from_official_balance_csv(csv_path,ba,year,month):
+def from_official_balance_csv(csv_path,ba,year,month,*,permit_2024_jan_srp_first_seven_absent=False):
     """Fail-closed full UTC month from original EIA official hour-ending CSV."""
     fields={"Balancing Authority","UTC Time at End of Hour","Demand (MW)"}
     source=pd.read_csv(csv_path,dtype="string")
@@ -62,7 +62,13 @@ def from_official_balance_csv(csv_path,ba,year,month):
     observed=pd.DatetimeIndex(g.timestamp.sort_values())
     missing=expected.difference(observed)
     extra=observed.difference(expected)
-    if (g.timestamp.duplicated().any() or not observed.equals(expected) or
+    boundary_exception=bool(
+        permit_2024_jan_srp_first_seven_absent and
+        ba=="SRP" and year==2024 and month==1 and
+        len(g)==737 and observed.equals(expected[7:]) and
+        missing.equals(expected[:7]) and len(extra)==0)
+    if (g.timestamp.duplicated().any() or
+        not (observed.equals(expected) or boundary_exception) or
         g.demand_mw.isna().any() or g.demand_mw.le(0).any()):
         raise ValueError(
             "Official original CSV lacks complete valid UTC model start-hours: "
@@ -81,9 +87,12 @@ def main():
     p.add_argument("--ba",required=True);p.add_argument("--year",type=int,required=True)
     p.add_argument("--month",type=int,required=True);p.add_argument("--output",required=True)
     p.add_argument("--official-csv",help="Original official EIA930 BALANCE six-month CSV; bypass API 403")
+    p.add_argument("--permit-2024-jan-srp-first-seven-absent",action="store_true",
+        help="Only for official SRP January 2024 CSV: admit 737 genuine UTC hours, never fill 7 missing boundary hours")
     a=p.parse_args()
     if a.official_csv:
-        data=from_official_balance_csv(a.official_csv,a.ba,a.year,a.month)
+        data=from_official_balance_csv(a.official_csv,a.ba,a.year,a.month,
+            permit_2024_jan_srp_first_seven_absent=a.permit_2024_jan_srp_first_seven_absent)
         url="official EIA930 BALANCE CSV supplied and timestamp/checksum logged by source workflow"
     else:
         data,url=fetch(a.ba,a.year,a.month)
@@ -92,6 +101,10 @@ def main():
     (out/"demand_manifest.json").write_text(json.dumps({"source_url":url,"ba":a.ba,
       "year":a.year,"month":a.month,"hours":len(data),"source":"EIA-930 API region-data type D",
       "time_basis":"EIA period UTC hour-ending converted to model interval start",
+      "complete_utc_month":len(data)==calendar.monthrange(a.year,a.month)[1]*24,
+      "official_csv_2024_jan_srp_missing_first_7_utc_hours_admitted":bool(
+          a.official_csv and a.permit_2024_jan_srp_first_seven_absent and len(data)==737),
+      "unobserved_hours_imputed":False,
       "historical_calibration_certified":False},indent=2)+"\n")
     print(f"Validated {len(data)} UTC hourly demand rows for {a.ba}")
 if __name__=="__main__":main()
