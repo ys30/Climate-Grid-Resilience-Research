@@ -1,0 +1,83 @@
+name: Grand Coulee PS irrigation access exact model source replay and climate interaction
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-grand-coulee-irrigation-ps-access-reconciliation.yml'
+jobs:
+  reconcile-independent-original:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pandas numpy
+      - name: Restore canonical HY and PS source-modeled original runs plus irrigation sensitivity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/replay/base outputs/replay/ps314 outputs/replay/access outputs/replay/results
+          gh run download 42122153716 --repo ys30/Climate-Grid-Resilience-Research --name bpat-july2024-672h-intertemporal-hy-pypsa-factorial --dir outputs/replay/base
+          gh run download 42126570062 --repo ys30/Climate-Grid-Resilience-Research --name bpat-july2024-314mw-ps-source-anchored-672h-hy-soc-counterfactual --dir outputs/replay/ps314
+          gh run download 42130327635 --repo ys30/Climate-Grid-Resilience-Research --name bpat-grand-coulee-314mw-irrigation-competing-ps-operating-availability-sensitivity --dir outputs/replay/access
+      - name: Exactly replay no-PS original 64 and 314MW source-controlled 64 row model outcomes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          root=Path("outputs/replay")
+          old=pd.read_csv(root/"base/july_2024_672h_bpat_hy_intertemporal_factorial_by_ba_week.csv")
+          ps=pd.read_csv(root/"ps314/july_2024_672h_bpat_hy_ps_factorial_by_ba_week.csv")
+          new=pd.read_csv(root/"access/july_2024_672h_bpat_hy_ps_factorial_by_ba_week.csv")
+          keys=["scenario","ba","week"]
+          controls=[
+           ("original_hy",old.loc[old.resource_scenario.eq("HY_2000MW_598947MWh")],
+            new.loc[new.resource_scenario.eq("PS_0MW_0MWh_eta100")]),
+           ("prior_314mw_4h_80pct",ps.loc[ps.resource_scenario.eq("PS_314MW_1256MWh_eta80")],
+            new.loc[new.resource_scenario.eq("PS_314MW_1256MWh_eta80")])]
+          report={}
+          for name,left,right in controls:
+              assert len(left)==len(right)==64
+              assert not left.duplicated(keys).any() and not right.duplicated(keys).any()
+              m=left.merge(right,on=keys,validate="one_to_one",suffixes=("_previous","_new"))
+              assert len(m)==64
+              d=(m.modeled_unserved_mwh_previous-m.modeled_unserved_mwh_new).abs()
+              assert d.max()<.05,(name,d.max())
+              m["abs_model_shortage_replay_error_mwh"]=d
+              m.to_csv(root/f"results/{name}_64_exact_source_replay.csv",index=False)
+              report[name+"_max_abs_replay_error_mwh"]=float(d.max())
+          x=new.groupby(["resource_scenario","scenario"],as_index=False).modeled_unserved_mwh.sum()
+          pivot=x.pivot(index="resource_scenario",columns="scenario",values="modeled_unserved_mwh")
+          zero=float(pivot.loc["PS_0MW_0MWh_eta100","baseline"])
+          pivot["baseline_shortage_reduction_from_zero_PS_mwh"]=zero-pivot.baseline
+          pivot["heat_wind_second_difference_mwh"]=(
+              pivot.heat_wind-pivot.heat_only-pivot.wind_only+pivot.baseline)
+          pivot=pivot.reset_index()
+          assert len(pivot)==4
+          assert pivot.baseline_shortage_reduction_from_zero_PS_mwh.ge(-.1).all()
+          pivot.to_csv(root/"results/irrigation_access_2024_ps_all_four_factorial_exact_model.csv",index=False)
+          report.update({
+            "new_672h_hypothetical_irrigation_access_ci":42130327635,
+            "source_original_hy_only_ci":42122153716,
+            "source_prior_314mw_ps_ci":42126570062,
+            "source_original_BPAT_2024_EIA860_PS_nameplate_mw":314.,
+            "measured_2024_Grand_Coulee_irrigation_access_fraction":False,
+            "hypothetical_PS_duration_hours":4.,
+            "hypothetical_PS_roundtrip_efficiency":.8,
+            "source_verified_reservoir_usable_energy_mwh":False,
+            "historical_outage_eens_estimated":False})
+          (root/"results/irrigation_access_2024_ps_source_replay_manifest.json").write_text(json.dumps(report,indent=2)+"\n")
+          print("SOURCE-ANCHORED GRAND COULEE PS IRRIGATION SENSITIVITY AND 128 EXACT CONTROLS")
+          print(pivot.to_string(index=False,float_format=lambda z:f"{z:.6f}"))
+          print(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bpat-grand-coulee-ps-irrigation-access-128-source-replay-and-four-climate-factorial
+          path: outputs/replay/results/
+          if-no-files-found: error
