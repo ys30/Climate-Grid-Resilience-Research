@@ -26,7 +26,7 @@ Each observed EPA unit has precisely 8,784 *calendar-hour rows* (2024 leap year)
 | 55129 / DBG5 | 8,784 | **183** | **119.22** | 166 | 48 |
 | 147 / K-7 | 8,784 | **5,267** | **5,139.54** | 5,240 | 250 |
 
-These are **reported EPA combustion-unit source metrics**, not confirmed 2024 net EIA generator power, turbine derating events, dispatch statuses, or forced outages. Gross Load is a source-reported *gross* electrical measure and is **not interchangeable** with EIA net MW; source-hour timezone interpretation has **not yet been verified**. Some gross-load cells are unreported even though an operating-time cell equals 0; these values must not be zero-filled. A reported zero operating time does not establish a forced outage.
+These are **reported EPA combustion-unit source metrics**, not confirmed 2024 net EIA generator power, turbine derating events, dispatch statuses, or forced outages. Gross Load is a source-reported *gross* electrical measure and is **not interchangeable** with EIA net MW; source-hour timezone interpretation was **subsequently verified** for the July 2024 EPA–ERA5 analysis: Part75 local standard time (Arizona MST, UTC−07:00). See [verified full local-July alignment](SRP_EPA_ERA5_AUGUST_BOUNDARY_744H_ADMISSION_GATE.md). Some gross-load cells are unreported even though an operating-time cell equals 0; these values must not be zero-filled. A reported zero operating time does not establish a forced outage.
 
 ## Independently audited static crosswalk on the actual 10 EPA Unit IDs
 
@@ -44,7 +44,7 @@ The *unmapped* 2024 EPA units (141/7, 141/8, 55129/DBG4, 55129/DBG5) are especia
 ## Scientific inference guardrails and next gates
 
 1. EPA source Operating Time > 0 indicates a *reported operating indicator*, not continuously operable available power. Positive Gross Load reported hours describe the EPA source-unit data; do not equate them to positive EIA net electric generation.
-2. For true hourly temperature alignment, independently establish date/hour convention, local time and daylight-saving handling, and exact plant-to-weather series crosswalk; currently ERA5 monthly 744-hour UTC source data cannot be naively aligned to EPA date/hour records.
+2. **Subsequent milestone completed:** EPA Part75 local-standard to UTC conversion and full July 744-hour ERA5 weather matching are now CI verified for all ten source units (run 41961038085). This does not resolve generator mapping or identify actual heat derating.
 3. Obtain explicit 2024 ECMPS monitoring plan unit/stack associations or independent EIA boiler–generator/source mapping, especially 141 units 7/8 and 55129 DBG4/DBG5, before attributing their operation to specific gas turbines.
 4. Even if gross-load and ambient air temperature are paired, observed output depends on dispatch, commitment, demand, maintenance and fuel, so *output–temperature correlation* alone does not identify derating of physically available capacity. Need OEM thermal performance, availability/outage and dispatched/not-dispatched distinctions, plus independent year holdouts.
 
