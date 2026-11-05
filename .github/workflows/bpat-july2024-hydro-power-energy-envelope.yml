@@ -1,0 +1,63 @@
+name: BPAT July 2024 real HY evidence and four-week theoretical power energy envelope
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-july2024-hydro-power-energy-envelope.yml'
+      - 'src/grid_resilience/bpat_july2024_hydro_power_energy_envelope.py'
+      - 'tests/test_bpat_july2024_hydro_power_energy_envelope.py'
+jobs:
+  source-supported-hydro-envelopes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify nonimputed actual monthly HY source and four-week feasibility bounds
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_bpat_july2024_hydro_power_energy_envelope.py
+      - name: Recover independently audited official EIA923 HY and original corrected-hour four-week PyPSA scenarios
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/hydro_envelope/hy outputs/hydro_envelope/fourweek outputs/hydro_envelope/scope outputs/hydro_envelope/results
+          gh run download 41263007401 --repo ys30/Climate-Grid-Resilience-Research --name eia923-2024-intake-manifests --dir outputs/hydro_envelope/hy
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/hydro_envelope/fourweek
+          gh run download 42117378382 --repo ys30/Climate-Grid-Resilience-Research --name bpat-2024-july-source-eia923-hyps-eia930-hour-group-scope --dir outputs/hydro_envelope/scope
+      - name: Compute actual-source anchored but explicitly hypothetical hydro joint power energy limits
+        run: |
+          python -m grid_resilience.bpat_july2024_hydro_power_energy_envelope \
+            --eia923-month outputs/hydro_envelope/hy/eia923_hy_ps_ba_month_observed_2024.csv \
+            --pypsa-scenarios outputs/hydro_envelope/fourweek/results/july_four_week_four_scenario_ba_dispatch.csv \
+            --hydro-source-scope outputs/hydro_envelope/scope/bpat_july2024_eia923_page1_hy_ps_vs_eia930_mixed_hydro.csv \
+            --weekly-coverage outputs/hydro_envelope/fourweek/inputs/four_distinct_july_weeks_source_coverage.csv \
+            --output outputs/hydro_envelope/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path('outputs/hydro_envelope/results')
+          x=pd.read_csv(p/'bpat_july_2024_hypothetical_hydro_power_energy_optimistic_bound.csv')
+          m=json.loads((p/'bpat_july_2024_hydro_envelope_scope_manifest.json').read_text())
+          assert len(x)==16
+          assert (x.optimistic_total_shortfall_mitigation_ceiling_mwh<=x.existing_isolated_partial_model_baseline_shortage_mwh+1e-6).all()
+          assert (x.residual_original_model_shortage_floor_mwh>=0).all()
+          assert m['source_2024_july_eia923_hy_reported_net_mwh']==5989476.0
+          assert not m['historical_eens_or_real_outage_inference']
+          print('VERIFIED REAL BPAT HY MONTHLY ENERGY, HYPOTHETICAL POWER-ENERGY UPPER BOUNDS')
+          print(x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-july2024-real-hy-observed-mwh-hypothetical-power-energy-envelope
+          path: outputs/hydro_envelope/results/
+          if-no-files-found: warn
