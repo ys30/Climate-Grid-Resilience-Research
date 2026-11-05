@@ -1,0 +1,86 @@
+name: BPAT source 314 MW PS nameplate anchored 672h HY PS SOC PyPSA
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bpat-july2024-ps-314mw-source-anchored.yml'
+      - 'src/grid_resilience/bpat_july2024_ps_314mw_source_anchored.py'
+      - 'src/grid_resilience/bpat_july2024_hy_ps_soc_pypsa.py'
+      - 'tests/test_bpat_july2024_ps_314mw_source_anchored.py'
+jobs:
+  original-source-ps-nameplate-hypothesis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test official PS nameplate admission and scenario-only duration
+        run: |
+          python -m pip install -e '.[model,dev]'
+          python -m pytest -q tests/test_bpat_july2024_ps_314mw_source_anchored.py tests/test_bpat_july2024_hy_ps_soc_pypsa.py
+      - name: Recover source-certified six 314 MW BPAT PS roster and actual July model inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/source314/ps outputs/source314/old outputs/source314/hy outputs/source314/input outputs/source314/result
+          gh run download 42126016886 --repo ys30/Climate-Grid-Resilience-Research --name bpat-2024-eia860-ps-prime-mover-exact-storage-power-energy-evidence --dir outputs/source314/ps
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/source314/old
+          gh run download 42117378382 --repo ys30/Climate-Grid-Resilience-Research --name bpat-2024-july-source-eia923-hyps-eia930-hour-group-scope --dir outputs/source314/hy
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          root=Path("outputs/source314")
+          manifests=list((root/"ps").rglob("bpat_2024_ps_power_energy_admission_manifest.json"))
+          assert len(manifests)==1, manifests
+          m=json.loads(manifests[0].read_text())
+          assert m["bpat_ps_prime_mover_records"]==6
+          assert abs(m["bpat_ps_positive_nameplate_mw"]-314.0)<1e-6
+          assert not m["physical_ps_672h_dispatch_parameters_admitted"]
+          (root/"input/ps_admission.json").write_text(json.dumps(m,indent=2)+"\n")
+          ds=[];ws=[]
+          for week in range(1,5):
+              d=pd.read_csv(root/f"old/inputs/week_{week}/demand.csv")
+              w=pd.read_csv(root/f"old/inputs/week_{week}/weather.csv")
+              assert len(d)==len(w)==672
+              ds.append(d);ws.append(w)
+          pd.concat(ds,ignore_index=True).to_csv(root/"input/demand.csv",index=False)
+          pd.concat(ws,ignore_index=True).to_csv(root/"input/weather.csv",index=False)
+          PY
+      - name: Run 16 actual 672h PyPSA solves under six-generator PS nameplate and assumed 2h/4h durations
+        run: |
+          python -m grid_resilience.bpat_july2024_ps_314mw_source_anchored \
+            --source-admission outputs/source314/input/ps_admission.json \
+            --demand outputs/source314/input/demand.csv \
+            --weather outputs/source314/input/weather.csv \
+            --capacity outputs/source314/old/inputs/frozen_partial_eia860_capacity.csv \
+            --source-scope outputs/source314/hy/bpat_july2024_eia923_page1_hy_ps_vs_eia930_mixed_hydro.csv \
+            --output outputs/source314/result
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          root=Path("outputs/source314/result")
+          x=pd.read_csv(root/"july_2024_672h_hy_ps_factorial_system.csv")
+          h=pd.read_csv(root/"july_2024_672h_hy_ps_hourly.csv")
+          w=pd.read_csv(root/"july_2024_672h_hy_ps_by_week.csv")
+          m=json.loads((root/"bpat_314mw_ps_source_anchored_assumption_manifest.json").read_text())
+          assert len(x)==16 and len(h)==16*672 and len(w)==16*4
+          assert h.groupby(["resource_scenario","scenario"]).tail(1).ps_soc_mwh.abs().lt(.1).all()
+          assert not m["source_ps_usable_mwh_verified"]
+          print("SOURCE 314MW BPAT PS MODEL SYSTEM SUMMARY")
+          print(x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bpat-july2024-314mw-ps-source-anchored-672h-hy-soc-counterfactual
+          path: outputs/source314/result/
+          if-no-files-found: warn
