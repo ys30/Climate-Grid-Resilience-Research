@@ -84,5 +84,5 @@ def test_missing_utc_demand_fails_without_fill():
 
 def test_partial_epa_month_rejected():
     jan,jand,jul,juld=sources()
-    with pytest.raises(ValueError,match="source-unit cohort"):
+    with pytest.raises(ValueError,match="January weather coverage differs"):
         audit(jan.drop(index=jan.index[0]),jand,jul,juld)
