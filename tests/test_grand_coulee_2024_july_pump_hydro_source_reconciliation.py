@@ -20,6 +20,12 @@ def test_real_31day_project_pump_energy_not_ps_discharge():
     assert m["actual_USACE_Banks_pumping_July_1_28_2024_28day_MWh"]==140000
     assert m["USACE_pump_MWh_is_whole_Banks_irrigation_site_not_PG7_PG12_only"]
     assert not m["usable_electric_PS_MWh_or_reservoir_water_balance_calibrated"]
+    scope = m["hypothetical_314mw_ps_scope_diagnostic"]
+    assert scope["project_pumping_observation_days"] == 31
+    assert scope["project_pumping_reported_total_mwh"] == 175641.0
+    assert scope["hypothetical_ps_only_max_daily_charge_mwh"] == 7536.0
+    assert scope["project_daily_energy_above_hypothetical_ps_envelope_days"] == 1
+    assert scope["ps_charge_energy_disaggregated"] is False
 
 def test_missing_actual_site_pump_energy_rejected():
     a,b,c=sample();a.loc[1,"usace_banks_lake_pumping_electricity_mwh"]=None
