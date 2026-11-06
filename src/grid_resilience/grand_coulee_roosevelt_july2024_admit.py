@@ -16,9 +16,9 @@ def usgs_daily(path):
     header=lines[0].split("\t")
     if "site_no" not in header or "datetime" not in header:
         raise ValueError(f"USGS NWIS RDB source header absent: {header}")
-    numeric=[k for k in header if re.search(r"62614_00003$",k)]
+    numeric=[k for k in header if re.search(r"62614_32400$",k)]
     if len(numeric)!=1:
-        raise ValueError(f"USGS daily mean 62614 not uniquely present: {header}")
+        raise ValueError(f"USGS daily 2400-hour observation 62614 not uniquely present: {header}")
     if lines[1].split("\t")[0].endswith("s") is False:
         raise ValueError("USGS RDB type specification row absent")
     data="\n".join([lines[0]]+lines[2:])+"\n"
@@ -26,17 +26,17 @@ def usgs_daily(path):
     if "site_no" not in x or not x.site_no.eq("12436000").all():
         raise ValueError("USGS station identity not 12436000")
     x["date"]=pd.to_datetime(x["datetime"],errors="raise")
-    x["lake_roosevelt_daily_mean_elevation_ft_ngvd29"]=pd.to_numeric(
+    x["lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29"]=pd.to_numeric(
         x[numeric[0]],errors="coerce")
     q=x.loc[x.date.dt.strftime("%Y-%m").eq("2024-07")].copy()
     expected=pd.date_range("2024-07-01",periods=31,freq="D")
     if len(q)!=31 or q.date.duplicated().any() or not pd.DatetimeIndex(q.date.sort_values()).equals(expected):
         raise ValueError(f"USGS source missing July 31-day mean elevations, n={len(q)}")
-    if q.lake_roosevelt_daily_mean_elevation_ft_ngvd29.isna().any():
-        raise ValueError("USGS daily mean lake levels missing, not imputed")
-    if not q.lake_roosevelt_daily_mean_elevation_ft_ngvd29.between(1200,1320).all():
+    if q.lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29.isna().any():
+        raise ValueError("USGS daily 2400-hour observation lake levels missing, not imputed")
+    if not q.lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29.between(1200,1320).all():
         raise ValueError("USGS lake levels outside physically plausible original feet range")
-    keep=["date","lake_roosevelt_daily_mean_elevation_ft_ngvd29"]
+    keep=["date","lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29"]
     q=q[keep].sort_values("date")
     return q
 
@@ -67,16 +67,16 @@ def admit(usgs,usbr):
     df=usgs_daily(usgs)
     monthly,raw_rows=usbr_month(usbr)
     m={
-      "USGS_12436000_2024_07_daily_mean_observations":len(df),
-      "USGS_daily_elevation_datum":"NGVD29",
-      "USGS_2024_07_daily_mean_min_ft":float(df.lake_roosevelt_daily_mean_elevation_ft_ngvd29.min()),
-      "USGS_2024_07_daily_mean_max_ft":float(df.lake_roosevelt_daily_mean_elevation_ft_ngvd29.max()),
-      "USGS_2024_07_01_daily_mean_ft":float(df.iloc[0].lake_roosevelt_daily_mean_elevation_ft_ngvd29),
-      "USGS_2024_07_31_daily_mean_ft":float(df.iloc[-1].lake_roosevelt_daily_mean_elevation_ft_ngvd29),
+      "USGS_12436000_2024_07_daily_2400_observed_observations":len(df),
+      "USGS_daily_elevation_datum":"NGVD29",\n      "USGS_statistic_code":"32400",\n      "USGS_statistic_interpretation":"OBSERVATION AT 2400, not daily mean",
+      "USGS_2024_07_daily_2400_observed_min_ft":float(df.lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29.min()),
+      "USGS_2024_07_daily_2400_observed_max_ft":float(df.lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29.max()),
+      "USGS_2024_07_01_daily_2400_observed_ft":float(df.iloc[0].lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29),
+      "USGS_2024_07_31_daily_2400_observed_ft":float(df.iloc[-1].lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29),
       "USBR_5253_2024_07_monthly_Grand_Coulee_forebay_ft":monthly,
       "USBR_monthly_july_raw_duplicate_row_count":raw_rows,
       "USBR_5253_first_day_timestamp_means_month_end":True,
-      "USGS_daily_mean_is_same_as_USBR_month_end_instant":False,
+      "USGS_daily_2400_observed_is_same_as_USBR_month_end_instant":False,
       "USGS_and_USBR_vertical_datum_interoperability_verified":False,
       "direct_bank_lake_minus_roosevelt_daily_head_m_permitted":False,
       "pump_station_effective_net_head_verified":False,
@@ -91,7 +91,7 @@ def main():
     a=p.parse_args()
     x,m=admit(a.usgs_daily,a.usbr_monthly)
     out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
-    x.to_csv(out/"lake_roosevelt_usgs_2024_july_31_daily_mean_ngvd29_elevation.csv",index=False)
+    x.to_csv(out/"lake_roosevelt_usgs_2024_july_31_daily_2400_observed_ngvd29_elevation.csv",index=False)
     (out/"lake_roosevelt_july2024_forebay_elevation_source_manifest.json").write_text(json.dumps(m,indent=2)+"\n")
     print("ORIGINAL USGS 12436000 ROOSEVELT 2024 JULY DAILY SOURCE VERIFIED")
     print(json.dumps(m,indent=2))
