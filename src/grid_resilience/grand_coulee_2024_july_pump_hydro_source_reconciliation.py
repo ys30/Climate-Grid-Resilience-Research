@@ -8,6 +8,7 @@ import argparse,json
 from pathlib import Path
 import numpy as np
 import pandas as pd
+from grid_resilience.grand_coulee_pumping_scope_gate import pumping_scope_diagnostic
 
 def audit(usace,banks,roosevelt):
     required={
@@ -44,6 +45,7 @@ def audit(usace,banks,roosevelt):
     last=float(w.loc[~w.in_672h_pypsa_original_july_window,"usace_banks_lake_pumping_electricity_mwh"].sum())
     if abs(total-175641)>1e-6 or abs(first+last-total)>1e-6:
         raise ValueError("Original July project-wide USACE pump MWh checksum disagrees")
+    scope = pumping_scope_diagnostic(w.usace_banks_lake_pumping_electricity_mwh.tolist(), 314.0)
     report={
       "actual_USACE_Banks_pumping_July_2024_complete_31days_MWh":total,
       "actual_USACE_Banks_pumping_July_1_28_2024_28day_MWh":first,
@@ -60,7 +62,8 @@ def audit(usace,banks,roosevelt):
       "USACE_pumping_kcfs_aggregation_and_total_water_volume_not_inferred":True,
       "USACE_pump_project_consumption_is_not_EIA923_signed_PS_net_generation":True,
       "usable_electric_PS_MWh_or_reservoir_water_balance_calibrated":False,
-      "real_historical_grid_outages_or_EENS_identified":False}
+      "real_historical_grid_outages_or_EENS_identified":False,
+      "hypothetical_314mw_ps_scope_diagnostic":scope}
     return w,report
 
 def main():
