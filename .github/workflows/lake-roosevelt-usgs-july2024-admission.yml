@@ -1,0 +1,53 @@
+name: USGS Lake Roosevelt 2024 July 31-day observed elevation source admission
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/lake-roosevelt-usgs-july2024-admission.yml'
+      - 'src/grid_resilience/grand_coulee_roosevelt_july2024_admit.py'
+      - 'tests/test_grand_coulee_roosevelt_july2024_admit.py'
+jobs:
+  verified-daily-original:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify strict original daily source and month-end unit gates
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_grand_coulee_roosevelt_july2024_admit.py
+      - name: Restore exact original USGS RDB and USBR 5253 files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/roosevelt/raw outputs/roosevelt/verified
+          gh run download 42135379269 --repo ys30/Climate-Grid-Resilience-Research --name usgs-grand-coulee-roosevelt-july2024-daily-plus-usbr-forebay-monthly --dir outputs/roosevelt/raw
+      - name: Admit exact 2024 July complete daily original USGS elevations, independent USBR forebay
+        run: |
+          python -m grid_resilience.grand_coulee_roosevelt_july2024_admit \
+            --usgs-daily outputs/roosevelt/raw/usgs_lake_roosevelt_daily_2024_07_raw.txt \
+            --usbr-monthly outputs/roosevelt/raw/usbr_grand_coulee_monthly_forebay_2024_07_raw.txt \
+            --output outputs/roosevelt/verified
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/roosevelt/verified")
+          x=pd.read_csv(p/"lake_roosevelt_usgs_2024_july_31_daily_mean_ngvd29_elevation.csv")
+          m=json.loads((p/"lake_roosevelt_july2024_forebay_elevation_source_manifest.json").read_text())
+          assert len(x)==31
+          assert m["USGS_12436000_2024_07_daily_mean_observations"]==31
+          assert not m["direct_bank_lake_minus_roosevelt_daily_head_m_permitted"]
+          print("VERIFIED JULY LAKE ROOSEVELT OFFICIAL DAILY SOURCE",json.dumps(m,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grand-coulee-roosevelt-2024-july-usgs-31day-plus-usbr-forebay
+          path: outputs/roosevelt/verified/
+          if-no-files-found: warn
