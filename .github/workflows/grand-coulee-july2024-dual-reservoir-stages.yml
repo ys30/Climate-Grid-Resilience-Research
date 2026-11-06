@@ -33,7 +33,7 @@ jobs:
         run: |
           python -m grid_resilience.grand_coulee_july2024_dual_reservoir_stage_panel \
             --banks-daily outputs/paired/banks/banks_lake_2024_july_31_original_daily_elevation_ft.csv \
-            --roosevelt-daily outputs/paired/roosevelt/lake_roosevelt_usgs_2024_july_31_daily_2400_ngvd29_elevation.csv \
+            --roosevelt-daily outputs/paired/roosevelt/lake_roosevelt_usgs_2024_july_31_daily_2400_observed_ngvd29_elevation.csv \
             --banks-scope outputs/paired/banks/usbr_2024_july_banks_keys_hydrological_evidence_manifest.json \
             --roosevelt-scope outputs/paired/roosevelt/lake_roosevelt_july2024_forebay_elevation_source_manifest.json \
             --output outputs/paired/results
