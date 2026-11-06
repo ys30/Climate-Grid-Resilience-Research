@@ -49,6 +49,15 @@ The independently source-audited EIA923 BPAT July Page1 **PS signed net generati
 
 **Priority next physical step**: obtain actual **PG7–PG12 unit-level daily/hourly pump-generation operation**, six dedicated irrigation-pump disaggregation, verified pump-flow aggregation/statistic, Banks Lake stage–volume rating and irrigation withdrawal, plus source aligned lower/upper lake level and datum. Then estimate water volume balance and PS-specific available electric power only after full identities and hydraulic head verified. If inaccessible, present a bounded *partial identification* study instead of fabricated calibration. Independent seasons/years plus complete BA generating fleet and intertie validity remain needed for a physical grid-reliability paper.
 
+## Observational figures for Paper C supplement
+
+The archived **actual-source, non-simulated figures** are built from the fully source-audited 31-day USACE/USBR/USGS joined input: [original July historical pumping and dual-reservoir figure CI 42137937886](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42137937886) **SUCCESS**, [download both high-resolution PNG figures artifact 13465469574](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42137937886/artifacts/13465469574).
+
+- **Fig. Hydro-S1:** observed daily **whole-project** USACE Banks Lake pumping MWh from July 1–31, a dashed mark after July 28 identifying the original PyPSA 672h model calendar cohort. It does not infer PS-generator-specific charging energy or grid shortages.
+- **Fig. Hydro-S2:** observed **within-each-reservoir** stage change relative to July 1 at Banks Lake and Lake Roosevelt, **not their absolute-elevation subtraction**. Source clocks, water-surface datum and actual hydraulic energy are not harmonized. The diagram illustrates observed daily variability and does not infer recoverable electric storage MWh.
+
+Reproducible plotting code: [original source-only figures](../src/grid_resilience/grand_coulee_2024_july_observed_hydro_figures.py), [figure build CI](../.github/workflows/grand-coulee-july2024-observed-hydro-figures.yml). Avoid including these charts without their reporting-scope and time-definition captions.
+
 ## Code and fully automated source checks
 
 [USACE historical original July access](../src/grid_resilience/grand_coulee_usace_july2024_pump_data_access_probe.py);
