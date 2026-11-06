@@ -38,10 +38,10 @@ jobs:
           import json,pandas as pd
           from pathlib import Path
           p=Path("outputs/roosevelt/verified")
-          x=pd.read_csv(p/"lake_roosevelt_usgs_2024_july_31_daily_mean_ngvd29_elevation.csv")
+          x=pd.read_csv(p/"lake_roosevelt_usgs_2024_july_31_daily_2400_observed_ngvd29_elevation.csv")
           m=json.loads((p/"lake_roosevelt_july2024_forebay_elevation_source_manifest.json").read_text())
           assert len(x)==31
-          assert m["USGS_12436000_2024_07_daily_mean_observations"]==31
+          assert m["USGS_12436000_2024_07_daily_2400_observed_observations"]==31
           assert not m["direct_bank_lake_minus_roosevelt_daily_head_m_permitted"]
           print("VERIFIED JULY LAKE ROOSEVELT OFFICIAL DAILY SOURCE",json.dumps(m,indent=2))
           PY
