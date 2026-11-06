@@ -1,0 +1,25 @@
+name: USACE Grand Coulee July 2024 historical daily Banks pump access diagnostic
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/grand-coulee-usace-july2024-pumping-historical-access.yml'
+      - 'src/grid_resilience/grand_coulee_usace_july2024_pump_data_access_probe.py'
+jobs:
+  historic-2024-source-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test whether USACE month-back report genuinely yields July 2024 Banks Lake pumping data
+        run: |
+          python -m grid_resilience.grand_coulee_usace_july2024_pump_data_access_probe --output outputs/usace/diagnostic
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grand-coulee-usace-original-2024-july-pump-month-access-evidence
+          path: outputs/usace/diagnostic/
+          if-no-files-found: warn
