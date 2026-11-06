@@ -1,0 +1,30 @@
+name: Lake Roosevelt USGS 2024 July daily and USBR 5253 original forebay source intake
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/lake-roosevelt-usgs-july2024-source.yml'
+      - 'src/grid_resilience/grand_coulee_roosevelt_july2024_source_intake.py'
+      - 'tests/test_grand_coulee_roosevelt_july2024_source_intake.py'
+jobs:
+  original-low-reservoir:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Confirm station, dates, units and independently located RISE item
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_grand_coulee_roosevelt_july2024_source_intake.py
+      - name: Obtain original USGS Roosevelt daily and USBR POMTS monthly records
+        run: |
+          python -m grid_resilience.grand_coulee_roosevelt_july2024_source_intake --output outputs/roosevelt/original
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: usgs-grand-coulee-roosevelt-july2024-daily-plus-usbr-forebay-monthly
+          path: outputs/roosevelt/original/
+          if-no-files-found: warn
