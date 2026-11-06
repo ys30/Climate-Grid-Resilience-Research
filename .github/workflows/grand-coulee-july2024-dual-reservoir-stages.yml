@@ -1,0 +1,58 @@
+name: Banks Roosevelt 2024 July 31-day observed dual reservoir stage overlap
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/grand-coulee-july2024-dual-reservoir-stages.yml'
+      - 'src/grid_resilience/grand_coulee_july2024_dual_reservoir_stage_panel.py'
+      - 'tests/test_grand_coulee_july2024_dual_reservoir_stage_panel.py'
+jobs:
+  source-observed-upper-lower-paired-calendar-days:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test observed day exact join and no fake pump head
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_grand_coulee_july2024_dual_reservoir_stage_panel.py
+      - name: Recover both independent original daily reservoir source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/paired/banks outputs/paired/roosevelt outputs/paired/results
+          gh run download 42133017279 --repo ys30/Climate-Grid-Resilience-Research --name usbr-banks-lake-july-2024-31-observed-daily-elevations-plus-keys-monthend --dir outputs/paired/banks
+          gh run download 42135925149 --repo ys30/Climate-Grid-Resilience-Research --name grand-coulee-roosevelt-2024-july-usgs-31day-plus-usbr-forebay --dir outputs/paired/roosevelt
+      - name: Join 31 genuine dates, explicitly distinguish observation times and 28-day PyPSA window
+        run: |
+          python -m grid_resilience.grand_coulee_july2024_dual_reservoir_stage_panel \
+            --banks-daily outputs/paired/banks/banks_lake_2024_july_31_original_daily_elevation_ft.csv \
+            --roosevelt-daily outputs/paired/roosevelt/lake_roosevelt_usgs_2024_july_31_daily_2400_ngvd29_elevation.csv \
+            --banks-scope outputs/paired/banks/usbr_2024_july_banks_keys_hydrological_evidence_manifest.json \
+            --roosevelt-scope outputs/paired/roosevelt/lake_roosevelt_july2024_forebay_elevation_source_manifest.json \
+            --output outputs/paired/results
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          root=Path('outputs/paired/results')
+          x=pd.read_csv(root/'july2024_banks_roosevelt_31day_observed_elevation_levels_and_within_site_changes.csv')
+          m=json.loads((root/'july2024_dual_reservoir_observations_scope_manifest.json').read_text())
+          assert len(x)==31
+          assert x.within_original_2024_july_28day_pypsa_window.sum()==28
+          assert not m['inter_reservoir_daily_actual_head_computed']
+          assert not m['pypsa_ps_4h_80percent_measured']
+          print('CI VERIFIED OBSERVED TWO RESERVOIR DAILY STAGE WITHOUT CALIBRATED HEAD')
+          print(x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grand-coulee-banks-roosevelt-2024-july-31day-paired-source-observations
+          path: outputs/paired/results/
+          if-no-files-found: warn
