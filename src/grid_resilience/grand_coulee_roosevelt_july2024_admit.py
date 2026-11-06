@@ -68,7 +68,9 @@ def admit(usgs,usbr):
     monthly,raw_rows=usbr_month(usbr)
     m={
       "USGS_12436000_2024_07_daily_2400_observed_observations":len(df),
-      "USGS_daily_elevation_datum":"NGVD29",\n      "USGS_statistic_code":"32400",\n      "USGS_statistic_interpretation":"OBSERVATION AT 2400, not daily mean",
+      "USGS_daily_elevation_datum":"NGVD29",
+      "USGS_statistic_code":"32400",
+      "USGS_statistic_interpretation":"OBSERVATION AT 2400, not daily mean",
       "USGS_2024_07_daily_2400_observed_min_ft":float(df.lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29.min()),
       "USGS_2024_07_daily_2400_observed_max_ft":float(df.lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29.max()),
       "USGS_2024_07_01_daily_2400_observed_ft":float(df.iloc[0].lake_roosevelt_daily_2400_observed_elevation_ft_ngvd29),
