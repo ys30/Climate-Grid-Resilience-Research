@@ -1,0 +1,53 @@
+name: Original USACE Grand Coulee July 2024 observed Banks Pump MWh and kcfs audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/usace-grand-coulee-july2024-pump-observation.yml'
+      - 'src/grid_resilience/usace_grand_coulee_july2024_pump_observation_admit.py'
+      - 'tests/test_usace_grand_coulee_july2024_pump_observation_admit.py'
+jobs:
+  actual-source-2024-pump-observations:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test historical report month and missing pump data fail closed
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_usace_grand_coulee_july2024_pump_observation_admit.py
+      - name: Recover authentic source-archived USACE July 2024 history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/pumping/original outputs/pumping/admitted
+          gh run download 42136906572 --repo ys30/Climate-Grid-Resilience-Research --name grand-coulee-usace-original-2024-july-pump-month-access-evidence --dir outputs/pumping/original
+      - name: Extract only real 2024 July per-day Banks Pump MWh, kcfs and reservoir levels
+        run: |
+          python -m grid_resilience.usace_grand_coulee_july2024_pump_observation_admit \
+            --source outputs/pumping/original/usace_grand_coulee_2024_july_probe_0_original.html \
+            --output outputs/pumping/admitted
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          r=Path('outputs/pumping/admitted')
+          x=pd.read_csv(r/'usace_grand_coulee_banks_pumping_2024_july_31day_actual_reported.csv')
+          m=json.loads((r/'usace_grand_coulee_july2024_original_pumping_audit_manifest.json').read_text())
+          assert len(x)==31
+          assert m['USACE_original_historical_page_July_2024']
+          assert m['USACE_pumping_MWh_is_project_wide_not_verified_reversible_PG7_PG12_only']
+          assert not m['historical_real_outage_EENS_inferred']
+          print("ACTUAL JULY USACE BANKS PUMP SOURCE COVERAGE",json.dumps(m,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grand-coulee-2024-july-real-usace-banks-pump-mwh-kcfs-31days
+          path: outputs/pumping/admitted/
+          if-no-files-found: warn
