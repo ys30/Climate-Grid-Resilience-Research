@@ -1,0 +1,58 @@
+name: Grand Coulee July 2024 real USACE pumping 31day and Banks Roosevelt source reconciliation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/grand-coulee-july2024-usace-pump-three-source-reconciliation.yml'
+      - 'src/grid_resilience/grand_coulee_2024_july_pump_hydro_source_reconciliation.py'
+      - 'tests/test_grand_coulee_2024_july_pump_hydro_source_reconciliation.py'
+jobs:
+  observed-pumping-and-reservoir-source-harmonization:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit-test source actual July pumping checksum and strict reported-day identity
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_grand_coulee_2024_july_pump_hydro_source_reconciliation.py
+      - name: Recover three independently source-verified official July 2024 observations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/three/usace outputs/three/banks outputs/three/roosevelt outputs/three/reconciled
+          gh run download 42137162460 --repo ys30/Climate-Grid-Resilience-Research --name grand-coulee-2024-july-real-usace-banks-pump-mwh-kcfs-31days --dir outputs/three/usace
+          gh run download 42133017279 --repo ys30/Climate-Grid-Resilience-Research --name usbr-banks-lake-july-2024-31-observed-daily-elevations-plus-keys-monthend --dir outputs/three/banks
+          gh run download 42135925149 --repo ys30/Climate-Grid-Resilience-Research --name grand-coulee-roosevelt-2024-july-usgs-31day-plus-usbr-forebay --dir outputs/three/roosevelt
+      - name: Match all 31 original source days and compute actual pump use for original 28-day PyPSA cohort
+        run: |
+          python -m grid_resilience.grand_coulee_2024_july_pump_hydro_source_reconciliation \
+            --usace outputs/three/usace/usace_grand_coulee_banks_pumping_2024_july_31day_actual_reported.csv \
+            --banks outputs/three/banks/banks_lake_2024_july_31_original_daily_elevation_ft.csv \
+            --roosevelt outputs/three/roosevelt/lake_roosevelt_usgs_2024_july_31_daily_2400_observed_ngvd29_elevation.csv \
+            --output outputs/three/reconciled
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          p=Path("outputs/three/reconciled")
+          x=pd.read_csv(p/"grand_coulee_2024_july_31day_usace_usbr_usgs_pumping_lake_observation_reconciliation.csv")
+          m=json.loads((p/"grand_coulee_2024_july_pumping_hydro_source_scope_manifest.json").read_text())
+          assert len(x)==31 and x.in_672h_pypsa_original_july_window.sum()==28
+          assert m["actual_USACE_Banks_pumping_July_2024_complete_31days_MWh"]==175641
+          assert m["USACE_pump_MWh_is_whole_Banks_irrigation_site_not_PG7_PG12_only"]
+          assert not m["usable_electric_PS_MWh_or_reservoir_water_balance_calibrated"]
+          print("ACTUAL ORIGINAL 2024 JULY BANKS PUMP ENERGY AND RESERVOIR CROSS-SOURCE",json.dumps(m,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grand-coulee-2024-july-real-pumping-28day-and-three-independent-water-source-reconciliation
+          path: outputs/three/reconciled/
+          if-no-files-found: warn
