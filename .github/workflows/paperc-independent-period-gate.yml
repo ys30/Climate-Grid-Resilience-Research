@@ -1,0 +1,72 @@
+name: Paper C independent-season/year source holdout gate
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-independent-period-gate.yml'
+      - 'src/grid_resilience/paperc_independent_period_gate.py'
+      - 'tests/test_paperc_independent_period_gate.py'
+jobs:
+  audit-observed-windows:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit test strict 168h four-BA candidate and season/year holdout
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_independent_period_gate.py
+      - name: Restore four independently date-stamped but within-July source weeks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/holdout/source outputs/holdout/report
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/holdout/source
+      - name: Audit source timestamps and explicitly deny external period validation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("outputs/holdout/source")
+          m=json.loads((root/"four_week_source_manifest.json").read_text())
+          assert m["nonoverlapping_168h_windows"] == 4
+          assert m["source_distinct_hourly_timestamps"] == 672
+          specs=[]
+          for i in range(1,5):
+              specs.append({
+                  "window_id":f"JULY2024_WEEK_{i}",
+                  "demand":str(root/f"week_{i}/demand.csv"),
+                  "weather":str(root/f"week_{i}/weather.csv"),
+                  "capacity":str(root/"frozen_partial_eia860_capacity.csv"),
+                  "source_evidence":{
+                      "official_hour_start_demand":True,
+                      "documented_weather_source":True,
+                      "frozen_capacity_convention":True,
+                      "source_provenance_available":True}})
+          Path("outputs/holdout/manifest.json").write_text(json.dumps(specs,indent=2))
+          PY
+          python -m grid_resilience.paperc_independent_period_gate \
+            --manifest outputs/holdout/manifest.json \
+            --output outputs/holdout/report/independent_period_admission.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path("outputs/holdout/report/independent_period_admission.json").read_text())
+          assert x["candidate_windows"]==4
+          assert x["distinct_meteorological_season_years"]==1
+          assert not x["cross_period_holdout_source_admitted"]
+          assert not x["independent_statistical_events_established"]
+          assert not x["source_supported_physical_grid_adequacy"]
+          print("July four-week within-season evidence: correctly REJECTED as external holdout")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2024-july-independent-season-year-not-admitted
+          path: outputs/holdout/report/
+          if-no-files-found: error
