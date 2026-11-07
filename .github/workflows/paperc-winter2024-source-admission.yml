@@ -1,0 +1,105 @@
+name: Paper C 2024 winter four-BA observed 168h period admission
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-winter2024-source-admission.yml'
+      - 'src/grid_resilience/paperc_independent_period_gate.py'
+      - 'tests/test_paperc_independent_period_gate.py'
+jobs:
+  winter-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and test strict evidence admission
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_independent_period_gate.py
+      - name: Recover original July source and EIA860 partial fleet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/winter/july outputs/winter/winter outputs/winter/raw outputs/winter/report
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/winter/july
+      - name: Download authentic 2024 Jan-Jun EIA930 hourly reported BA demand source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          import hashlib,json
+          url="https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_Jan_Jun.csv"
+          with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+              content=r.read()
+              final=r.geturl()
+          assert len(content)>10000
+          root=Path("outputs/winter/raw")
+          (root/"EIA930_BALANCE_2024_Jan_Jun.csv").write_bytes(content)
+          (root/"official_source.json").write_text(json.dumps({
+              "url":url,"final_url":final,"sha256":hashlib.sha256(content).hexdigest(),
+              "bytes":len(content),"hour_ending_to_start_shift_hours":-1,
+              "historical_adequacy_calibrated":False},indent=2))
+          PY
+      - name: Extract complete 2024 February 5-11 UTC four-BA raw demand
+        run: |
+          python - <<'PY'
+          from grid_resilience.eia930_six_month_demand import extract
+          m=extract("outputs/winter/raw/EIA930_BALANCE_2024_Jan_Jun.csv",
+                    "outputs/winter/winter",start="2024-02-05T00:00:00+00:00",hours=168)
+          assert m["rows"]==672 and m["hour_ending_shift_hours"]==-1
+          PY
+      - name: Acquire independent 2024 Feb 5-11 ERA5 original point weather
+        run: |
+          python -m grid_resilience.era5_proxy --bas AZPS BPAT CISO SRP \
+            --start 2024-02-05T00:00:00Z --end 2024-02-12T00:00:00Z \
+            --output outputs/winter/winter/era5_fourba_feb2024.csv
+      - name: Verify cross-season four-BA source admission using original July week 1
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from grid_resilience.paperc_independent_period_gate import inspect_window,audit_periods
+          r=Path("outputs/winter")
+          root=r/"july"/"inputs"
+          assert (root/"four_week_source_manifest.json").exists()
+          cap=pd.read_csv(root/"frozen_partial_eia860_capacity.csv")
+          source={"official_hour_start_demand":True,"documented_weather_source":True,
+                  "frozen_capacity_convention":True,"source_provenance_available":True}
+          july=inspect_window("JULY2024_WEEK_1",
+                              pd.read_csv(root/"week_1/demand.csv"),
+                              pd.read_csv(root/"week_1/weather.csv"),cap,source)
+          feb=inspect_window("FEB2024_WEEK_FEB05",
+                             pd.read_csv(r/"winter/hourly_ba_demand.csv"),
+                             pd.read_csv(r/"winter/era5_fourba_feb2024.csv"),
+                             cap,source)
+          report=audit_periods([july,feb])
+          assert report["candidate_windows"]==2
+          assert report["distinct_meteorological_season_years"]==2
+          assert report["different_season_candidate_available"]
+          assert report["cross_period_holdout_source_admitted"]
+          assert not report["independent_statistical_events_established"]
+          assert not report["source_supported_physical_grid_adequacy"]
+          report["winter_EIA930_original"]=json.loads((r/"raw/official_source.json").read_text())
+          report["winter_ERA5_provenance"]=json.loads((r/"winter/era5_fourba_feb2024.manifest.json").read_text())
+          report["frozen_2024_annual_partial_fleet_not_observed_hourly_availability"]=True
+          (r/"report/winter_four_ba_period_admission.json").write_text(json.dumps(report,indent=2)+"\n")
+          print(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-real-feb2024-fourba-observed-winter-holdout-inputs
+          path: |
+            outputs/winter/winter/hourly_ba_demand.csv
+            outputs/winter/winter/hourly_ba_demand_manifest.json
+            outputs/winter/winter/era5_fourba_feb2024.csv
+            outputs/winter/winter/era5_fourba_feb2024.manifest.json
+            outputs/winter/report/winter_four_ba_period_admission.json
+          if-no-files-found: warn
