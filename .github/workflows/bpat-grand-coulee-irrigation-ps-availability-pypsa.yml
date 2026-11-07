@@ -6,6 +6,8 @@ on:
       - '.github/workflows/bpat-grand-coulee-irrigation-ps-availability-pypsa.yml'
       - 'src/grid_resilience/bpat_grand_coulee_ps_irrigation_access_sensitivity.py'
       - 'tests/test_bpat_grand_coulee_ps_irrigation_access_sensitivity.py'
+      - 'src/grid_resilience/hy_ps_exported_soc_audit.py'
+      - 'tests/test_hy_ps_exported_soc_audit.py'
 jobs:
   four-access-fractions:
     runs-on: ubuntu-24.04
@@ -24,7 +26,7 @@ jobs:
       - name: Verify scenario-only irrigation competition fractions and source identity
         run: |
           python -m pip install -e '.[model,dev]'
-          python -m pytest -q tests/test_bpat_grand_coulee_ps_irrigation_access_sensitivity.py
+          python -m pytest -q tests/test_bpat_grand_coulee_ps_irrigation_access_sensitivity.py tests/test_hy_ps_exported_soc_audit.py
       - name: Recover exact EIA860 Grand Coulee identity, USBR scope and original July cohort
         env:
           GH_TOKEN: ${{ github.token }}
@@ -81,6 +83,10 @@ jobs:
           summary.reset_index().to_csv(p/"grand_coulee_ps_2024_july_fractional_access_hypothetical_interaction.csv",index=False)
           print(summary.to_string())
           PY
+          python -m grid_resilience.hy_ps_exported_soc_audit \
+            --hourly outputs/irrigation/results/july_2024_672h_hy_ps_hourly.csv \
+            --scope outputs/irrigation/results/july_2024_672h_hy_ps_scope.json \
+            --output outputs/irrigation/results/grand_coulee_independent_exported_soc_audit.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
