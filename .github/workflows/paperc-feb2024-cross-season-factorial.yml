@@ -1,0 +1,126 @@
+name: Paper C winter 2024 four-BA factorial cross-season screening comparison
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-feb2024-cross-season-factorial.yml'
+jobs:
+  matched-winter-factorial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install fixed solver inputs
+        run: python -m pip install -e '.[model,dev]'
+      - name: Restore certified February and July original sources and capacity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/cross/winter outputs/cross/july outputs/cross/results
+          gh run download 42414968609 --repo ys30/Climate-Grid-Resilience-Research --name paperc-real-feb2024-fourba-observed-winter-holdout-inputs --dir outputs/cross/winter
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/cross/july
+      - name: Verify official winter source evidence and hold original capacity/link assumptions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          from grid_resilience.paperc_independent_period_gate import inspect_window,audit_periods
+          root=Path("outputs/cross")
+          winter=root/"winter"
+          summer=root/"july"/"inputs"
+          report=json.loads((winter/"winter_four_ba_period_admission.json").read_text())
+          assert report["cross_period_holdout_source_admitted"]
+          assert report["candidate_windows"]==2
+          c=pd.read_csv(summer/"frozen_partial_eia860_capacity.csv")
+          source={"official_hour_start_demand":True,"documented_weather_source":True,
+                  "frozen_capacity_convention":True,"source_provenance_available":True}
+          d=pd.read_csv(winter/"hourly_ba_demand.csv")
+          w=pd.read_csv(winter/"era5_fourba_feb2024.csv")
+          admitted=inspect_window("FEB2024_05_11",d,w,c,source)
+          assert admitted["meteorological_season"]=="DJF"
+          assert admitted["unique_utc_hours"]==168
+          july=inspect_window("JULY2024_01_07",
+                              pd.read_csv(summer/"week_1/demand.csv"),
+                              pd.read_csv(summer/"week_1/weather.csv"),c,source)
+          assert audit_periods([admitted,july])["cross_period_holdout_source_admitted"]
+          PY
+      - name: Run matched winter four-case factorial with isolated BAs
+        run: |
+          python -m grid_resilience.research_run \
+            --demand outputs/cross/winter/hourly_ba_demand.csv \
+            --weather outputs/cross/winter/era5_fourba_feb2024.csv \
+            --capacity outputs/cross/july/inputs/frozen_partial_eia860_capacity.csv \
+            --links outputs/cross/july/inputs/isolated_ba_links.csv \
+            --event-id FEB2024_05_11 \
+            --network-variant isolated \
+            --link-evidence hypothetical \
+            --output outputs/cross/results/winter/isolated
+      - name: Run matched winter four-case factorial with frozen hypothetical July 10-percent links
+        run: |
+          python -m grid_resilience.research_run \
+            --demand outputs/cross/winter/hourly_ba_demand.csv \
+            --weather outputs/cross/winter/era5_fourba_feb2024.csv \
+            --capacity outputs/cross/july/inputs/frozen_partial_eia860_capacity.csv \
+            --links outputs/cross/july/inputs/frozen_hypothetical_links.csv \
+            --event-id FEB2024_05_11 \
+            --network-variant links_10pct \
+            --link-evidence hypothetical \
+            --output outputs/cross/results/winter/links_10pct
+      - name: Construct audited winter vs July first-week model-only contrast
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path("outputs/cross")
+          results=root/"results"
+          summer=pd.read_csv(root/"july/results/july_four_week_factorial_interaction_by_ba.csv")
+          summer=summer.loc[summer.event_id.eq("JULY2024_WEEK_1") & summer.ba.eq("SYSTEM")]
+          assert len(summer)==2
+          rows=[]
+          for variant in ("isolated","links_10pct"):
+              path=results/"winter"/variant
+              x=pd.read_csv(path/"solved/factorial_dispatch.csv")
+              assert len(x)==16 and set(x.scenario)=={"baseline","heat_only","wind_only","heat_wind"}
+              assert set(x.ba)=={"AZPS","BPAT","CISO","SRP"}
+              u=x.groupby("scenario").unserved_energy_mwh.sum()
+              interaction=float(u["heat_wind"]-u["heat_only"]-u["wind_only"]+u["baseline"])
+              y=summer.loc[summer.network_variant.eq(variant)]
+              assert len(y)==1
+              july=float(y.iloc[0].modeled_factorial_interaction_mwh)
+              rows.append({"network_variant":variant,
+                  "feb2024_modeled_interaction_mwh":interaction,
+                  "july2024_week1_modeled_interaction_mwh":july,
+                  "feb_minus_july_model_interaction_mwh":interaction-july,
+                  "feb_baseline_modeled_supply_gap_mwh":float(u["baseline"]),
+                  "july_baseline_modeled_supply_gap_mwh":float(y.iloc[0].baseline_shortage_mwh),
+                  "physical_grid_calibrated":False,
+                  "historical_eens_identified":False})
+          out=pd.DataFrame(rows)
+          out.to_csv(results/"winter_vs_july2024_week1_model_factorial.csv",index=False)
+          print(out.to_string(index=False))
+          manifest={"winter_observed_input_run":42414968609,
+                    "summer_observed_input_run":42104106361,
+                    "periods":"2024-02-05/11 versus 2024-07-01/07; both 168 h",
+                    "frozen_annual_2024_partial_fleet":True,
+                    "hypothetical_10pct_link_ratings_from_July_week1":True,
+                    "source_period_holdout_admitted":True,
+                    "independent_events_statistically_established":False,
+                    "historical_adequacy_or_weather_causation_calibrated":False}
+          (results/"cross_season_scope.json").write_text(json.dumps(manifest,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-feb-july2024-cross-season-conditional-factorial
+          path: outputs/cross/results/
+          if-no-files-found: warn
