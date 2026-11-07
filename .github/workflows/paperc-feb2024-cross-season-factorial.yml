@@ -52,6 +52,9 @@ jobs:
                               pd.read_csv(summer/"week_1/demand.csv"),
                               pd.read_csv(summer/"week_1/weather.csv"),c,source)
           assert audit_periods([admitted,july])["cross_period_holdout_source_admitted"]
+          # The source artifact archives the frozen linked network, not the empty isolated CSV.
+          # Construct an explicitly empty topology; no estimated transfer capacity is inserted.
+          (summer/"isolated_ba_links.csv").write_text("from_ba,to_ba,capacity_mw\\n")
           PY
       - name: Run matched winter four-case factorial with isolated BAs
         run: |
