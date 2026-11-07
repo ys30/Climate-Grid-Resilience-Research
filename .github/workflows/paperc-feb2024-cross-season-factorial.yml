@@ -70,8 +70,8 @@ jobs:
       - name: Run matched winter four-case factorial with frozen hypothetical July 10-percent links
         run: |
           python -m grid_resilience.research_run \
-            --demand outputs/cross/winter/hourly_ba_demand.csv \
-            --weather outputs/cross/winter/era5_fourba_feb2024.csv \
+            --demand outputs/cross/winter/winter/hourly_ba_demand.csv \
+            --weather outputs/cross/winter/winter/era5_fourba_feb2024.csv \
             --capacity outputs/cross/july/inputs/frozen_partial_eia860_capacity.csv \
             --links outputs/cross/july/inputs/frozen_hypothetical_links.csv \
             --event-id FEB2024_05_11 \
