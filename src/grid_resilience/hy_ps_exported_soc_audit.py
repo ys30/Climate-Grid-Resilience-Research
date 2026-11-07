@@ -106,7 +106,7 @@ def main():
     out = audit_exported_hourly(pd.read_csv(args.hourly), specs)
     target = Path(args.output)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(out, indent=2)+"\\n")
+    target.write_text(json.dumps(out, indent=2)+chr(10))
     print("INDEPENDENT EXPORTED HY/PS SOC CONSERVATION AUDIT:", out["groups_checked"], "groups")
 
 
