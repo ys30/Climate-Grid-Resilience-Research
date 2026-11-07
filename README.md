@@ -2,6 +2,9 @@
 
 **Research V2 — independent climate and power-system adequacy paper.** This repository is separate from the [portfolio V1 demonstration](https://github.com/ys30/Climate-Grid-Resilience-PyPSA). Results in the portfolio remain versioned and are not presented as historically calibrated grid reliability forecasts.
 
+
+**Independent storage accounting milestone (7 November 2026):** The July 2024 Grand Coulee four-access-fraction, four-hazard-case **16 × 672-hour PyPSA results** now have a separate exported-time-series energy conservation audit, [successful CI 42397840448](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42397840448) and [archived verification and factorial results](reports/PROJECT_C_GRAND_COULEE_672H_INDEPENDENT_SOC_AUDIT_RESULTS_CI_VERIFIED.md). All 16 groups passed hourly SOC conservation, charging/discharging power, zero terminal SOC, and full-horizon hydro budget checks. Baseline modeled shortage falls from 1,508,297 MWh with no assumed PS access to 1,480,656 MWh with 100% **hypothetical** 314-MW/1,256-MWh access; **not observed outages, historical EENS, calibrated water-energy or actual storage performance**.
+
 ## Latest verified results: SRP real-source meteorology and matched PyPSA (November 2026)
 
 **What is verified.** Official EIA-860/923/930 provenance, 744-hour SRP hourly demand/interchange boundaries, ERA5 plant-coordinate meteorology, and successful PyPSA + HiGHS screening runs. **What is not verified:** physical BA dispatch rights, plant-specific turbine/thermal performance, transmission ratings, historical outages, EENS, or climate-attributable capacity losses.
