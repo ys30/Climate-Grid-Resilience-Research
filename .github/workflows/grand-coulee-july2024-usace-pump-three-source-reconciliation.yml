@@ -5,7 +5,9 @@ on:
     paths:
       - '.github/workflows/grand-coulee-july2024-usace-pump-three-source-reconciliation.yml'
       - 'src/grid_resilience/grand_coulee_2024_july_pump_hydro_source_reconciliation.py'
+      - 'src/grid_resilience/grand_coulee_pumping_scope_gate.py'
       - 'tests/test_grand_coulee_2024_july_pump_hydro_source_reconciliation.py'
+      - 'tests/test_grand_coulee_pumping_scope_gate.py'
 jobs:
   observed-pumping-and-reservoir-source-harmonization:
     runs-on: ubuntu-24.04
@@ -21,7 +23,7 @@ jobs:
       - name: Unit-test source actual July pumping checksum and strict reported-day identity
         run: |
           python -m pip install -e '.[dev]'
-          python -m pytest -q tests/test_grand_coulee_2024_july_pump_hydro_source_reconciliation.py
+          python -m pytest -q tests/test_grand_coulee_2024_july_pump_hydro_source_reconciliation.py tests/test_grand_coulee_pumping_scope_gate.py
       - name: Recover three independently source-verified official July 2024 observations
         env:
           GH_TOKEN: ${{ github.token }}
@@ -48,6 +50,15 @@ jobs:
           assert m["actual_USACE_Banks_pumping_July_2024_complete_31days_MWh"]==175641
           assert m["USACE_pump_MWh_is_whole_Banks_irrigation_site_not_PG7_PG12_only"]
           assert not m["usable_electric_PS_MWh_or_reservoir_water_balance_calibrated"]
+          scope=m["hypothetical_314mw_ps_scope_diagnostic"]
+          assert scope["project_pumping_observation_days"]==31
+          assert scope["project_pumping_reported_total_mwh"]==175641
+          assert scope["project_pumping_reported_daily_max_mwh"]==10735
+          assert scope["hypothetical_ps_only_max_daily_charge_mwh"]==7536
+          assert scope["project_daily_energy_above_hypothetical_ps_envelope_days"]>=1
+          assert scope["project_daily_peak_minus_ps_envelope_mwh"]==3199
+          assert scope["project_wide_pumping_is_ps_unit_charging"] is False
+          assert scope["ps_charge_energy_disaggregated"] is False
           print("ACTUAL ORIGINAL 2024 JULY BANKS PUMP ENERGY AND RESERVOIR CROSS-SOURCE",json.dumps(m,indent=2))
           PY
       - uses: actions/upload-artifact@v4
