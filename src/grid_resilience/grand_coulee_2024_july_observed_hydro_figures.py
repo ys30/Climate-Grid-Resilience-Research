@@ -11,6 +11,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from grid_resilience.grand_coulee_pumping_scope_gate import pumping_scope_diagnostic
 
 def plot(data,output):
     x=data.copy()
@@ -61,6 +62,36 @@ def plot(data,output):
          "Different source observation times; not an effective hydraulic head or stored energy MWh.",
          ha="center",fontsize=8)
     fig.savefig(out/"fig_grand_coulee_july2024_banks_roosevelt_observed_stage_changes.png",
+                dpi=185,bbox_inches="tight")
+    plt.close(fig)
+
+    # Third panel: source-observed project electricity vs an explicitly
+    # hypothetical six-generator charging-power envelope, NOT measured PG7-12.
+    scope=pumping_scope_diagnostic(x.usace_banks_lake_pumping_electricity_mwh.tolist(),314.0)
+    assert abs(scope["project_pumping_reported_total_mwh"]-175641.0)<1e-6
+    assert abs(scope["project_pumping_reported_daily_max_mwh"]-10735.0)<1e-6
+    fig,ax=plt.subplots(figsize=(10.7,4.7),layout="constrained")
+    actual=x.usace_banks_lake_pumping_electricity_mwh
+    ceiling=scope["hypothetical_ps_only_max_daily_charge_mwh"]
+    colors=["#aa504c" if value>ceiling else "#547f9c" for value in actual]
+    ax.bar(x.date,actual,width=.85,color=colors,label="USACE reported whole-project pump electricity")
+    ax.axhline(ceiling,color="#a26c18",linestyle="--",linewidth=1.7,
+               label="Hypothetical 314 MW × 24 h charger envelope (NOT observed rating)")
+    ax.axvline(pd.Timestamp("2024-07-28 12:00"),color="#666666",linestyle=":",linewidth=1,
+               label="End of 672-hour PyPSA scenario window")
+    ax.set_title("Grand Coulee / Banks Lake: observational pump energy vs assumed PS-only envelope")
+    ax.set_ylabel("Daily electricity (MWh)")
+    ax.set_xlabel("July 2024")
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=4))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+    ax.tick_params(axis="x",rotation=25)
+    ax.grid(axis="y",alpha=.2)
+    ax.legend(loc="upper left",fontsize=7.5)
+    fig.text(.5,-.025,
+       "Whole-project irrigation + reversible-pump installation; 314 MW is generating nameplate, not measured charging MW. "
+       "This is a scope comparison, not PS dispatch or water-energy calibration.",
+       ha="center",va="top",fontsize=7.4,wrap=True)
+    fig.savefig(out/"fig_grand_coulee_july2024_real_project_pump_vs_hypothetical_ps_charge_envelope.png",
                 dpi=185,bbox_inches="tight")
     plt.close(fig)
     return out
