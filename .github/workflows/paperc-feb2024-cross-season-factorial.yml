@@ -43,8 +43,8 @@ jobs:
           c=pd.read_csv(summer/"frozen_partial_eia860_capacity.csv")
           source={"official_hour_start_demand":True,"documented_weather_source":True,
                   "frozen_capacity_convention":True,"source_provenance_available":True}
-          d=pd.read_csv(winter/"hourly_ba_demand.csv")
-          w=pd.read_csv(winter/"era5_fourba_feb2024.csv")
+          d=pd.read_csv(winter/"winter/hourly_ba_demand.csv")
+          w=pd.read_csv(winter/"winter/era5_fourba_feb2024.csv")
           admitted=inspect_window("FEB2024_05_11",d,w,c,source)
           assert admitted["meteorological_season"]=="DJF"
           assert admitted["unique_utc_hours"]==168
@@ -56,8 +56,8 @@ jobs:
       - name: Run matched winter four-case factorial with isolated BAs
         run: |
           python -m grid_resilience.research_run \
-            --demand outputs/cross/winter/hourly_ba_demand.csv \
-            --weather outputs/cross/winter/era5_fourba_feb2024.csv \
+            --demand outputs/cross/winter/winter/hourly_ba_demand.csv \
+            --weather outputs/cross/winter/winter/era5_fourba_feb2024.csv \
             --capacity outputs/cross/july/inputs/frozen_partial_eia860_capacity.csv \
             --links outputs/cross/july/inputs/isolated_ba_links.csv \
             --event-id FEB2024_05_11 \
