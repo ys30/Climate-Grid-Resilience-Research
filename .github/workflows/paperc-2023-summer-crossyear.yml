@@ -1,0 +1,163 @@
+name: Paper C 2023 summer observed cross-year heat-active factorial
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2023-summer-crossyear.yml'
+jobs:
+  source-gated-crossyear:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install source and PyPSA/HiGHS methods
+        run: |
+          python -m pip install -e '.[model,dev]'
+          python -m pytest -q tests/test_paperc_independent_period_gate.py
+      - name: Recover corrected July 2024 source, partial 2024 capacity and hypothetical link design
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/crossyear/july outputs/crossyear/source outputs/crossyear/out
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/crossyear/july
+      - name: Download EIA 2023 Jul-Dec official BA balance CSV with immutable SHA
+        run: |
+          python - <<'PY'
+          from urllib.request import Request,urlopen
+          from pathlib import Path
+          import hashlib,json
+          root=Path("outputs/crossyear/source")
+          url="https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2023_Jul_Dec.csv"
+          with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as response:
+              raw=response.read()
+              destination=response.geturl()
+          if len(raw)<=10000:raise ValueError("Official source unexpectedly small")
+          (root/"eia930_2023_jul_dec.csv").write_bytes(raw)
+          (root/"eia930_2023_source.json").write_text(json.dumps({
+              "official_url":url,"resolved_url":destination,
+              "source_sha256":hashlib.sha256(raw).hexdigest(),
+              "source_bytes":len(raw),"hour_ending_to_start_shift_hours":-1,
+              "source_year":2023,"historical_adequacy_calibrated":False},indent=2)+chr(10))
+          PY
+      - name: Admit actual 2023 July 10-16 168h four BA demand without interpolation
+        run: |
+          python - <<'PY'
+          from grid_resilience.eia930_six_month_demand import extract
+          m=extract("outputs/crossyear/source/eia930_2023_jul_dec.csv",
+                    "outputs/crossyear/source",start="2023-07-10T00:00:00+00:00",hours=168)
+          assert m["rows"]==672 and m["hour_ending_shift_hours"]==-1
+          PY
+      - name: Retrieve source ERA5 for full 2023 July 10-16 UTC and verify heat response activates
+        run: |
+          python -m grid_resilience.era5_proxy --bas AZPS BPAT CISO SRP \
+            --start 2023-07-10T00:00:00Z --end 2023-07-17T00:00:00Z \
+            --output outputs/crossyear/source/era5_2023_july.csv
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          w=pd.read_csv("outputs/crossyear/source/era5_2023_july.csv")
+          assert len(w)==672 and len(w.ba.unique())==4
+          increments=(w.temperature_c.add(4).sub(30).clip(lower=0)-
+                      w.temperature_c.sub(30).clip(lower=0))
+          n=int(increments.gt(0).sum())
+          result={"observed_2023_four_ba_point_max_temperature_c":float(w.temperature_c.max()),
+                  "heat_load_response_active_ba_hours":n,
+                  "total_four_ba_hours":672,
+                  "assumed_heat_increment_c":4,"assumed_activation_temperature_c":30,
+                  "measured_grid_heat_response":False}
+          Path("outputs/crossyear/source/heat_activation.json").write_text(json.dumps(result,indent=2)+chr(10))
+          print("CROSS-YEAR ACTUAL WEATHER HEAT ACTIVATION",json.dumps(result))
+          if n==0:raise ValueError("Preselected cross-year window never activates heat-load mechanism; archive source and do not claim active-heat validation")
+          PY
+      - name: Independently gate two distinct-year original source periods
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          from grid_resilience.paperc_independent_period_gate import inspect_window,audit_periods
+          root=Path("outputs/crossyear")
+          j=root/"july/inputs"
+          c=pd.read_csv(j/"frozen_partial_eia860_capacity.csv")
+          evidence={"official_hour_start_demand":True,"documented_weather_source":True,
+                    "frozen_capacity_convention":True,"source_provenance_available":True}
+          first=inspect_window("JULY2024_01_07",pd.read_csv(j/"week_1/demand.csv"),
+                               pd.read_csv(j/"week_1/weather.csv"),c,evidence)
+          held=inspect_window("JULY2023_10_16",pd.read_csv(root/"source/hourly_ba_demand.csv"),
+                              pd.read_csv(root/"source/era5_2023_july.csv"),c,evidence)
+          x=audit_periods([first,held])
+          assert x["different_calendar_year_candidate_available"] and x["cross_period_holdout_source_admitted"]
+          assert not x["source_supported_physical_grid_adequacy"]
+          x["capacity_is_2024_partial_fleet_held_fixed_on_2023_not_true_2023_fleet"]=True
+          x["hypothetical_links_derived_from_2024_july_peak_not_real_ratings"]=True
+          (root/"source/crossyear_source_admission.json").write_text(json.dumps(x,indent=2)+chr(10))
+          (j/"isolated_ba_links.csv").write_text("from_ba,to_ba,capacity_mw"+chr(10))
+          PY
+      - name: Run 2023 actual input four-case isolated BA PyPSA screening experiment
+        run: |
+          python -m grid_resilience.research_run \
+            --demand outputs/crossyear/source/hourly_ba_demand.csv \
+            --weather outputs/crossyear/source/era5_2023_july.csv \
+            --capacity outputs/crossyear/july/inputs/frozen_partial_eia860_capacity.csv \
+            --links outputs/crossyear/july/inputs/isolated_ba_links.csv \
+            --event-id JULY2023_10_16 --network-variant isolated \
+            --link-evidence hypothetical --output outputs/crossyear/out/isolated
+      - name: Run 2023 actual input four-case hypothetical frozen 2024 links
+        run: |
+          python -m grid_resilience.research_run \
+            --demand outputs/crossyear/source/hourly_ba_demand.csv \
+            --weather outputs/crossyear/source/era5_2023_july.csv \
+            --capacity outputs/crossyear/july/inputs/frozen_partial_eia860_capacity.csv \
+            --links outputs/crossyear/july/inputs/frozen_hypothetical_links.csv \
+            --event-id JULY2023_10_16 --network-variant links_10pct \
+            --link-evidence hypothetical --output outputs/crossyear/out/links_10pct
+      - name: Source-traceable 2023 vs 2024 factorial model-only contrast
+        run: |
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          root=Path("outputs/crossyear")
+          july=pd.read_csv(root/"july/results/july_four_week_factorial_interaction_by_ba.csv")
+          july=july[(july.event_id=="JULY2024_WEEK_1") & (july.ba=="SYSTEM")]
+          rows=[]
+          for name in ("isolated","links_10pct"):
+              x=pd.read_csv(root/f"out/{name}/solved/factorial_dispatch.csv")
+              assert len(x)==16 and set(x.scenario)=={"baseline","heat_only","wind_only","heat_wind"}
+              u=x.groupby("scenario").unserved_energy_mwh.sum()
+              interaction=float(u["heat_wind"]-u["heat_only"]-u["wind_only"]+u["baseline"])
+              old=july.loc[july.network_variant.eq(name)]
+              assert len(old)==1
+              rows.append({"network_variant":name,"year2023_source_week":"2023-07-10_to_2023-07-16",
+                  "year2024_source_week":"2024-07-01_to_2024-07-07",
+                  "july2023_interaction_model_mwh":interaction,
+                  "july2024_interaction_model_mwh":float(old.iloc[0].modeled_factorial_interaction_mwh),
+                  "july2023_baseline_model_gap_mwh":float(u["baseline"]),
+                  "july2024_baseline_model_gap_mwh":float(old.iloc[0].baseline_shortage_mwh),
+                  "frozen_2024_partial_fleet_used_in_2023":True,
+                  "real_grid_calibration":False,"historical_eens":False})
+          result=pd.DataFrame(rows)
+          result.to_csv(root/"out/crossyear_2023_2024_factorial_model_comparison.csv",index=False)
+          print(result.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-2023-summer-crossyear-source-heat-active-conditional-model
+          path: |
+            outputs/crossyear/source/eia930_2023_source.json
+            outputs/crossyear/source/hourly_ba_demand.csv
+            outputs/crossyear/source/hourly_ba_demand_manifest.json
+            outputs/crossyear/source/era5_2023_july.csv
+            outputs/crossyear/source/era5_2023_july.manifest.json
+            outputs/crossyear/source/heat_activation.json
+            outputs/crossyear/source/crossyear_source_admission.json
+            outputs/crossyear/out/
+          if-no-files-found: warn
