@@ -110,6 +110,17 @@ jobs:
                   "historical_eens_identified":False})
           out=pd.DataFrame(rows)
           out.to_csv(results/"winter_vs_july2024_week1_model_factorial.csv",index=False)
+          w=pd.read_csv(root/"winter/winter/era5_fourba_feb2024.csv")
+          t=pd.to_numeric(w.temperature_c,errors="raise")
+          activation=((t+4-30).clip(lower=0)-(t-30).clip(lower=0))
+          diagnostic={"winter_era5_max_point_temperature_c":float(t.max()),
+                      "winter_ba_hours_heat_load_multiplier_positive":int((activation>0).sum()),
+                      "winter_ba_hours_total":len(w),
+                      "modeled_heat_increment_c":4.0,
+                      "assumed_heat_response_threshold_c":30.0,
+                      "not_historical_heat_derating":True}
+          (results/"winter_heat_response_activation.json").write_text(json.dumps(diagnostic,indent=2)+chr(10))
+          print("WINTER ASSUMED HEAT-RESPONSE ACTIVATION:",json.dumps(diagnostic))
           print(out.to_string(index=False))
           manifest={"winter_observed_input_run":42414968609,
                     "summer_observed_input_run":42104106361,
