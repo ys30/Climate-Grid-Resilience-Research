@@ -1,0 +1,55 @@
+name: Paper C 672h model factorial figure and audited CSV
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-672h-ps-factorial-figure.yml'
+      - 'src/grid_resilience/paperc_ps_factorial_figure.py'
+      - 'tests/test_paperc_ps_factorial_figure.py'
+jobs:
+  paper-figure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install plot and test dependencies
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_ps_factorial_figure.py
+      - name: Download archived independently SOC-audited PyPSA outputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/paperc/source outputs/paperc/figure
+          gh run download 42397840448 --repo ys30/Climate-Grid-Resilience-Research --name bpat-grand-coulee-314mw-irrigation-competing-ps-operating-availability-sensitivity --dir outputs/paperc/source
+      - name: Validate all 16 optimized cases and render model-only figure
+        run: |
+          python -m grid_resilience.paperc_ps_factorial_figure \
+            --system outputs/paperc/source/july_2024_672h_hy_ps_factorial_system.csv \
+            --scope outputs/paperc/source/july_2024_672h_hy_ps_scope.json \
+            --audit outputs/paperc/source/grand_coulee_independent_exported_soc_audit.json \
+            --output outputs/paperc/figure
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path('outputs/paperc/figure')
+          t=pd.read_csv(p/'table_paperc_672h_hypothetical_ps_factorial.csv')
+          assert len(t)==4 and t.assumed_access_pct.tolist()==[0,25,50,100]
+          assert (t.interaction_mwh>0).all()
+          assert abs(float(t.iloc[-1].baseline_gap_reduction_vs_zero_access_mwh)-27641.637)<.25
+          assert all((p/n).stat().st_size>10000 for n in
+            ['fig_paperc_672h_hypothetical_ps_factorial.png',
+             'fig_paperc_672h_hypothetical_ps_factorial.pdf'])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-672h-source-audited-model-factorial-main-figure
+          path: outputs/paperc/figure/
+          if-no-files-found: error
