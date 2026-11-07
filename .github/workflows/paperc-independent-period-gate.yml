@@ -33,7 +33,7 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          root=Path("outputs/holdout/source")
+          root=Path("outputs/holdout/source/inputs")
           m=json.loads((root/"four_week_source_manifest.json").read_text())
           assert m["nonoverlapping_168h_windows"] == 4
           assert m["source_distinct_hourly_timestamps"] == 672
