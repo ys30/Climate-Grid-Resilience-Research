@@ -37,7 +37,7 @@ jobs:
           root=Path("outputs/cross")
           winter=root/"winter"
           summer=root/"july"/"inputs"
-          report=json.loads((winter/"winter_four_ba_period_admission.json").read_text())
+          report=json.loads((winter/"report/winter_four_ba_period_admission.json").read_text())
           assert report["cross_period_holdout_source_admitted"]
           assert report["candidate_windows"]==2
           c=pd.read_csv(summer/"frozen_partial_eia860_capacity.csv")
