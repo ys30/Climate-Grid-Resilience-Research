@@ -55,7 +55,7 @@ def test_monthly_duplicate_identity_not_allowed(tmp_path):
     from openpyxl import load_workbook
     wb=load_workbook(path);wb["Operating"].append([101,"A","AZPS",100,"Natural Gas","NG","CT","(OP) Operating"]);wb.save(path)
     with pytest.raises(ValueError,match="repeated"):
-        inventory(path)
+        inventory(path,"august")
 
 def test_annual_row_alignment_required(tmp_path):
     monthly=inventory(xlsx(tmp_path,"august"),"august")
