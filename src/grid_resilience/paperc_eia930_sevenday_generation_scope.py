@@ -14,7 +14,7 @@ import numpy as np
 from .eia930_fuel_decomposition import FMT,FUELS
 
 BAS=("AZPS","BPAT","CISO","SRP")
-MAPPING={"Natural Gas":"generic_thermal_proxy","Wind":"wind"}
+MAPPING={"Natural Gas":"generic_thermal_proxy","Wind":"wind",\n         "Wind without Integrated Battery Storage":"wind"}
 SCENARIO="baseline"
 
 def extract(source, start, hours=168):
@@ -57,7 +57,7 @@ def extract(source, start, hours=168):
     if seen!={(t.to_pydatetime(),ba) for t in expected for ba in BAS}:
         raise ValueError(f"Incomplete official EIA930 BA-hour grid: {len(seen)}/672")
     obs=pd.DataFrame(rows)
-    if len(obs)!=hours*len(BAS)*len(FUELS):
+    if len(obs)!=hours*len(BAS)*len(fuelcols):
         raise ValueError("Incomplete fuel observation grid")
     summary=obs.groupby(["ba","fuel"],sort=True).agg(
         reported_hours=("reported","sum"),
@@ -89,7 +89,7 @@ def model_comparison(observed, modeled,year,variant):
         raise ValueError("Invalid modeled generation")
     model=a.groupby(["ba","technology"]).generation_mwh.sum()
     out=observed.copy()
-    out["model_technology_proxy"]=out.fuel.map(MAPPING)
+    out["model_technology_proxy"]=out.fuel.map(MAPPING)\n    out["modeled_wind_proxy_not_equivalent_to_integrated_storage_or_total_wind"]=True
     out["modeled_baseline_mwh"]=out.apply(
         lambda row:float(model.loc[(row.ba,row.model_technology_proxy)])
         if row.fuel in MAPPING else float("nan"),axis=1)
@@ -114,7 +114,7 @@ def main():
     out=Path(args.output);out.parent.mkdir(parents=True,exist_ok=True)
     result.to_csv(out,index=False)
     audit={"year":args.year,"start_utc":args.start,"hours_per_ba":168,
-           "fuel_category_ba_groups":len(result),"fully_observed_fuel_groups":
+           "fuel_category_ba_groups":len(result),\n           "source_fuel_categories":sorted(result.fuel.unique().tolist()),\n           "fully_observed_fuel_groups":
            int(result.reported_hours.eq(168).sum()),
            "partially_or_entirely_blank_fuel_groups":int(result.reported_hours.lt(168).sum()),
            "observed_fuel_columns_not_imputed":True,
