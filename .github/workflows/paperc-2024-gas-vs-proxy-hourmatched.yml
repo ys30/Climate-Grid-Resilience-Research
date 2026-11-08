@@ -1,0 +1,55 @@
+name: Paper C 2024 source-hour-matched observed gas versus model thermal scope
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-gas-vs-proxy-hourmatched.yml'
+      - 'src/grid_resilience/paperc_2024_hour_matched_model_scope.py'
+      - 'tests/test_paperc_2024_hour_matched_model_scope.py'
+jobs:
+  descriptive-non-equivalent-fleet-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and exercise no-calibration comparison contract
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_2024_hour_matched_model_scope.py
+      - name: Recover source-hour-verified EIA930 and year-specific PyPSA output
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/compare/observed outputs/compare/model outputs/compare/results
+          gh run download 42444317594 --repo ys30/Climate-Grid-Resilience-Research --name paperc-2024-july-fuel-schema-native-cross-partition-and-stable-net-gas --dir outputs/compare/observed
+          gh run download 42441502302 --repo ys30/Climate-Grid-Resilience-Research --name paperc-2023-2024-year-specific-gaswind-nameplate-factorials --dir outputs/compare/model
+      - name: Audit 672 exact BA-hours of reported gas vs hypothetical generic thermal dispatch
+        run: |
+          python -m grid_resilience.paperc_2024_hour_matched_model_scope \
+            --observed outputs/compare/observed/results/2024_july_week1_raw_4ba_hourly_fuel_provenance.csv \
+            --model outputs/compare/model/results/y2024_isolated/solved/factorial_generation_hourly.csv \
+            --output outputs/compare/results
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          p=Path("outputs/compare/results")
+          m=json.loads((p/"model_vs_observed_fuel_scope_not_equivalent.json").read_text())
+          s=pd.read_csv(p/"source_hour_matched_non_equivalent_gas_thermal_by_ba.csv")
+          assert m["matched_ba_hours"]==672 and not m["generator_population_equivalent"]
+          assert not m["historical_shortage_or_eens_inferred"]
+          assert len(s)==4 and s.matched_hours.eq(168).all()
+          assert not s.hourly_plant_dispatch_calibrated.any()
+          assert set(s.ba)=={"AZPS","BPAT","CISO","SRP"}
+          assert s.loc[s.ba.eq("CISO"),"eia930_raw_ba_natural_gas_mwh"].iloc[0]==2076666.0
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2024-168h-observed-eia930-gas-versus-unmatched-model-thermal
+          path: outputs/compare/results/
+          if-no-files-found: error
