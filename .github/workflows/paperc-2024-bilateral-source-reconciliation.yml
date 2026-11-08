@@ -1,0 +1,76 @@
+name: Paper C 2024 July original EIA930 bilateral vs reported interchange
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-bilateral-source-reconciliation.yml'
+      - 'src/grid_resilience/paperc_2024_bilateral_exchange_gate.py'
+      - 'tests/test_paperc_2024_bilateral_exchange_gate.py'
+jobs:
+  source-accounting:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test bilateral missingness and dual source boundary
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_2024_bilateral_exchange_gate.py
+      - name: Download four original EIA930 half-year balance/interchange archives
+        run: |
+          mkdir -p outputs/bilateral/raw outputs/bilateral/results
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          root=Path("outputs/bilateral/raw")
+          sources=[]
+          for kind in ("BALANCE","INTERCHANGE"):
+              for period in ("Jan_Jun","Jul_Dec"):
+                  url=f"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_{kind}_2024_{period}.csv"
+                  with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as response:
+                      data=response.read()
+                      final=response.geturl()
+                  if len(data)<10000:raise ValueError("Unexpectedly small original EIA source")
+                  (root/f"EIA930_{kind}_2024_{period}.csv").write_bytes(data)
+                  sources.append({"kind":kind,"partition":period,"original_url":url,
+                                  "resolved_url":final,"sha256":hashlib.sha256(data).hexdigest(),
+                                  "bytes":len(data)})
+          (root/"source_provenance.json").write_text(json.dumps(sources,indent=2)+"\n")
+          PY
+      - name: Source audit without filling reported totals or assuming bilateral coverage
+        run: |
+          python -m grid_resilience.paperc_2024_bilateral_exchange_gate \
+            --balance-jan-jun outputs/bilateral/raw/EIA930_BALANCE_2024_Jan_Jun.csv \
+            --balance-jul-dec outputs/bilateral/raw/EIA930_BALANCE_2024_Jul_Dec.csv \
+            --interchange-jan-jun outputs/bilateral/raw/EIA930_INTERCHANGE_2024_Jan_Jun.csv \
+            --interchange-jul-dec outputs/bilateral/raw/EIA930_INTERCHANGE_2024_Jul_Dec.csv \
+            --output outputs/bilateral/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          root=Path("outputs/bilateral/results")
+          m=json.loads((root/"july2024_168h_bilateral_scope.json").read_text())
+          s=pd.read_csv(root/"july2024_168h_bilateral_vs_reported_total_by_ba.csv")
+          x=pd.read_csv(root/"july2024_168h_bilateral_vs_reported_total_hourly.csv")
+          assert len(x)==672 and s.expected_ba_hours.eq(168).all()
+          assert set(s.ba)=={"AZPS","BPAT","CISO","SRP"}
+          assert s.loc[s.ba.eq("CISO"),"missing_total_interchange_hours"].iloc[0]==144
+          assert not m["bilateral_complete_counterparty_universe_verified"]
+          assert not m["historical_grid_adequacy_or_eens_validated"]
+          assert not s.source_total_interchange_imputed.any()
+          print("BILATERAL ORIGINAL SOURCE COUNTS AND DIFFERENCES:",s.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-july2024-eia930-bilateral-vs-reported-168h-source-audit
+          path: |
+            outputs/bilateral/raw/source_provenance.json
+            outputs/bilateral/results/
+          if-no-files-found: warn
