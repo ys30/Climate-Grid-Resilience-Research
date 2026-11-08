@@ -59,6 +59,6 @@ def test_missing_source_cohort_rejected():
 
 def test_incorrect_annual_source_period_rejected():
     d,m=sample()
-    d.loc[0,"utc_hour_start"]="2023-07-01T00:00:00Z"
+    d.loc[0:5,"utc_hour_start"]="2023-07-01T00:00:00Z"
     with pytest.raises(ValueError,match="UTC calendar"):
         analyze(d,m)
