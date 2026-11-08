@@ -73,15 +73,20 @@ jobs:
                   path=root/f"eia930_fuel_vs_model_{year}_{variant}.csv"
                   p=pd.read_csv(path)
                   m=json.loads(path.with_suffix(".manifest.json").read_text())
-                  assert m["hours_per_ba"]==168 and m["fuel_category_ba_groups"]==36
+                  assert m["hours_per_ba"]==168
+                  assert m["fuel_category_ba_groups"]==4*len(m["source_fuel_categories"])
+                  assert len(m["source_fuel_categories"])>=9
                   assert m["observed_fuel_columns_not_imputed"]
                   assert not m["historical_energy_not_served_estimated"]
                   assert not p.actual_generation_coverage_fraction_certified.any()
                   assert (p.reported_hours+p.blank_hours).eq(168).all()
                   assert p.loc[p.reported_hours.lt(168),"observed_full_period_mwh"].isna().all()
-                  for fuel in ("Natural Gas","Wind"):
+                  for fuel in ("Natural Gas", "Wind" if year==2023 else "Wind without Integrated Battery Storage"):
                       v=p.loc[p.fuel.eq(fuel)]
                       assert len(v)==4 and v.modeled_baseline_mwh.notna().all()
+                  if year==2024:
+                      assert "Pumped Storage" in m["source_fuel_categories"]
+                      assert "Wind with Integrated Battery Storage" in m["source_fuel_categories"]
                   records.append({"year":year,"variant":variant,
                       "fully_reported_fuel_groups":m["fully_observed_fuel_groups"],
                       "partially_or_entirely_blank_fuel_groups":m["partially_or_entirely_blank_fuel_groups"],
