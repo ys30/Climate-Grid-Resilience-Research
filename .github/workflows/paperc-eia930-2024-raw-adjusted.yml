@@ -1,0 +1,71 @@
+name: Paper C 2024 July official EIA930 raw versus adjusted BA-balance audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia930-2024-raw-adjusted.yml'
+      - 'src/grid_resilience/paperc_eia930_2024_weekly_raw_adjusted.py'
+      - 'tests/test_paperc_eia930_2024_weekly_raw_adjusted.py'
+jobs:
+  raw-versus-adjusted:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test missing interchange and adjusted-source separation
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_eia930_2024_weekly_raw_adjusted.py
+      - name: Independently fetch both original EIA930 2024 semiannual CSV sources
+        run: |
+          mkdir -p outputs/adjust/raw outputs/adjust/results
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          import hashlib,json
+          folder=Path("outputs/adjust/raw")
+          records=[]
+          for half in ("Jan_Jun","Jul_Dec"):
+              url=f"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_{half}.csv"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as response:
+                  data=response.read()
+                  final=response.geturl()
+              assert len(data)>10000
+              (folder/f"EIA930_BALANCE_2024_{half}.csv").write_bytes(data)
+              records.append({"source":half,"official_url":url,"resolved_url":final,
+                  "sha256":hashlib.sha256(data).hexdigest(),"source_bytes":len(data)})
+          (folder/"official_source_sha256.json").write_text(json.dumps(records,indent=2)+"\n")
+          PY
+      - name: Audit original and adjusted D NG TI without substituting them
+        run: |
+          python -m grid_resilience.paperc_eia930_2024_weekly_raw_adjusted \
+            --jan-jun outputs/adjust/raw/EIA930_BALANCE_2024_Jan_Jun.csv \
+            --jul-dec outputs/adjust/raw/EIA930_BALANCE_2024_Jul_Dec.csv \
+            --output outputs/adjust/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          path=Path("outputs/adjust/results")
+          s=pd.read_csv(path/"paper_c_eia930_raw_vs_adjusted_2024_week1_by_ba.csv")
+          m=json.loads((path/"paper_c_raw_vs_adjusted_scope.json").read_text())
+          assert m["source_ba_hours"]==672 and m["missing_source_ba_hours"]==0
+          assert m["never_substitute_adjusted_for_missing_raw"] and not m["historical_model_adequacy_calibrated"]
+          assert set(s.ba)=={"AZPS","BPAT","CISO","SRP"}
+          assert s.jan_jun_hours.eq(7).all() and s.jul_dec_hours.eq(161).all()
+          c=s[s.ba.eq("CISO")].iloc[0]
+          assert c.raw_interchange_missing_hours==144
+          assert s[s.ba.eq("BPAT")].iloc[0].raw_nonclosing_evaluable_hours==168
+          print("RAW VS ADJUSTED SOURCE COMPARISON:",s.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-eia930-july2024-raw-versus-adjusted-168h-source-comparison
+          path: |
+            outputs/adjust/raw/official_source_sha256.json
+            outputs/adjust/results/
+          if-no-files-found: error
