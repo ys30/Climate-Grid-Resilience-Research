@@ -14,8 +14,8 @@ def sample():
                     val=None if missing else 25.0 if fuel=="Natural Gas" else 0.
                     rows.append({"year":year,"utc_hour_start":t.isoformat(),
                         "ba":ba,"original_partition":(
-                        "2023_Jul_Dec" if year==2023 else
-                        "2024_Jan_Jun" if i<7 else "2024_Jul_Dec"),
+                        "Jul_Dec" if year==2023 else
+                        "Jan_Jun" if i<7 else "Jul_Dec"),
                         "original_fuel_category":fuel,
                         "reported_fuel_mwh":val,"fuel_value_reported":not missing,
                         "reported_zero":val==0 if val is not None else False})
