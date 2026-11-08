@@ -1,0 +1,79 @@
+name: Paper C CAISO historical July 2023/2024 storage market XML evidence
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-2023-2024-storage-market-xml.yml'
+      - 'src/grid_resilience/paperc_caiso_original_storage_xml.py'
+      - 'tests/test_paperc_caiso_original_storage_xml.py'
+jobs:
+  independently-audit-storage-market-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test true XML data rows, PDT/UTC time crossing, quarter source integrity
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_caiso_original_storage_xml.py
+      - name: Download original CAISO 2023Q3 2024Q2 2024Q3 storage source files
+        run: |
+          mkdir -p outputs/caiso_storage/raw outputs/caiso_storage/results
+          python - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          p=Path("outputs/caiso_storage/raw")
+          data=[]
+          for year,quarter in ((2023,3),(2024,2),(2024,3)):
+              url=f"https://www.caiso.com/documents/storage-report-{year}q{quarter}.xlsx"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  payload=r.read();resolved=r.geturl()
+              if len(payload)<5_000_000 or payload[:2]!=b"PK":
+                  raise ValueError("Quarterly raw source unavailable, not replacing data")
+              path=p/f"caiso-{year}q{quarter}.xlsx"
+              path.write_bytes(payload)
+              data.append({"year":year,"quarter":quarter,"official_source":url,
+                           "resolved_url":resolved,"sha256":hashlib.sha256(payload).hexdigest(),
+                           "file_size_bytes":len(payload)})
+          (p/"original_quarterly_source_sha256.json").write_text(json.dumps(data,indent=2)+"\n")
+          PY
+      - name: Stream original market_output XML to two UTC-aligned 168-hour cohort audits
+        run: |
+          python -m grid_resilience.paperc_caiso_original_storage_xml \
+            --q3_2023 outputs/caiso_storage/raw/caiso-2023q3.xlsx \
+            --q2_2024 outputs/caiso_storage/raw/caiso-2024q2.xlsx \
+            --q3_2024 outputs/caiso_storage/raw/caiso-2024q3.xlsx \
+            --output outputs/caiso_storage/results
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          r=Path("outputs/caiso_storage/results")
+          d=pd.read_csv(r/"paperc_caiso_original_market_output_2023_2024_study_weeks.csv")
+          s=pd.read_csv(r/"paperc_caiso_original_market_output_coverage_by_market_type.csv")
+          m=json.loads((r/"paperc_caiso_original_market_output_scope_and_sha256.json").read_text())
+          assert set(d.eia930_study_year)=={2023,2024}
+          assert set(d.quarter)=={"Q2","Q3"}
+          assert len(d)>1000 and len(s)>0
+          assert not d.duplicated(["eia930_study_year",
+                 "utc_hour_start_from_local_trade_date","market","resource_type",
+                 "output_type","interval_index"]).any()
+          assert m["utc_hour_join_uses_los_angeles_summer_dst"]
+          assert m["no_eia930_raw_storage_null_imputation"]
+          assert not m["historical_outage_or_eens_calibrated"]
+          assert d.loc[d.quarter.eq("Q2"),"eia930_study_year"].eq(2024).all()
+          print("CAISO OBSERVED ORIGINAL MARKET OUTPUT:",s.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-caiso-2023-2024-utc-matched-storage-market-source-evidence
+          path: |
+            outputs/caiso_storage/raw/original_quarterly_source_sha256.json
+            outputs/caiso_storage/results/
+          if-no-files-found: warn
