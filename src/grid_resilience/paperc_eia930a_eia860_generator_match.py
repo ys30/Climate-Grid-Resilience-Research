@@ -67,7 +67,7 @@ def compare(annual_roster,operable,year):
         raise ValueError("Wrong annual EIA930A four-BA cohort")
     a["plant_id"]=a.plant_id_source.map(lambda v:_identity(v,True))
     a["generator_id"]=a.generator_id_source.map(_identity)
-    a["has_source_identity"]=a.plant_id.ne("")&a.generator_id.ne("")
+    a["has_source_identity"]=a.plant_id.ne("")&a.generator_id.ne("")&a.eia860_generator_id_recognized.eq(True)
     a["eia930a_row"]=range(len(a))
     source_keys=a.loc[a.has_source_identity]
     if source_keys.duplicated(["ba"]+KEYS).any():
