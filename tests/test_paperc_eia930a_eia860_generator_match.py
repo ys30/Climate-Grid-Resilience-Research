@@ -54,11 +54,15 @@ def test_fallback_ids_not_accepted_even_if_fake_identity_matches():
     assert v.match_class=="no_eia930a_source_identity"
 
 
-def test_duplicate_same_ba_generator_rejected():
+def test_duplicate_same_ba_generator_retained_but_ambiguous():
     a,b=fixture()
     a=pd.concat([a,a.iloc[[0]]],ignore_index=True)
-    with pytest.raises(ValueError,match="Duplicate EIA930A"):
-        compare(a,b,2024)
+    x,y,m=compare(a,b,2024)
+    assert len(x)==7
+    assert m["same_ba_ambiguous_identity_source_rows"]==2
+    assert y.loc[y.ba.eq("AZPS"),"duplicate_same_ba_source_identity_rows"].iloc[0]==2
+    assert x.loc[x.duplicate_same_ba_source_identity,
+                 "annual_nameplate_comparison_available"].eq(False).all()
 
 
 def test_duplicate_eia860_generator_rejected():
