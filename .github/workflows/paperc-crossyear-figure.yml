@@ -1,0 +1,56 @@
+name: Paper C 2023-2024 source-audited cross-year comparison figure
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-crossyear-figure.yml'
+      - 'src/grid_resilience/paperc_crossyear_figure.py'
+      - 'tests/test_paperc_crossyear_figure.py'
+jobs:
+  publish-model-figure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install figure and test dependencies
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_crossyear_figure.py
+      - name: Restore 2023-2024 source-gated result archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/crossfigure/input outputs/crossfigure/figure
+          gh run download 42419234209 --repo ys30/Climate-Grid-Resilience-Research --name paperc-2023-summer-crossyear-source-heat-active-conditional-model --dir outputs/crossfigure/input
+      - name: Rebuild source-verified cross-year journal figure and table
+        run: |
+          python -m grid_resilience.paperc_crossyear_figure \
+            --comparison outputs/crossfigure/input/out/crossyear_2023_2024_factorial_model_comparison.csv \
+            --source-gate outputs/crossfigure/input/source/crossyear_source_admission.json \
+            --heat-gate outputs/crossfigure/input/source/heat_activation.json \
+            --output outputs/crossfigure/figure
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          p=Path("outputs/crossfigure/figure")
+          t=pd.read_csv(p/"table_paperc_2023_2024_crossyear_model_comparison.csv")
+          assert len(t)==2
+          x=t.loc[t.network_variant.eq("isolated")].iloc[0]
+          assert abs(x.july2023_interaction_model_mwh-12968.975027)<.01
+          assert abs(x.july2024_interaction_model_mwh-14630.333329)<.01
+          for ext in ("png","pdf"):
+              f=p/f"fig_paperc_2023_2024_crossyear_model_comparison.{ext}"
+              assert f.stat().st_size>10000
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2023-2024-conditional-model-comparison-png-pdf-csv
+          path: outputs/crossfigure/figure/
+          if-no-files-found: error
