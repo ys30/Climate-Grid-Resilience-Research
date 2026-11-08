@@ -1,0 +1,49 @@
+name: Paper C CAISO storage workbook ZIP container forensics
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-q3-xlsx-zip-forensics.yml'
+jobs:
+  inspect-zip-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe official CAISO original XLSX ZIP internal worksheet bytes and relationship parts
+        run: |
+          mkdir -p outputs/caiso_xlsx_forensics
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from zipfile import ZipFile
+          from io import BytesIO
+          import hashlib,json,re
+          results=[]
+          for year in (2023,2024):
+              u=f"https://www.caiso.com/documents/storage-report-{year}q3.xlsx"
+              with urlopen(Request(u,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  data=r.read()
+              z=ZipFile(BytesIO(data))
+              infos=[]
+              for inf in sorted(z.infolist(),key=lambda a:a.filename):
+                  p=inf.filename
+                  if any(x in p for x in ("worksheets/","connections","queryTables","externalLinks","workbook.xml","sharedStrings","metadata","pivot","customXml","tables/")):
+                      contents=z.read(p) if inf.file_size<2_000_000 else b""
+                      infos.append({"part":p,"bytes_uncompressed":inf.file_size,
+                                    "compressed_bytes":inf.compress_size,
+                                    "sample":contents[:500].decode("utf-8",errors="replace") if contents else None})
+              manifest={"year":year,"sha256":hashlib.sha256(data).hexdigest(),
+                        "xlsx_member_count":len(z.infolist()),
+                        "zip_uncompressed_sum_bytes":sum(t.file_size for t in z.infolist()),
+                        "parts":infos,"declared_storage_market_values_extracted":False}
+              print("ZIP SOURCE STRUCTURE",json.dumps(manifest)[:18000])
+              results.append(manifest)
+          Path("outputs/caiso_xlsx_forensics/caiso_q3_2023_2024_container_schema.json").write_text(
+              json.dumps(results,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-caiso-q3-xlsx-container-forensics-2023-2024
+          path: outputs/caiso_xlsx_forensics/
+          if-no-files-found: error
