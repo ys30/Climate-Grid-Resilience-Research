@@ -70,8 +70,11 @@ def compare(annual_roster,operable,year):
     a["has_source_identity"]=a.plant_id.ne("")&a.generator_id.ne("")&a.eia860_generator_id_recognized.eq(True)
     a["eia930a_row"]=range(len(a))
     source_keys=a.loc[a.has_source_identity]
-    if source_keys.duplicated(["ba"]+KEYS).any():
-        raise ValueError("Duplicate EIA930A same BA+generator key")
+    # Keep duplicate raw source rows; never treat them as independently identified generators.
+    duplicate_keys=source_keys.loc[source_keys.duplicated(["ba"]+KEYS,keep=False),["ba"]+KEYS]
+    duplicate_key_set=set(duplicate_keys.itertuples(index=False,name=None))
+    a["duplicate_same_ba_source_identity"]=a[["ba"]+KEYS].apply(
+        lambda row:tuple(row) in duplicate_key_set,axis=1)
     b=operable.copy()
     if not set(KEYS).issubset(b) or b.duplicated(KEYS).any():
         raise ValueError("Ambiguous official EIA860 reference roster")
@@ -82,9 +85,13 @@ def compare(annual_roster,operable,year):
     match.loc[exact,"match_class"]="matched_identity_ba_conflict"
     match.loc[exact & match.ba.eq(match.eia860_plant_reported_ba),
               "match_class"]="matched_identity_same_plant_ba"
+    match.loc[match.duplicate_same_ba_source_identity,
+              "match_class"]="duplicate_same_ba_source_identity"
     match["eia930a_annual_nameplate_mw"]=pd.to_numeric(
         match.reported_nameplate_mw,errors="coerce")
-    both=match.eia930a_annual_nameplate_mw.notna()&match.eia860_annual_operable_nameplate_mw.notna()&exact
+    both=(match.eia930a_annual_nameplate_mw.notna()&
+          match.eia860_annual_operable_nameplate_mw.notna()&exact&
+          ~match.duplicate_same_ba_source_identity)
     match["annual_nameplate_delta_930a_minus_860_mw"]=(
         match.eia930a_annual_nameplate_mw-match.eia860_annual_operable_nameplate_mw
     ).where(both)
@@ -93,7 +100,7 @@ def compare(annual_roster,operable,year):
     match["ba_membership_physical_connectivity_verified"]=False
     match["eia930a_schedule2_source_vintage_matches_eia860_annual_vintage_certified"]=False
     columns=["year","ba","eia930a_row","plant_id","generator_id","has_source_identity",
-             "eia860_generator_id_recognized","match_class","eia860_plant_reported_ba",
+             "eia860_generator_id_recognized","match_class","duplicate_same_ba_source_identity","eia860_plant_reported_ba",
              "technology","eia860_technology","eia860_energy_source_1","eia860_prime_mover",
              "eia930a_annual_nameplate_mw","eia860_annual_operable_nameplate_mw",
              "annual_nameplate_delta_930a_minus_860_mw",
@@ -109,6 +116,7 @@ def compare(annual_roster,operable,year):
             "exact_identity_ba_conflict_rows":int(g.match_class.eq("matched_identity_ba_conflict").sum()),
             "sameyear_operable_unmatched_rows":int(g.match_class.eq("unmatched_in_sameyear_eia860_operable").sum()),
             "source_identity_missing_rows":int(g.match_class.eq("no_eia930a_source_identity").sum()),
+            "duplicate_same_ba_source_identity_rows":int(g.match_class.eq("duplicate_same_ba_source_identity").sum()),
             "cross_ba_duplicate_plant_generator_keys":int(g.loc[g.has_source_identity,
                 ["plant_id","generator_id"]].apply(tuple,axis=1).isin(
                 match.loc[match.ba.ne(ba)&match.has_source_identity,
@@ -120,12 +128,14 @@ def compare(annual_roster,operable,year):
             "hourly_firm_capacity_or_EENS_calibrated":False})
     summary=pd.DataFrame(reports)
     if not (summary[["exact_identity_and_same_ba_rows","exact_identity_ba_conflict_rows",
-                       "sameyear_operable_unmatched_rows","source_identity_missing_rows"]]
+                       "sameyear_operable_unmatched_rows","source_identity_missing_rows",
+                       "duplicate_same_ba_source_identity_rows"]]
             .sum(axis=1).eq(summary.eia930a_schedule2_rows).all()):
         raise ValueError("Identity accounting does not reconcile")
     cross=match.loc[match.has_source_identity].groupby(KEYS).ba.nunique()
     manifest={"year":year,"eia930a_rows":len(match),"matched_identity_rows":int(exact.sum()),
               "cross_ba_duplicate_generator_identity_keys":int(cross.gt(1).sum()),
+              "same_ba_ambiguous_identity_source_rows":int(a.duplicate_same_ba_source_identity.sum()),
               "identity_join_key":"exact plant_id + generator_id, no name/fuel guessing",
               "source_year_860_operable_not_same_as_eia930a_underlying_workbook_860_vintage":True,
               "annual_nameplate_not_hourly_available_power":True,
