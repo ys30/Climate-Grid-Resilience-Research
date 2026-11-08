@@ -1,0 +1,55 @@
+name: Paper C yearly fleet-representation robustness main figure
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-fleet-representation-figure.yml'
+      - 'src/grid_resilience/paperc_fleet_representation_figure.py'
+      - 'tests/test_paperc_fleet_representation_figure.py'
+jobs:
+  export-sensitivity-figure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate and install figure code
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_fleet_representation_figure.py
+      - name: Restore frozen-proxy and source-year-nameplate source-authenticated model runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/paperfleet/frozen outputs/paperfleet/annual outputs/paperfleet/figure
+          gh run download 42419234209 --repo ys30/Climate-Grid-Resilience-Research --name paperc-2023-summer-crossyear-source-heat-active-conditional-model --dir outputs/paperfleet/frozen
+          gh run download 42441502302 --repo ys30/Climate-Grid-Resilience-Research --name paperc-2023-2024-year-specific-gaswind-nameplate-factorials --dir outputs/paperfleet/annual
+      - name: Generate four-way robust model figure PNG PDF and CSV
+        run: |
+          python -m grid_resilience.paperc_fleet_representation_figure \
+            --frozen outputs/paperfleet/frozen/out/crossyear_2023_2024_factorial_model_comparison.csv \
+            --annual outputs/paperfleet/annual/results/year_specific_annual_nameplate_factorial_comparison.csv \
+            --output outputs/paperfleet/figure
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          p=Path("outputs/paperfleet/figure")
+          x=pd.read_csv(p/"table_paperc_fleet_representation_sensitivity.csv")
+          assert len(x)==4
+          z=x.loc[(x.year==2023)&x.network_variant.eq("isolated")].iloc[0]
+          assert abs(z.annual_nameplate_model_interaction_mwh-6044.647931)<.01
+          z=x.loc[(x.year==2024)&x.network_variant.eq("links_10pct")].iloc[0]
+          assert abs(z.frozen_proxy_model_interaction_mwh-22515.997901)<.01
+          assert all((p/f"fig_paperc_fleet_representation_sensitivity.{ext}").stat().st_size>10000 for ext in ("png","pdf"))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-fleet-representation-sensitivity-figure-png-pdf-csv
+          path: outputs/paperfleet/figure/
+          if-no-files-found: error
