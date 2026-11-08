@@ -1,0 +1,75 @@
+name: Paper C original EIA930 2024 July UTC half-year boundary source audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia930-halfyear-boundary.yml'
+      - 'src/grid_resilience/paperc_eia930_halfyear_utc_boundary.py'
+      - 'tests/test_paperc_eia930_halfyear_utc_boundary.py'
+jobs:
+  independently-audit-source-partition:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate half-year source-gap evidence and no filling
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_eia930_halfyear_utc_boundary.py
+      - name: Acquire both original EIA930 2024 halves with checksums
+        run: |
+          mkdir -p outputs/boundary/raw outputs/boundary/results
+          python - <<'PY'
+          from urllib.request import Request,urlopen
+          from pathlib import Path
+          import json,hashlib
+          root=Path("outputs/boundary/raw")
+          records=[]
+          for half in ("Jan_Jun","Jul_Dec"):
+              url=f"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_{half}.csv"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  raw=r.read()
+                  final=r.geturl()
+              assert len(raw)>10000
+              (root/f"EIA930_BALANCE_2024_{half}.csv").write_bytes(raw)
+              records.append({"source":half,"url":url,"resolved":final,
+                  "sha256":hashlib.sha256(raw).hexdigest(),"bytes":len(raw)})
+          (root/"official_source_sha256.json").write_text(json.dumps(records,indent=2)+chr(10))
+          PY
+      - name: Check whether prior-half rows recover all 2024 July week1 UTC hours
+        run: |
+          python -m grid_resilience.paperc_eia930_halfyear_utc_boundary \
+            --previous outputs/boundary/raw/EIA930_BALANCE_2024_Jan_Jun.csv \
+            --current outputs/boundary/raw/EIA930_BALANCE_2024_Jul_Dec.csv \
+            --output outputs/boundary/results
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          r=Path("outputs/boundary/results")
+          m=json.loads((r/"july2024_merged_source_partition_manifest.json").read_text())
+          x=pd.read_csv(r/"july2024_merged_source_partition_observation_168h.csv")
+          assert len(x)==672
+          assert m["source_jul_dec_hours"]==644
+          assert m["source_jan_jun_hours"]+m["source_jul_dec_hours"]+m["unrecovered_missing_ba_hours"]==672
+          assert not m["cross_schema_sevenday_full_fuel_mix_calibrated"]
+          assert all(row["still_missing_hours"]>=0 for row in m["by_ba"])
+          print("SOURCE-BOUNDARY EVIDENCE:",json.dumps({
+              "previous_half_hours":m["source_jan_jun_hours"],
+              "current_half_hours":m["source_jul_dec_hours"],
+              "still_missing_hours":m["unrecovered_missing_ba_hours"],
+              "full_utc_period_recovered":m["all_utc_ba_hours_source_recovered"],
+              "fuel_schemas_identical":m["cross_partitions_fuel_schema_identical"]}))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-official-eia930-2024-july-source-partition-168h-reconciliation
+          path: |
+            outputs/boundary/raw/official_source_sha256.json
+            outputs/boundary/results/
+          if-no-files-found: warn
