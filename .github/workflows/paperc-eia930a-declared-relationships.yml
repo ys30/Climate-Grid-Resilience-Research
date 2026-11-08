@@ -1,0 +1,74 @@
+name: Paper C EIA930A reported BA pseudo-tie relations and measured-fleet population
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia930a-declared-relationships.yml'
+      - 'src/grid_resilience/paperc_eia930a_declared_relationships.py'
+      - 'tests/test_paperc_eia930a_declared_relationships.py'
+jobs:
+  annual-reported-ba-relationships:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate EIA930A annual relation and generator-scope contracts
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install openpyxl
+          python -m pytest -q tests/test_paperc_eia930a_declared_relationships.py
+      - name: Fetch official annual EIA930A workbooks with exact provenance
+        run: |
+          mkdir -p outputs/relations/source outputs/relations/results
+          python - <<'PY'
+          from urllib.request import Request,urlopen
+          from pathlib import Path
+          import json,hashlib
+          output=Path("outputs/relations/source")
+          records=[]
+          for year in (2023,2024):
+              url=f"https://www.eia.gov/electricity/930-content/EIA_930A_{year}_with%20layout.xlsx"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as response:
+                  data=response.read()
+                  final=response.geturl()
+              if len(data)<100000 or not data.startswith(b"PK"):
+                  raise ValueError("Wrong EIA930A official file")
+              (output/f"eia930a_{year}_original.xlsx").write_bytes(data)
+              records.append({"year":year,"official_url":url,"resolved_url":final,
+                              "sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data)})
+          (output/"original_eia930a_source_sha256.json").write_text(json.dumps(records,indent=2)+"\n")
+          PY
+      - name: Extract original Schedule 2 reporting population and Schedule 4 BA relations
+        run: |
+          python -m grid_resilience.paperc_eia930a_declared_relationships \
+            --source2023 outputs/relations/source/eia930a_2023_original.xlsx \
+            --source2024 outputs/relations/source/eia930a_2024_original.xlsx \
+            --output outputs/relations/results
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          root=Path("outputs/relations/results")
+          m=json.loads((root/"eia930a_source_scope_manifest.json").read_text())
+          assert {x["year"] for x in m}=={2023,2024}
+          for year in (2023,2024):
+              fleet=pd.read_csv(root/f"eia930a_{year}_schedule2_four_ba.csv")
+              ties=pd.read_csv(root/f"eia930a_{year}_schedule4_relevant_relationships.csv")
+              assert set(fleet.ba)=={"AZPS","BPAT","CISO","SRP"}
+              assert ties.proves_caused_july_pair_reciprocity_discrepancy.eq(False).all()
+              assert ties.distinguishes_dynamic_schedule_vs_pseudotie.eq(False).all()
+              print(f"YEAR {year}, FOUR-BA REPORTING FLEET",fleet.groupby("ba").size().to_dict())
+              print(f"YEAR {year}, SELECTED REPORTED RELATIONS",
+                    ties.groupby(["schedule4_reporting_ba","declared_partner_ba"]).size().to_string())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-official-eia930a-2023-2024-sch2-sch4-fourba-relationships
+          path: |
+            outputs/relations/source/original_eia930a_source_sha256.json
+            outputs/relations/results/
+          if-no-files-found: error
