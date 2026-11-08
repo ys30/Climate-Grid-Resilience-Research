@@ -61,9 +61,14 @@ jobs:
               assert set(fleet.ba)=={"AZPS","BPAT","CISO","SRP"}
               assert ties.proves_caused_july_pair_reciprocity_discrepancy.eq(False).all()
               assert ties.distinguishes_dynamic_schedule_vs_pseudotie.eq(False).all()
+              assert ties.loc[ties.source_declares_mechanism_category,"declared_partner_ba"].isna().all()
+              if year==2024:
+                  c=ties.loc[ties.schedule4_reporting_ba.eq("CISO") & ties.source_declares_mechanism_category]
+                  counts=c.relationship_original_label.value_counts().to_dict()
+                  assert counts.get("PSEUDO TIE")==21 and counts.get("DYNAMIC IMPORT")==35
               print(f"YEAR {year}, FOUR-BA REPORTING FLEET",fleet.groupby("ba").size().to_dict())
               print(f"YEAR {year}, SELECTED REPORTED RELATIONS",
-                    ties.groupby(["schedule4_reporting_ba","declared_partner_ba"]).size().to_string())
+                    ties.groupby(["schedule4_reporting_ba","relationship_original_label","relationship_label_kind"]).size().to_string())
           PY
       - uses: actions/upload-artifact@v4
         with:
