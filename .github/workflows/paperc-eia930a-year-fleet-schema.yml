@@ -1,0 +1,65 @@
+name: Paper C official EIA930A 2023-2024 metered fleet schema admission
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia930a-year-fleet-schema.yml'
+jobs:
+  original-metered-fleet-schema:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install official source workbook parser
+        run: python -m pip install openpyxl
+      - name: Independently fetch EIA-hosted 2023 and 2024 EIA930A originals and audit tab schema
+        run: |
+          mkdir -p outputs/eia930a/source outputs/eia930a/results
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          import hashlib,json,io
+          from openpyxl import load_workbook
+          raw=Path("outputs/eia930a/source")
+          output=Path("outputs/eia930a/results")
+          manifests=[]
+          for year in (2023,2024):
+              url=f"https://www.eia.gov/electricity/930-content/EIA_930A_{year}_with%20layout.xlsx"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  payload=r.read()
+                  resolved=r.geturl()
+              if not payload[:2]==b"PK" or len(payload)<100000:
+                  raise ValueError(f"Invalid original EIA-930A workbook {year}")
+              (raw/f"EIA_930A_{year}_official.xlsx").write_bytes(payload)
+              book=load_workbook(io.BytesIO(payload),read_only=True,data_only=True)
+              sheets=[]
+              for sheet in book:
+                  snippets=[]
+                  for i,values in enumerate(sheet.iter_rows(values_only=True)):
+                      if i>=12:break
+                      snippets.append([str(v)[:110] if v is not None else None
+                                       for v in values[:24]])
+                  sheets.append({"sheet":sheet.title,"rows":sheet.max_row,
+                                 "columns":sheet.max_column,"first_12_rows":snippets})
+              book.close()
+              manifest={"year":year,"official_source":url,"resolved_source":resolved,
+                        "sha256":hashlib.sha256(payload).hexdigest(),
+                        "bytes":len(payload),"worksheets":sheets,
+                        "original_file_not_a_physical_availability_or_dispatch_record":True}
+              manifests.append(manifest)
+              print("EIA930A SCHEMA",json.dumps(manifest))
+          (output/"official_2023_2024_eia930a_schema_and_sha256.json").write_text(
+              json.dumps(manifests,indent=2)+"\n")
+          assert {m["year"] for m in manifests}=={2023,2024}
+          assert all(len(m["worksheets"])>0 for m in manifests)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-official-eia930a-2023-2024-source-schema-sha256
+          path: outputs/eia930a/results/
+          if-no-files-found: error
