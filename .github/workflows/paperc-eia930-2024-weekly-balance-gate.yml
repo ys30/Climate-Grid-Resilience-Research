@@ -1,0 +1,74 @@
+name: Paper C 2024 July official 168h EIA930 four-BA arithmetic gate
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia930-2024-weekly-balance-gate.yml'
+      - 'src/grid_resilience/paperc_eia930_2024_weekly_balance_gate.py'
+      - 'tests/test_paperc_eia930_2024_weekly_balance_gate.py'
+jobs:
+  true-source-balance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test complete source and no-imputation contracts
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_eia930_2024_weekly_balance_gate.py
+      - name: Fetch original official 2024 EIA930 source partitions and checksum
+        run: |
+          mkdir -p outputs/weekly/raw outputs/weekly/results
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          import hashlib,json
+          root=Path("outputs/weekly/raw")
+          provenance=[]
+          for part in ("Jan_Jun","Jul_Dec"):
+              url=f"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_{part}.csv"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  data=r.read()
+                  final=r.geturl()
+              assert len(data)>10000
+              (root/f"EIA930_BALANCE_2024_{part}.csv").write_bytes(data)
+              provenance.append({"partition":part,"original_url":url,"resolved_url":final,
+                                 "sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data)})
+          (root/"source_checksums.json").write_text(json.dumps(provenance,indent=2)+"\n")
+          PY
+      - name: Independently compute raw D NG TI hourly closure and field missingness
+        run: |
+          python -m grid_resilience.paperc_eia930_2024_weekly_balance_gate \
+            --jan-jun outputs/weekly/raw/EIA930_BALANCE_2024_Jan_Jun.csv \
+            --jul-dec outputs/weekly/raw/EIA930_BALANCE_2024_Jul_Dec.csv \
+            --output outputs/weekly/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          root=Path("outputs/weekly/results")
+          meta=json.loads((root/"paper_c_july2024_raw_ba_balance_manifest.json").read_text())
+          s=pd.read_csv(root/"paper_c_july2024_168h_raw_ba_balance_by_ba.csv")
+          assert meta["total_source_ba_hours"]==672 and meta["source_ba_hours_complete"]
+          assert meta["historical_energy_not_served_estimated"] is False
+          assert set(s.ba)=={"AZPS","BPAT","CISO","SRP"}
+          assert s.jan_jun_hours.eq(7).all() and s.jul_dec_hours.eq(161).all()
+          assert s.source_hours.eq(168).all()
+          assert not s.historical_supply_adequacy_calibrated.any()
+          # These source-consistency checks reproduce the previously published screening,
+          # not an empirical calibration of transmission, generation or actual shortages.
+          assert s.loc[s.ba.eq("AZPS"),"hourly_arithmetic_nonclosing_hours"].iloc[0]==0
+          assert s.loc[s.ba.eq("BPAT"),"hourly_arithmetic_nonclosing_hours"].iloc[0]==168
+          print("SOURCE WEEKLY ARITHMETIC GATE:",s.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-official-eia930-2024-july168h-fourba-raw-balance-and-missingness
+          path: |
+            outputs/weekly/raw/source_checksums.json
+            outputs/weekly/results/
+          if-no-files-found: error
