@@ -1,0 +1,112 @@
+name: Paper C 2023-2024 annual-nameplate gas-wind factorial sensitivity
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-crossyear-year-specific-capacity-pypsa.yml'
+      - 'src/grid_resilience/paperc_year_specific_capacity_adapter.py'
+      - 'tests/test_paperc_year_specific_capacity_adapter.py'
+jobs:
+  annual-nameplate-counterfactual:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test and install PyPSA annual fleet screening methods
+        run: |
+          python -m pip install -e '.[model,dev]'
+          python -m pytest -q tests/test_paperc_year_specific_capacity_adapter.py
+      - name: Restore 2023/2024 EIA860 annual source audits and historical load/weather
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/annual/rosters outputs/annual/heldout outputs/annual/july outputs/annual/input outputs/annual/results
+          gh run download 42441328634 --repo ys30/Climate-Grid-Resilience-Research --name paperc-eia860-official-2023-2024-fourba-nameplate-comparison --dir outputs/annual/rosters
+          gh run download 42419234209 --repo ys30/Climate-Grid-Resilience-Research --name paperc-2023-summer-crossyear-source-heat-active-conditional-model --dir outputs/annual/heldout
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research --name july2024-4-disjoint-real-week-factorial-source-results --dir outputs/annual/july
+      - name: Source-lock two independent calendar-year input periods and year-specific inventory
+        run: |
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          from grid_resilience.paperc_independent_period_gate import inspect_window,audit_periods
+          root=Path("outputs/annual")
+          r=root/"rosters/results"
+          c=root/"july/inputs/frozen_partial_eia860_capacity.csv"
+          assert c.exists()
+          scope=json.loads((r/"year_specific_capacity_scope.json").read_text())
+          assert {m["source_year"] for m in scope["source_manifests"]}=={2023,2024}
+          assert scope["cross_year_model_results_still_use_frozen_2024_partial_fleet"]
+          source={"official_hour_start_demand":True,"documented_weather_source":True,
+                  "frozen_capacity_convention":True,"source_provenance_available":True}
+          c=pd.read_csv(c)
+          old=inspect_window("2024_JULY_WEEK_1",
+              pd.read_csv(root/"july/inputs/week_1/demand.csv"),
+              pd.read_csv(root/"july/inputs/week_1/weather.csv"),c,source)
+          new=inspect_window("2023_JULY_HEAT_ACTIVE",
+              pd.read_csv(root/"heldout/source/hourly_ba_demand.csv"),
+              pd.read_csv(root/"heldout/source/era5_2023_july.csv"),c,source)
+          assert audit_periods([new,old])["different_calendar_year_candidate_available"]
+          (root/"input/isolated_ba_links.csv").write_text("from_ba,to_ba,capacity_mw"+chr(10))
+          PY
+          python -m grid_resilience.paperc_year_specific_capacity_adapter \
+            --inventory outputs/annual/rosters/results/eia860_2023_fourba_nameplate_candidates.csv \
+            --year 2023 --output outputs/annual/input/capacity_2023.csv
+          python -m grid_resilience.paperc_year_specific_capacity_adapter \
+            --inventory outputs/annual/rosters/results/eia860_2024_fourba_nameplate_candidates.csv \
+            --year 2024 --output outputs/annual/input/capacity_2024.csv
+      - name: Run independent 2023/2024 annual nameplate gas-wind-only factorials
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          from grid_resilience.research_run import run
+          root=Path("outputs/annual")
+          rows=[]
+          for year in (2023,2024):
+              demand=(root/"heldout/source/hourly_ba_demand.csv" if year==2023 else
+                      root/"july/inputs/week_1/demand.csv")
+              weather=(root/"heldout/source/era5_2023_july.csv" if year==2023 else
+                       root/"july/inputs/week_1/weather.csv")
+              for variant in ("isolated","links_10pct"):
+                  links=(root/"input/isolated_ba_links.csv" if variant=="isolated" else
+                         root/"july/inputs/frozen_hypothetical_links.csv")
+                  dest=root/f"results/y{year}_{variant}"
+                  manifest=run(demand,weather,root/f"input/capacity_{year}.csv",
+                               links,dest,f"JULY{year}_SCREEN",variant,"hypothetical")
+                  assert manifest["input_validation"]["hours"]==168
+                  x=pd.read_csv(dest/"solved/factorial_dispatch.csv")
+                  assert len(x)==16 and set(x.scenario)=={"baseline","heat_only","wind_only","heat_wind"}
+                  z=x.groupby("scenario").unserved_energy_mwh.sum()
+                  rows.append({"source_year":year,"variant":variant,
+                               "baseline_model_gap_mwh":float(z["baseline"]),
+                               "heat_only_model_gap_mwh":float(z["heat_only"]),
+                               "wind_only_model_gap_mwh":float(z["wind_only"]),
+                               "heat_wind_model_gap_mwh":float(z["heat_wind"]),
+                               "interaction_model_mwh":float(z["heat_wind"]-z["heat_only"]-z["wind_only"]+z["baseline"]),
+                               "year_specific_eia860_nameplate_used":True,
+                               "all_historical_generation_fleet_calibrated":False,
+                               "historical_eens_or_outages_identified":False})
+          result=pd.DataFrame(rows)
+          assert len(result)==4
+          result.to_csv(root/"results/year_specific_annual_nameplate_factorial_comparison.csv",index=False)
+          print(result.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-2023-2024-year-specific-gaswind-nameplate-factorials
+          path: |
+            outputs/annual/input/capacity_20*.csv
+            outputs/annual/input/capacity_20*.scope.json
+            outputs/annual/results/
+          if-no-files-found: warn
