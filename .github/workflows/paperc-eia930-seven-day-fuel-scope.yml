@@ -1,0 +1,100 @@
+name: Paper C 2023-2024 EIA930 observed fuel versus modeled generator scope
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia930-seven-day-fuel-scope.yml'
+      - 'src/grid_resilience/paperc_eia930_sevenday_generation_scope.py'
+      - 'tests/test_paperc_eia930_sevenday_generation_scope.py'
+jobs:
+  compare-actual-to-screening:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate source-coverage method
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_eia930_sevenday_generation_scope.py
+      - name: Restore previously verified annual model-output archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/fuel/annual outputs/fuel/official outputs/fuel/results
+          gh run download 42441502302 --repo ys30/Climate-Grid-Resilience-Research --name paperc-2023-2024-year-specific-gaswind-nameplate-factorials --dir outputs/fuel/annual
+      - name: Independently fetch 2023 and 2024 EIA930 July-December official raw fuel reports
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          import json,hashlib
+          root=Path("outputs/fuel/official")
+          records=[]
+          for year in (2023,2024):
+              url=f"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_{year}_Jul_Dec.csv"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  content=r.read()
+                  final=r.geturl()
+              if len(content)<10000:raise ValueError("Official EIA-930 source unexpectedly small")
+              (root/f"EIA930_BALANCE_{year}_Jul_Dec.csv").write_bytes(content)
+              records.append({"year":year,"original_url":url,"final_url":final,
+                  "sha256":hashlib.sha256(content).hexdigest(),"bytes":len(content)})
+          (root/"source_sha256.json").write_text(json.dumps(records,indent=2)+chr(10))
+          print(json.dumps(records,indent=2))
+          PY
+      - name: Audit four BA x nine fuel reporting groups in both years and both networks
+        run: |
+          for year in 2023 2024; do
+            if [ "$year" = "2023" ]; then start=2023-07-10T00:00:00Z; else start=2024-07-01T00:00:00Z; fi
+            for variant in isolated links_10pct; do
+              python -m grid_resilience.paperc_eia930_sevenday_generation_scope \
+                --source outputs/fuel/official/EIA930_BALANCE_${year}_Jul_Dec.csv \
+                --start "$start" \
+                --model outputs/fuel/annual/results/y${year}_${variant}/solved/factorial_generation_hourly.csv \
+                --network-variant "$variant" --year "$year" \
+                --output outputs/fuel/results/eia930_fuel_vs_model_${year}_${variant}.csv
+            done
+          done
+      - name: Check no-imputation, all complete BA-hour pairs, signed fuel-energy summary
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          root=Path("outputs/fuel/results")
+          records=[]
+          for year in (2023,2024):
+              for variant in ("isolated","links_10pct"):
+                  path=root/f"eia930_fuel_vs_model_{year}_{variant}.csv"
+                  p=pd.read_csv(path)
+                  m=json.loads(path.with_suffix(".manifest.json").read_text())
+                  assert m["hours_per_ba"]==168 and m["fuel_category_ba_groups"]==36
+                  assert m["observed_fuel_columns_not_imputed"]
+                  assert not m["historical_energy_not_served_estimated"]
+                  assert not p.actual_generation_coverage_fraction_certified.any()
+                  assert (p.reported_hours+p.blank_hours).eq(168).all()
+                  assert p.loc[p.reported_hours.lt(168),"observed_full_period_mwh"].isna().all()
+                  for fuel in ("Natural Gas","Wind"):
+                      v=p.loc[p.fuel.eq(fuel)]
+                      assert len(v)==4 and v.modeled_baseline_mwh.notna().all()
+                  records.append({"year":year,"variant":variant,
+                      "fully_reported_fuel_groups":m["fully_observed_fuel_groups"],
+                      "partially_or_entirely_blank_fuel_groups":m["partially_or_entirely_blank_fuel_groups"],
+                      "observed_reported_fuel_is_not_model_equivalent":True,
+                      "physical_reliability_calibrated":False})
+          pd.DataFrame(records).to_csv(root/"year_network_eia930_fuel_scope_summary.csv",index=False)
+          print(pd.DataFrame(records).to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-2023-2024-eia930-168h-fourba-observed-fuel-reporting-scope
+          path: |
+            outputs/fuel/official/source_sha256.json
+            outputs/fuel/results/
+          if-no-files-found: warn
