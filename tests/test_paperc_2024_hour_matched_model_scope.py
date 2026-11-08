@@ -53,6 +53,6 @@ def test_source_partition_mismatch_fails():
 
 def test_model_keys_cannot_fake_complete_hours():
     a,b=fixture()
-    b.loc[0,"timestamp"]=b.loc[1,"timestamp"]
+    b.loc[0,"timestamp"]=b.loc[4,"timestamp"]
     with pytest.raises(ValueError,match="Model 672"):
         audit(a,b)
