@@ -1,0 +1,63 @@
+name: Paper C CAISO original storage RTD EN SOC 2023-2024 source figure
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-rtd-storage-soc-figure.yml'
+      - 'src/grid_resilience/paperc_caiso_rtd_storage_soc_figure.py'
+      - 'tests/test_paperc_caiso_rtd_storage_soc_figure.py'
+jobs:
+  plot-original-market-interval-coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test 5-minute RTD reporting gaps and market-output-only interpretation
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_caiso_rtd_storage_soc_figure.py
+      - name: Restore original CAISO 2023/24 Q2/Q3 source extraction with real UTC keys
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/caiso_rtd/source outputs/caiso_rtd/results
+          gh run download 42511395768 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-caiso-2023-2024-utc-matched-storage-market-source-evidence \
+            --dir outputs/caiso_rtd/source
+      - name: Plot source-record CAISO energy and SOC market output, only full 12-interval hours
+        run: |
+          python -m grid_resilience.paperc_caiso_rtd_storage_soc_figure \
+            --source outputs/caiso_rtd/source/results/paperc_caiso_original_market_output_2023_2024_study_weeks.csv \
+            --manifest outputs/caiso_rtd/source/results/paperc_caiso_original_market_output_scope_and_sha256.json \
+            --output outputs/caiso_rtd/results
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          root=Path("outputs/caiso_rtd/results")
+          x=pd.read_csv(root/"paperc_caiso_rtd_lesr_en_soc_complete_hour_gate.csv")
+          scope=json.loads((root/"paperc_caiso_rtd_hourly_completeness_scope.json").read_text())
+          assert len(x)==672
+          v=x.groupby(["year","rtd_output_type"])[["recorded_5min_intervals","missing_rtd_intervals"]].sum()
+          assert v.loc[(2023,"EN"),"recorded_5min_intervals"]==2004
+          assert v.loc[(2023,"SOC"),"recorded_5min_intervals"]==2004
+          assert v.loc[(2024,"EN"),"recorded_5min_intervals"]==2016
+          assert v.loc[(2024,"SOC"),"recorded_5min_intervals"]==2016
+          assert x.loc[~x.complete_twelve_intervals,
+                       "mean_raw_market_value_complete_hour_only"].isna().all()
+          assert scope["incomplete_hour_displayed_as_nan_not_zero"]
+          assert scope["reliability_or_eens_calibrated"] is False
+          for ext in ("png","pdf"):
+              assert (root/f"fig_paperc_caiso_2023_2024_storage_rtd_market_en_soc.{ext}").stat().st_size>10000
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-caiso-2023-2024-storage-rtd-energy-soc-hourly-reporting-figure
+          path: outputs/caiso_rtd/results/
+          if-no-files-found: error
