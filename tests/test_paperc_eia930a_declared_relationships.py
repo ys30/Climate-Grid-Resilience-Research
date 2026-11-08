@@ -68,6 +68,7 @@ def test_mechanism_type_label_is_not_misread_as_ba(tmp_path):
     book=load_workbook(path)
     book["SCH 4"]["H2"]="PSEUDO TIE"
     book["SCH 4"]["H3"]="DYNAMIC IMPORT"
+    book["SCH 4"]["A3"]="CISO"
     book.save(path)
     _,relations,_,pairs=get_year(path,2024)
     assert relations.source_declares_mechanism_category.sum()==2
