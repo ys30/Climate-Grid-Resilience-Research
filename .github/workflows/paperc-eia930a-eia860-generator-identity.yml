@@ -69,8 +69,12 @@ jobs:
               assert y.set_index("ba").eia930a_schedule2_rows.to_dict()==expected
               assert not y.complete_generator_coverage_certified.any()
               assert not y.hourly_firm_capacity_or_EENS_calibrated.any()
-              assert x.loc[x.eia860_generator_id_recognized.eq(False),
-                           "match_class"].eq("no_eia930a_source_identity").all()
+              mismatched=x.loc[x.eia860_generator_id_recognized.eq(False) &
+                   x.match_class.ne("no_eia930a_source_identity")]
+              print("FALLBACK FLAG AUDIT year",year,"rows",len(mismatched),
+                    mismatched[["ba","plant_id","generator_id","has_source_identity",
+                                "eia860_generator_id_recognized","match_class"]].head(12).to_string(index=False))
+              assert mismatched.empty
               assert y[["exact_identity_and_same_ba_rows","exact_identity_ba_conflict_rows",
                         "sameyear_operable_unmatched_rows","source_identity_missing_rows",
                         "duplicate_same_ba_source_identity_rows"]].sum(axis=1).equals(
