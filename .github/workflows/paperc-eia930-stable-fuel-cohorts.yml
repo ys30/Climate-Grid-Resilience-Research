@@ -1,0 +1,59 @@
+name: Paper C official EIA930 two-cohort strict stable-fuel hourly admission
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia930-stable-fuel-cohorts.yml'
+      - 'src/grid_resilience/paperc_eia930_stable_fuel_cohorts.py'
+      - 'tests/test_paperc_eia930_stable_fuel_cohorts.py'
+jobs:
+  original-fuel-stable-window-admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test strict stable category, missingness and original 2024 source boundary
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_eia930_stable_fuel_cohorts.py
+      - name: Restore exact source-native 2023/2024 EIA930 hourly reporting panel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/stable_fuel/source outputs/stable_fuel/results
+          gh run download 42462457999 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-official-eia930-2023-2024-hourly-fuel-panel-original-schema \
+            --dir outputs/stable_fuel/source
+      - name: Admit only same-label stable source reporting hours without blank imputation
+        run: |
+          python -m grid_resilience.paperc_eia930_stable_fuel_cohorts \
+            --source outputs/stable_fuel/source/results/paperc_2023_2024_original_hourly_ba_fuel_labels.csv \
+            --manifest outputs/stable_fuel/source/results/paperc_2023_2024_original_fuel_reporting_scope.json \
+            --output outputs/stable_fuel/results
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path("outputs/stable_fuel/results")
+          s=pd.read_csv(p/"paperc_stable_category_two_cohorts_summary.csv")
+          m=json.loads((p/"paperc_stable_category_source_scope.json").read_text())
+          assert len(s)==2*4*6
+          assert s.source_hours.eq(168).all()
+          assert s.reported_hours.add(s.blank_hours).eq(168).all()
+          assert s.loc[s.blank_hours.gt(0),"full_168h_reported_energy_mwh"].isna().all()
+          assert m["2024_wind_solar_hydro_battery_taxonomy_not_harmonized"]
+          assert m["actual_hourly_generation_is_not_available_capacity_or_EENS"]
+          print("STABLE ORIGINAL FUEL ELIGIBILITY:",s[[
+              "year","ba","stable_original_category","reported_hours",
+              "blank_hours","full_168h_reported_energy_mwh"]].to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-official-eia930-2023-2024-stable-fuel-observed-168h-no-imputation
+          path: outputs/stable_fuel/results/
+          if-no-files-found: error
