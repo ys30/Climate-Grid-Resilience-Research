@@ -30,7 +30,7 @@ def extract(source, start, hours=168):
     with Path(source).open(newline="",encoding="utf-8-sig") as f:
         reader=csv.DictReader(f)
         if not required.issubset(reader.fieldnames or []):
-            raise ValueError("Missing official EIA930 fuel/net generation columns")
+            raise ValueError(f"Missing official EIA930 fuel/net generation columns: {sorted(required-set(reader.fieldnames or []))}; official header={reader.fieldnames}")
         for raw in reader:
             ba=raw["Balancing Authority"].strip()
             if ba not in BAS:continue
