@@ -40,3 +40,17 @@ This result belongs in **Source and Data Quality**, **Supply–Demand Accounting
 1. Compare **original source hash/date/version and hour-level raw-versus-adjusted TI** for CISO and BPAT with earlier archived balance diagnostics, without filling nulls.
 2. Match BA demand/NG/TI to official bilateral interchange records where EIA-930 reporting permits, and check sign conventions and interchange completeness.
 3. Keep raw electric-accounting missingness separate from generation technology omissions, capacity/dispatch reconciliation, and true adequacy validation.
+
+## Independent follow-up: raw versus adjusted fields in the same original two EIA-930 partitions
+
+The separate [successful original-versus-adjusted hourly CI 42446170248](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42446170248) ([source-vintage SHA256, 672-hour original-versus-adjusted table, BA summary, metadata artifact 13603174258](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42446170248/artifacts/13603174258)) explicitly reads `Demand`, `Net Generation`, and `Total Interchange` alongside their `(Adjusted)` versions **without filling missing raw values from adjusted data**.
+
+| BA | Raw complete triplets | Adjusted complete triplets | Raw closing hours | Adjusted closing hours | Raw TI missing | Adjusted TI missing |
+|---|---:|---:|---:|---:|---:|---:|
+| AZPS | 168 | 168 | 168 | 168 | 0 | 0 |
+| BPAT | 168 | 168 | 0 | 0 | 0 | 0 |
+| CISO | 24 | 24 | 5 | 5 | 144 | 144 |
+| SRP | 168 | 168 | 168 | 168 | 0 | 0 |
+
+**Result:** Original and adjusted source columns yield **identical signed and absolute residual summaries** for these four BA windows. Adjusted interchange never supplies a value at an hour where raw CISO interchange is missing (0 such hours). BPAT retains its **−741,860 MWh signed weekly residual** in both raw and adjusted values. This **rules out switching to the adjusted columns of the currently downloaded official CSVs as a repair**; it does not identify the deeper cause of the original report discrepancy, prove physical curtailment, or show a grid loss. Further work requires source-revision comparison and physical BA/interchange accounting.
+
