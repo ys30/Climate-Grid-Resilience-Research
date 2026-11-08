@@ -35,3 +35,7 @@ For the **year-specific gas/wind** annual-nameplate scenario the baseline modele
 - Create a compact figure contrasting model interaction for **both fleet formulations**, stratified by year and network assumption. The figure must label both as incomplete-fleet screening scenarios, rather than implying the year-specific inventory is a firm-capacity forecast.
 - Derive year-specific capacity-to-observed-EIA930 fuel-generation coverage diagnostics, and incorporate excluded technologies in a transparent supply accounting; retain full-source status and site-to-BA ambiguity checks.
 - Obtain physical intertie and generator available MW before making real reliability statements.
+
+## Published reproducible figure package
+
+The sensitivity comparison is now rendered directly from both archived optimization CSVs: [successful Paper C fleet figure CI 42441660864](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42441660864) ([PNG, PDF and matched four-row table artifact 13602225029](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42441660864/artifacts/13602225029)). The plotting workflow enforces both 2023 and 2024, both isolated and illustrative-link variants, and both incomplete fleet-provenance classifications. The figure does not imply statistical confidence intervals, physically certified transfer capacities or real-world EENS.
