@@ -11,8 +11,7 @@ import pandas as pd
 
 BAS=("AZPS","BPAT","CISO","SRP")
 COHORTS={2023:"2023-07-10T00:00:00Z",2024:"2024-07-01T00:00:00Z"}
-STABLE=("Coal","Natural Gas","Nuclear","All Petroleum Products",
-        "Other Fuel Sources","Unknown Fuel Sources")
+STABLE=("Coal","Natural Gas","Nuclear")
 
 
 def admitted(hourly,meta):
