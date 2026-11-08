@@ -1,0 +1,56 @@
+name: Paper C source-audited bilateral reciprocal reporting figure
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-bilateral-reciprocity-figure.yml'
+      - 'src/grid_resilience/paperc_bilateral_reciprocity_figure.py'
+      - 'tests/test_paperc_bilateral_reciprocity_figure.py'
+jobs:
+  make-reciprocity-figure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test plotting provenance and missingness
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_bilateral_reciprocity_figure.py
+      - name: Restore official CI-audited 41-pair EIA930 source records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/pairfigure/source outputs/pairfigure/figure
+          gh run download 42447683798 --repo ys30/Climate-Grid-Resilience-Research --name paperc-2024-july-eia930-directed-reciprocity-by-counterparty --dir outputs/pairfigure/source
+      - name: Generate publication supplemental original-source reciprocity panels
+        run: |
+          python -m grid_resilience.paperc_bilateral_reciprocity_figure \
+            --hourly outputs/pairfigure/source/results/july2024_reciprocal_directed_pair_hourly.csv \
+            --manifest outputs/pairfigure/source/results/july2024_reciprocity_source_scope.json \
+            --output outputs/pairfigure/figure
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          root=Path("outputs/pairfigure/figure")
+          table=pd.read_csv(root/"table_paperc_bilateral_reciprocity_source_quality.csv")
+          a=table[(table.ba_a=="AZPS")&(table.ba_b=="CISO")].iloc[0]
+          b=table[(table.ba_a=="BPAT")&(table.ba_b=="CISO")].iloc[0]
+          assert a.sum_absolute_reciprocal_discrepancy_mwh==49080.
+          assert b.sum_absolute_reciprocal_discrepancy_mwh==0.
+          assert table.pair_hours.eq(168).all()
+          assert not table.reporting_is_physical_line_capacity.any()
+          for ext in ("png","pdf"):
+              assert (root/f"fig_paperc_bilateral_reciprocity_source_quality.{ext}").stat().st_size>10000
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2024-bilateral-reciprocity-figure-and-source-table
+          path: outputs/pairfigure/figure/
+          if-no-files-found: error
