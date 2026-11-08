@@ -58,27 +58,36 @@ def extract(source, start, hours=168):
                     value=float(value)
                     if not np.isfinite(value):raise ValueError("Nonfinite reported fuel MW")
                     rows.append({"timestamp":stamp.isoformat(),"ba":ba,"fuel":fuel,
-                                 "reported":True,"observed_mwh":value,"observed_net_generation_mwh":total})
+                                 "reported":True,"source_ba_hour_present":True,"observed_mwh":value,"observed_net_generation_mwh":total})
                 else:
                     rows.append({"timestamp":stamp.isoformat(),"ba":ba,"fuel":fuel,
-                                 "reported":False,"observed_mwh":float("nan"),
+                                 "reported":False,"source_ba_hour_present":True,"observed_mwh":float("nan"),
                                  "observed_net_generation_mwh":total})
-    if seen!={(t.to_pydatetime(),ba) for t in expected for ba in BAS}:
-        raise ValueError(f"Incomplete official EIA930 BA-hour grid: {len(seen)}/672")
+    missing={(t.to_pydatetime(),ba) for t in expected for ba in BAS}-seen
+    # Absent BA-hours are missing source evidence, NEVER zero generation.
+    for stamp,ba in sorted(missing):
+        for fuel in fuelcols:
+            rows.append({"timestamp":stamp.isoformat(),"ba":ba,"fuel":fuel,
+                         "reported":False,"source_ba_hour_present":False,
+                         "observed_mwh":float("nan"),"observed_net_generation_mwh":float("nan")})
     obs=pd.DataFrame(rows)
     if len(obs)!=hours*len(BAS)*len(fuelcols):
         raise ValueError("Incomplete fuel observation grid")
     summary=obs.groupby(["ba","fuel"],sort=True).agg(
         reported_hours=("reported","sum"),
+        source_ba_hours=("source_ba_hour_present","sum"),
         signed_observed_mwh_reported_hours_only=("observed_mwh","sum"),
         observed_negative_hours=("observed_mwh",lambda x:int((x<0).sum()))
     ).reset_index()
-    summary["blank_hours"]=hours-summary.reported_hours
+    summary["blank_hours"]=summary.source_ba_hours-summary.reported_hours
+    summary["missing_entire_ba_hours"]=hours-summary.source_ba_hours
     summary.loc[summary.reported_hours.eq(0),"signed_observed_mwh_reported_hours_only"]=np.nan
     summary["observed_full_period_mwh"]=summary.signed_observed_mwh_reported_hours_only.where(
         summary.reported_hours.eq(hours))
     totals=obs.drop_duplicates(["timestamp","ba"])[["ba","observed_net_generation_mwh"]]
-    net=totals.groupby("ba").observed_net_generation_mwh.sum().rename("official_ba_net_generation_mwh")
+    net=totals.groupby("ba").observed_net_generation_mwh.sum(min_count=1).rename("official_ba_net_generation_mwh")
+    net_counts=totals.groupby("ba").observed_net_generation_mwh.count()
+    net=net.where(net_counts.eq(hours))
     summary=summary.merge(net,on="ba",validate="many_to_one")
     return summary
 
@@ -126,6 +135,9 @@ def main():
     audit={"year":args.year,"start_utc":args.start,"hours_per_ba":168,
            "fuel_category_ba_groups":len(result),
            "source_fuel_categories":sorted(result.fuel.unique().tolist()),
+           "source_complete_ba_groups":int(result.loc[result.fuel.eq("Natural Gas"),"source_ba_hours"].eq(168).sum()),
+           "missing_source_ba_hours_total":int(result.loc[result.fuel.eq("Natural Gas"),"missing_entire_ba_hours"].sum()),
+           "full_sevenday_observed_generation_sums_admitted":bool(result.source_ba_hours.eq(168).all()),
            "fully_observed_fuel_groups":
            int(result.reported_hours.eq(168).sum()),
            "partially_or_entirely_blank_fuel_groups":int(result.reported_hours.lt(168).sum()),
