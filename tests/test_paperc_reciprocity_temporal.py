@@ -13,11 +13,14 @@ def sample():
                          "both_direction_values_present":True,
                          "signed_reciprocity_sum_mw":signed,
                          "absolute_reciprocity_sum_mw":abs(signed)})
-    for i in range(6888-len(rows)):
-        rows.append({"utc_hour_start":f"external_{i}","ba_a":"BPAT",
-                     "ba_b":"OTHER","both_direction_values_present":False,
-                     "signed_reciprocity_sum_mw":np.nan,
-                     "absolute_reciprocity_sum_mw":np.nan})
+    # Remaining 35 unique pairs × 168 valid UTC hours, preserving 41 original pairs.
+    for k in range(35):
+        for t in pd.date_range("2024-07-01T00:00:00Z",periods=168,freq="h"):
+            rows.append({"utc_hour_start":t.isoformat(),
+                         "ba_a":"BPAT","ba_b":f"EXTERNAL_{k:02d}",
+                         "both_direction_values_present":False,
+                         "signed_reciprocity_sum_mw":np.nan,
+                         "absolute_reciprocity_sum_mw":np.nan})
     manifest={"unordered_pair_hour_keys":6888,"pair_groups":41,
               "historical_eens_validated":False,"missing_direction_never_converted_to_zero":True}
     return pd.DataFrame(rows),manifest
