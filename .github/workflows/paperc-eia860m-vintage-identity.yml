@@ -1,0 +1,89 @@
+name: Paper C original cited EIA860M monthly-vintage vs annual identity census
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia860m-vintage-identity.yml'
+      - 'src/grid_resilience/paperc_eia860m_vintage_identity.py'
+      - 'tests/test_paperc_eia860m_vintage_identity.py'
+jobs:
+  exact-cited-vintage-reconciliation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 38
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test source integrity and category transitions
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install openpyxl
+          python -m pytest -q tests/test_paperc_eia860m_vintage_identity.py
+      - name: Obtain archived source-vintage EIA860M and original EIA930A files
+        run: |
+          mkdir -p outputs/vintage/source outputs/vintage/annual outputs/vintage/results
+          python - <<'PY'
+          from urllib.request import urlopen,Request
+          from pathlib import Path
+          import json,hashlib
+          root=Path("outputs/vintage/source")
+          records=[]
+          source=[
+             ("eia860m_feb2025.xlsx","https://www.eia.gov/electricity/data/eia860m/archive/xls/february_generator2025.xlsx"),
+             ("eia860m_aug2025.xlsx","https://www.eia.gov/electricity/data/eia860m/archive/xls/august_generator2025.xlsx"),
+             ("eia930a_2023.xlsx","https://www.eia.gov/electricity/930-content/EIA_930A_2023_with%20layout.xlsx"),
+             ("eia930a_2024.xlsx","https://www.eia.gov/electricity/930-content/EIA_930A_2024_with%20layout.xlsx")]
+          for name,url in source:
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  data=r.read()
+                  resolved=r.geturl()
+              assert len(data)>100000 and data.startswith(b"PK")
+              (root/name).write_bytes(data)
+              records.append({"filename":name,"official_url":url,"resolved_url":resolved,
+                              "sha256":hashlib.sha256(data).hexdigest(),"source_bytes":len(data)})
+          (root/"official_monthly_and_eia930a_checksums.json").write_text(
+              json.dumps(records,indent=2)+"\n")
+          PY
+      - name: Restore successful independent EIA930A-versus-annual EIA860 identity census
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 42455170263 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-2023-2024-eia930a-eia860-exact-generator-id-and-ba-match \
+            --dir outputs/vintage/annual
+      - name: Compare original EIA930A identity category with EIA860M cited preliminary vintage
+        run: |
+          python -m grid_resilience.paperc_eia860m_vintage_identity \
+            --monthly2023 outputs/vintage/source/eia860m_feb2025.xlsx \
+            --monthly2024 outputs/vintage/source/eia860m_aug2025.xlsx \
+            --eia930a2023 outputs/vintage/source/eia930a_2023.xlsx \
+            --eia930a2024 outputs/vintage/source/eia930a_2024.xlsx \
+            --annualmatch2023 outputs/vintage/annual/results/eia930a_eia860_exact_generator_join_2023.csv \
+            --annualmatch2024 outputs/vintage/annual/results/eia930a_eia860_exact_generator_join_2024.csv \
+            --output outputs/vintage/results
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          root=Path("outputs/vintage/results")
+          meta=json.loads((root/"paper_c_monthly_source_version_scope.json").read_text())
+          assert {x["year"] for x in meta}=={2023,2024}
+          for year,expected in ((2023,{"AZPS":131,"BPAT":300,"CISO":1619,"SRP":94}),
+                                (2024,{"AZPS":133,"BPAT":298,"CISO":1434,"SRP":95})):
+              x=pd.read_csv(root/f"paper_c_eia930a_{year}_annual_vs_{'february' if year==2023 else 'august'}2025_ba_summary.csv")
+              assert x.set_index("ba").source_rows.to_dict()==expected
+              assert x.vintage_match_category_changes.ge(0).all()
+              print("YEAR",year,"VINTAGE CHANGE COUNTS",x.to_string(index=False))
+          assert not any(x["actual_hourly_dispatch_or_EENS_calibrated"] for x in meta)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-eia930a-cited-eia860m-2025-feb-aug-exact-vintage-match
+          path: |
+            outputs/vintage/source/official_monthly_and_eia930a_checksums.json
+            outputs/vintage/results/
+          if-no-files-found: warn
