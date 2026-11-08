@@ -1,0 +1,60 @@
+name: Paper C EIA930 2024 renewable storage source-completeness figure
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-eia930-technology-reporting-figure.yml'
+      - 'src/grid_resilience/paperc_eia930_fuel_reporting_figure.py'
+      - 'tests/test_paperc_eia930_fuel_reporting_figure.py'
+jobs:
+  reporting-fraction-figure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify source hour and no-harmonization plotting contracts
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_eia930_fuel_reporting_figure.py
+      - name: Restore official source-partitioned fuel taxonomy audit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/renewable_figure/source outputs/renewable_figure/figure
+          gh run download 42464011904 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-eia930-2023-2024-original-renewable-storage-taxonomy-evidence \
+            --dir outputs/renewable_figure/source
+      - name: Generate source-verified 2024 161h reporting availability matrix and figure
+        run: |
+          python -m grid_resilience.paperc_eia930_fuel_reporting_figure \
+            --source outputs/renewable_figure/source/paper_c_wind_solar_hydro_storage_partition_coverage.csv \
+            --manifest outputs/renewable_figure/source/paper_c_wind_solar_hydro_storage_scope.json \
+            --output outputs/renewable_figure/figure
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          p=Path("outputs/renewable_figure/figure")
+          x=pd.read_csv(p/"table_paperc_2024_modern_fuel_nonblank_fraction.csv")
+          assert len(x)==7
+          expected=["AZPS","BPAT","CISO","SRP"]
+          wind=x.loc[x["Unnamed: 0"].eq("Wind with Integrated Battery Storage"),expected].iloc[0]
+          assert wind.sum()==0.
+          solar=x.loc[x["Unnamed: 0"].eq("Solar with Integrated Battery Storage"),expected].iloc[0]
+          assert solar["BPAT"]==1 and solar[["AZPS","CISO","SRP"]].sum()==0
+          m=json.loads((p/"fuel_reporting_figure_scope.json").read_text())
+          assert m["blank_is_not_zero"] and m["hourly_physical_energy_supply_or_EENS_validated"] is False
+          for ext in ("png","pdf"):
+              assert (p/f"fig_paperc_2024_renewable_storage_fuel_reporting.{ext}").stat().st_size>10000
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2024-eia930-original-renewable-storage-reporting-heatmap
+          path: outputs/renewable_figure/figure/
+          if-no-files-found: error
