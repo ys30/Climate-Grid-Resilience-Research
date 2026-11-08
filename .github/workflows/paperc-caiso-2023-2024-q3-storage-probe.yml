@@ -1,0 +1,61 @@
+name: Paper C CAISO original 2023 2024 Q3 storage market data source probe
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-2023-2024-q3-storage-probe.yml'
+jobs:
+  verify-original-caiso-storage-quarters:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install workbook reader
+        run: python -m pip install openpyxl
+      - name: Fetch independently documented 2023Q3 and 2024Q3 CAISO raw quarterly market workbooks
+        run: |
+          mkdir -p outputs/caiso/source outputs/caiso/results
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,io,json
+          from urllib.request import Request,urlopen
+          from openpyxl import load_workbook
+          root=Path("outputs/caiso")
+          evidence=[]
+          for year,start,end in [(2023,"2023-07-10","2023-07-16"),(2024,"2024-07-01","2024-07-07")]:
+              url=f"https://www.caiso.com/documents/storage-report-{year}q3.xlsx"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  data=r.read();resolved=r.geturl()
+              if len(data)<100000 or data[:2]!=b"PK":raise ValueError("Original source not valid workbook")
+              (root/"source"/f"storage-report-{year}q3.xlsx").write_bytes(data)
+              w=load_workbook(io.BytesIO(data),read_only=True,data_only=True)
+              tabs=[]
+              for sheet in w:
+                  first=[]
+                  for i,row in enumerate(sheet.iter_rows(values_only=True)):
+                      if i>=5:break
+                      first.append([str(v)[:95] if v is not None else None for v in row[:28]])
+                  tabs.append({"name":sheet.title,"source_rows":sheet.max_row,
+                               "source_columns":sheet.max_column,"top_five_rows":first})
+              w.close()
+              item={"year":year,"study_start":start,"study_end":end,"official_url":url,
+                    "resolved_url":resolved,"sha256":hashlib.sha256(data).hexdigest(),
+                    "bytes":len(data),"tabs":tabs,
+                    "market_output_not_metered_discharge_or_firm_available_mw":True,
+                    "scope_caiso_market_not_other_three_ba":True}
+              print("CAISO QUARTERLY ORIGINAL SOURCE:",json.dumps(item))
+              evidence.append(item)
+          (root/"results"/"caiso_2023_2024_q3_source_schema_sha256.json").write_text(
+              json.dumps(evidence,indent=2)+"\n")
+          assert len(evidence)==2 and all(e["tabs"] for e in evidence)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-caiso-2023-2024-q3-storage-original-source-schema
+          path: outputs/caiso/results/
+          if-no-files-found: error
