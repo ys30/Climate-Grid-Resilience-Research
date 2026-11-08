@@ -1,0 +1,44 @@
+name: Paper C CAISO historical storage XLSX XML first row data schema
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-q3-xml-header-probe.yml'
+jobs:
+  inspect-streamed-xml:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stream first six raw XLSX worksheet XML rows (ignore defective declared dimensions)
+        run: |
+          python - <<'PY'
+          from urllib.request import urlopen,Request
+          from zipfile import ZipFile
+          from io import BytesIO
+          from xml.etree.ElementTree import iterparse
+          import json
+          NS="{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+          for year in (2023,2024):
+              u=f"https://www.caiso.com/documents/storage-report-{year}q3.xlsx"
+              with urlopen(Request(u,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:data=r.read()
+              with ZipFile(BytesIO(data)) as z:
+                  ss=[]
+                  root=__import__("xml.etree.ElementTree",fromlist=["fromstring"]).fromstring(z.read("xl/sharedStrings.xml"))
+                  for child in root.findall(NS+"si"):
+                      ss.append("".join(v.text or "" for v in child.iter(NS+"t")))
+                  with z.open("xl/worksheets/sheet1.xml") as f:
+                      first=[]
+                      for _,elem in iterparse(f,events=("end",)):
+                          if elem.tag!=NS+"row":continue
+                          vals={}
+                          for c in elem.findall(NS+"c"):
+                              v=c.find(NS+"v")
+                              x=v.text if v is not None else None
+                              if c.get("t")=="s" and x is not None:x=ss[int(x)]
+                              vals[c.get("r")]=x
+                          first.append(vals)
+                          elem.clear()
+                          if len(first)==6:break
+                  print("CAISO XML HEAD",year,json.dumps({"shared":ss,"first_rows":first})[:12000])
+          PY
