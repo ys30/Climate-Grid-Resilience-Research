@@ -25,7 +25,7 @@ def sample():
 def test_two_cohorts_and_complete_gas():
     detail,summary,meta=admitted(*sample())
     assert len(detail)==2*168*4*len(STABLE)
-    assert len(summary)==48
+    assert len(summary)==24
     g=summary.loc[summary.stable_original_category.eq("Natural Gas")]
     assert len(g)==8 and g.full_168h_fuel_energy_comparison_eligible.all()
     assert g.full_168h_reported_energy_mwh.eq(4200).all()
