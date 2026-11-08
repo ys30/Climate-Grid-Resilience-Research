@@ -72,7 +72,8 @@ jobs:
               assert x.loc[x.eia860_generator_id_recognized.eq(False),
                            "match_class"].eq("no_eia930a_source_identity").all()
               assert y[["exact_identity_and_same_ba_rows","exact_identity_ba_conflict_rows",
-                        "sameyear_operable_unmatched_rows","source_identity_missing_rows"]].sum(axis=1).equals(
+                        "sameyear_operable_unmatched_rows","source_identity_missing_rows",
+                        "duplicate_same_ba_source_identity_rows"]].sum(axis=1).equals(
                          y.eia930a_schedule2_rows)
               print(f"YEAR {year} GENERATOR MATCH EVIDENCE:",y.to_string(index=False))
           PY
