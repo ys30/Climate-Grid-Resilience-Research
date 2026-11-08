@@ -37,8 +37,8 @@ def admitted(hourly,meta):
                 if len(x)!=168 or set(x.utc_hour_start)!=expected[year]:
                     raise ValueError("Stable fuel category did not cover all 168 source BA hours")
                 if year==2024:
-                    first=x[x.original_partition.eq("2024_Jan_Jun")]
-                    latter=x[x.original_partition.eq("2024_Jul_Dec")]
+                    first=x[x.original_partition.eq("Jan_Jun")]
+                    latter=x[x.original_partition.eq("Jul_Dec")]
                     if len(first)!=7 or len(latter)!=161:
                         raise ValueError("Original 2024 boundary 7/161 not preserved")
     if set(original.year)!={2023,2024} or set(original.ba)!=set(BAS):
