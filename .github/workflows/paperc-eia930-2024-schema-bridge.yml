@@ -1,0 +1,78 @@
+name: Paper C EIA930 2024 original-fuel schema bridge, no wind imputation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia930-2024-schema-bridge.yml'
+      - 'src/grid_resilience/paperc_eia930_2024_fuel_schema_bridge.py'
+      - 'tests/test_paperc_eia930_2024_fuel_schema_bridge.py'
+jobs:
+  observed-cross-schema:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate source schema boundary and missingness tests
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_eia930_2024_fuel_schema_bridge.py
+      - name: Download two official EIA930 original source halves with checksums
+        run: |
+          mkdir -p outputs/bridge/raw outputs/bridge/results
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          import hashlib,json
+          root=Path("outputs/bridge/raw")
+          checks=[]
+          for period in ("Jan_Jun","Jul_Dec"):
+              url=f"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_{period}.csv"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  payload=r.read()
+                  resolved=r.geturl()
+              if len(payload)<=10000:raise ValueError("Official EIA930 source unexpectedly small")
+              (root/f"EIA930_BALANCE_2024_{period}.csv").write_bytes(payload)
+              checks.append({"partition":period,"official_url":url,"resolved_url":resolved,
+                             "sha256":hashlib.sha256(payload).hexdigest(),"bytes":len(payload)})
+          (root/"official_source_checksums.json").write_text(json.dumps(checks,indent=2)+"\n")
+          PY
+      - name: Preserve source-native old/new wind categories and audit full 168h net/gas
+        run: |
+          python -m grid_resilience.paperc_eia930_2024_fuel_schema_bridge \
+            --jan-jun outputs/bridge/raw/EIA930_BALANCE_2024_Jan_Jun.csv \
+            --jul-dec outputs/bridge/raw/EIA930_BALANCE_2024_Jul_Dec.csv \
+            --output outputs/bridge/results
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path("outputs/bridge/results")
+          m=json.loads((root/"2024_july_week1_schema_scope.json").read_text())
+          t=pd.read_csv(root/"2024_july_week1_4ba_raw_net_gas_and_unmatched_wind.csv")
+          assert m["jan_jun_utc_hours"]==28 and m["jul_dec_utc_hours"]==644
+          assert m["source_ba_hours_complete"] and m["all_net_generation_168h_complete"]
+          assert m["all_natural_gas_168h_complete"]
+          assert m["source_schema_changed"] and m["old_wind_cannot_be_claimed_equivalent_to_modern_without_storage"]
+          assert set(t.ba)=={"AZPS","BPAT","CISO","SRP"}
+          assert t.legacy_unsplit_wind_hours.eq(7).all()
+          assert t.modern_wind_without_battery_hours.le(161).all()
+          assert not t.cross_schema_wind_168h_comparable_certified.any()
+          expected={"AZPS":(522280,203967),"BPAT":(1763554,116528),
+                    "CISO":(4653684,2076666),"SRP":(1355280,492311)}
+          for row in t.itertuples():
+              net,gas=expected[row.ba]
+              assert abs(row.raw_net_generation_mwh-net)<1e-3
+              assert abs(row.raw_natural_gas_mwh-gas)<1e-3
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2024-july-fuel-schema-native-cross-partition-and-stable-net-gas
+          path: |
+            outputs/bridge/raw/official_source_checksums.json
+            outputs/bridge/results/
+          if-no-files-found: error
