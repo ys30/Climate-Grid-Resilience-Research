@@ -61,3 +61,18 @@ def test_missing_schedule4_partner_fails_closed(tmp_path):
     w.save(path)
     with pytest.raises(ValueError,match="No relevant"):
         get_year(path,2024)
+
+def test_mechanism_type_label_is_not_misread_as_ba(tmp_path):
+    path=fixture(tmp_path,2024)
+    from openpyxl import load_workbook
+    book=load_workbook(path)
+    book["SCH 4"]["H2"]="PSEUDO TIE"
+    book["SCH 4"]["H3"]="DYNAMIC IMPORT"
+    book.save(path)
+    _,relations,_,pairs=get_year(path,2024)
+    assert relations.source_declares_mechanism_category.sum()==2
+    assert set(relations.loc[relations.source_declares_mechanism_category,
+                             "relationship_original_label"])=={"PSEUDO TIE","DYNAMIC IMPORT"}
+    assert relations.loc[relations.source_declares_mechanism_category,
+                         "declared_partner_ba"].isna().all()
+    assert not pairs.specific_pair_discrepancy_cause_verified.any()
