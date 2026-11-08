@@ -1,0 +1,59 @@
+name: Paper C CISO missing-total shadow bilateral balance audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-bilateral-shadow-balance.yml'
+      - 'src/grid_resilience/paperc_2024_bilateral_shadow_balance.py'
+      - 'tests/test_paperc_2024_bilateral_shadow_balance.py'
+jobs:
+  accounting-shadow-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test incomplete original TI and no-substitution contracts
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_2024_bilateral_shadow_balance.py
+      - name: Fetch audited raw BA balance and bilateral summary by exact UTC hour
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/shadow/original outputs/shadow/bilateral outputs/shadow/results
+          gh run download 42446010127 --repo ys30/Climate-Grid-Resilience-Research --name paperc-official-eia930-2024-july168h-fourba-raw-balance-and-missingness --dir outputs/shadow/original
+          gh run download 42447109422 --repo ys30/Climate-Grid-Resilience-Research --name paperc-july2024-eia930-bilateral-vs-reported-168h-source-audit --dir outputs/shadow/bilateral
+      - name: Compare shadow sums on missing CISO total TI without replacing originals
+        run: |
+          python -m grid_resilience.paperc_2024_bilateral_shadow_balance \
+            --original outputs/shadow/original/results/paper_c_july2024_168h_raw_ba_balance_hourly.csv \
+            --bilateral outputs/shadow/bilateral/results/july2024_168h_bilateral_vs_reported_total_hourly.csv \
+            --output outputs/shadow/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/shadow/results")
+          x=pd.read_csv(p/"july2024_shadow_bilateral_balance_by_ba.csv")
+          y=pd.read_csv(p/"july2024_shadow_bilateral_balance_hourly.csv")
+          m=json.loads((p/"july2024_shadow_bilateral_scope.json").read_text())
+          assert len(y)==672 and set(x.ba)=={"AZPS","BPAT","CISO","SRP"}
+          c=x[x.ba.eq("CISO")].iloc[0]
+          assert c.original_total_interchange_missing_hours==144
+          assert c.source_missing_with_bilateral_sum_hours==144
+          assert c.candidate_shadow_arithmetic_closing_missing_total_hours + c.candidate_shadow_arithmetic_nonclosing_missing_total_hours==144
+          assert y.loc[y.ba.eq("CISO") & y.net_interchange_mw.isna(),"net_interchange_mw"].isna().all()
+          assert m["official_missing_total_interchange_imputed"] is False
+          assert m["historical_reliability_or_EENS_calibrated"] is False
+          print("SHADOW ONLY SOURCE DIAGNOSTIC:",x.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-ciso-144h-bilateral-shadow-bookkeeping-not-raw-imputation
+          path: outputs/shadow/results/
+          if-no-files-found: error
