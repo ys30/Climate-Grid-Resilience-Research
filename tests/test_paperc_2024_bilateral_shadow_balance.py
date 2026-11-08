@@ -59,5 +59,5 @@ def test_duplicates_not_admitted():
 
 def test_missing_source_hour_rejected():
     a,b=data()
-    with pytest.raises(ValueError,match="672"):
+    with pytest.raises(ValueError,match="168h x 4BA"):
         compare(a.iloc[:-1],b)
