@@ -1,0 +1,82 @@
+name: Paper C original 2023-2024 source-native EIA930 hourly fuel panel
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2023-2024-original-hourly-fuel-panel.yml'
+      - 'src/grid_resilience/paperc_eia930_2023_2024_hourly_fuel_panel.py'
+      - 'tests/test_paperc_eia930_2023_2024_hourly_fuel_panel.py'
+jobs:
+  source-native-fuel-panel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test authentic hour boundaries, raw category schema and no imputation
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_eia930_2023_2024_hourly_fuel_panel.py
+      - name: Download three original EIA930 source partitions with SHA256
+        run: |
+          mkdir -p outputs/original_fuel/raw outputs/original_fuel/results
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          from urllib.request import Request,urlopen
+          raw=Path("outputs/original_fuel/raw")
+          sources=[(2023,"Jul_Dec"),(2024,"Jan_Jun"),(2024,"Jul_Dec")]
+          meta=[]
+          for year,half in sources:
+              url=f"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_{year}_{half}.csv"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  data=r.read()
+                  final=r.geturl()
+              assert len(data)>10000
+              filename=f"EIA930_BALANCE_{year}_{half}.csv"
+              (raw/filename).write_bytes(data)
+              meta.append({"year":year,"partition":half,"official_url":url,
+                           "resolved_url":final,"source_bytes":len(data),
+                           "sha256":hashlib.sha256(data).hexdigest()})
+          (raw/"original_eia930_source_sha256.json").write_text(json.dumps(meta,indent=2)+"\n")
+          PY
+      - name: Reconstruct strict source-native two-year 168h BA + fuel observation evidence
+        run: |
+          python -m grid_resilience.paperc_eia930_2023_2024_hourly_fuel_panel \
+            --source2023juldec outputs/original_fuel/raw/EIA930_BALANCE_2023_Jul_Dec.csv \
+            --source2024janjun outputs/original_fuel/raw/EIA930_BALANCE_2024_Jan_Jun.csv \
+            --source2024juldec outputs/original_fuel/raw/EIA930_BALANCE_2024_Jul_Dec.csv \
+            --output outputs/original_fuel/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          root=Path("outputs/original_fuel/results")
+          d=pd.read_csv(root/"paperc_2023_2024_original_hourly_ba_fuel_labels.csv")
+          s=pd.read_csv(root/"paperc_2023_2024_original_fuel_category_reporting.csv")
+          m=json.loads((root/"paperc_2023_2024_original_fuel_reporting_scope.json").read_text())
+          assert {x["year"] for x in m["comparison_cohorts"]}=={2023,2024}
+          assert all(x["source_ba_hours"]==672 for x in m["comparison_cohorts"])
+          assert d.groupby(["year","ba"]).utc_hour_start.nunique().eq(168).all()
+          assert d.groupby(["year","ba","utc_hour_start","original_fuel_category"]).size().eq(1).all()
+          assert m["2024_wind_hydro_solar_old_vs_new_not_assumed_equivalent"]
+          assert m["blank_never_assumed_zero"]
+          assert m["historical_hourly_available_mw_or_adequacy_calibrated"] is False
+          assert s.reported_hours.add(s.blank_hours).eq(s.source_ba_hours).all()
+          assert s.loc[s.reported_hours.lt(s.source_ba_hours),
+                       "full_partition_mwh_only_if_no_blank"].isna().all()
+          print("REAL SOURCE FUEL COVERAGE:",s.groupby(["year","ba"]).agg(
+              number_of_category_partitions=("original_fuel_category","size"),
+              reported_cells=("reported_hours","sum"),
+              missing_cells=("blank_hours","sum")).to_string())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-official-eia930-2023-2024-hourly-fuel-panel-original-schema
+          path: |
+            outputs/original_fuel/raw/original_eia930_source_sha256.json
+            outputs/original_fuel/results/
+          if-no-files-found: error
