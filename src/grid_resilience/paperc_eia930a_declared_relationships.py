@@ -68,7 +68,7 @@ def get_year(path,year):
         relations=[]
         for r in records(book,"SCH 4"):
             ba=clean_ba(r["BA Code"])
-            partners=sorted(set(x for x in re.split(r"[,;/]+",clean_ba(r.get(REL_COL))) if x.strip()))
+            partners=sorted(set(x.strip() for x in re.split(r"[,;/]+",clean_ba(r.get(REL_COL))) if x.strip()))
             if not partners:
                 continue
             if ba not in TARGET and not TARGET.intersection(partners):
