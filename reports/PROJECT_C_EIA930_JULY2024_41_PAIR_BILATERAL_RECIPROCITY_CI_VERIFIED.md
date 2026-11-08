@@ -40,3 +40,7 @@ CISO has 144 missing BA Total Interchange hours, yet bilateral counterpart recor
 4. Obtain independently verified transmission limits and generator operating state before interpreting the PyPSA model as physical adequacy. Directional reported tie-line interchange is **not** a certified available transfer limit.
 
 This report supports Paper C's source-quality and uncertainty sections, not observed outage or calibrated EENS claims.
+
+## Reproducible manuscript supplementary figure
+
+[Successful figure CI 42447882357](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42447882357) produced a two-panel source-audited figure (absolute pairwise reciprocal deviation and explicit both-direction availability) directly from the archived 6,888 pair-hour source records. [Download PDF, PNG and four-BA internal pair comparison CSV (artifact 13604178139)](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42447882357/artifacts/13604178139). The [plot source](../src/grid_resilience/paperc_bilateral_reciprocity_figure.py) and three regression tests require the exact source cohort and prohibit treating absent reciprocal readings as zero. The chart is a **supplemental source-reporting-quality visualization**, not a measured grid loss, true available transfer capacity, or statistically calibrated physical interchange estimate.
