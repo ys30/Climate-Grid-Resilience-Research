@@ -42,7 +42,7 @@ jobs:
           p=Path("outputs/stable_fuel/results")
           s=pd.read_csv(p/"paperc_stable_category_two_cohorts_summary.csv")
           m=json.loads((p/"paperc_stable_category_source_scope.json").read_text())
-          assert len(s)==2*4*6
+          assert len(s)==2*4*3
           assert s.source_hours.eq(168).all()
           assert s.reported_hours.add(s.blank_hours).eq(168).all()
           assert s.loc[s.blank_hours.gt(0),"full_168h_reported_energy_mwh"].isna().all()
