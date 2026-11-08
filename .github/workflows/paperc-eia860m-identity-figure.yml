@@ -1,0 +1,64 @@
+name: Paper C EIA930A annual-vs-monthly generator identity plot
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia860m-identity-figure.yml'
+      - 'src/grid_resilience/paperc_eia860m_identity_figure.py'
+      - 'tests/test_paperc_eia860m_identity_figure.py'
+jobs:
+  original-vintage-source-figure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check original-source denominators and chart reporting-scope gates
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_eia860m_identity_figure.py
+      - name: Restore independent annual and cited monthly original-source audited tables
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/identity_fig/annual outputs/identity_fig/monthly outputs/identity_fig/figures
+          gh run download 42455170263 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-2023-2024-eia930a-eia860-exact-generator-id-and-ba-match \
+            --dir outputs/identity_fig/annual
+          gh run download 42455881405 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-eia930a-cited-eia860m-2025-feb-aug-exact-vintage-match \
+            --dir outputs/identity_fig/monthly
+      - name: Produce scholarly figure preserving raw roster row denominator
+        run: |
+          python -m grid_resilience.paperc_eia860m_identity_figure \
+            --annual2023 outputs/identity_fig/annual/results/eia930a_eia860_fourba_match_summary_2023.csv \
+            --annual2024 outputs/identity_fig/annual/results/eia930a_eia860_fourba_match_summary_2024.csv \
+            --monthly2023 outputs/identity_fig/monthly/results/paper_c_eia930a_2023_annual_vs_february2025_ba_summary.csv \
+            --monthly2024 outputs/identity_fig/monthly/results/paper_c_eia930a_2024_annual_vs_august2025_ba_summary.csv \
+            --manifest outputs/identity_fig/monthly/results/paper_c_monthly_source_version_scope.json \
+            --output outputs/identity_fig/figures
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          root=Path("outputs/identity_fig/figures")
+          x=pd.read_csv(root/"table_paperc_eia930a_annual_vs_cited_monthly_identity.csv")
+          assert len(x)==8 and set(x.year)=={2023,2024}
+          c=x.loc[(x.year==2024)&x.ba.eq("CISO")].iloc[0]
+          assert c.eia930a_raw_schedule2_rows==1434
+          assert c.annual_same_ba_exact_rows==1165
+          assert c.monthly_same_ba_exact_rows==1192
+          assert not x.hourly_available_mw_or_EENS_identified.any()
+          for ext in ("png","pdf"):
+              assert (root/f"fig_paperc_eia930a_annual_vs_cited_monthly_identity.{ext}").stat().st_size>10000
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2023-2024-eia930a-generator-identity-source-vintage-png-pdf-csv
+          path: outputs/identity_fig/figures/
+          if-no-files-found: error
