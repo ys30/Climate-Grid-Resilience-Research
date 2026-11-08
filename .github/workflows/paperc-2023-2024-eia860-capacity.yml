@@ -1,0 +1,70 @@
+name: Paper C official 2023 versus 2024 EIA860 four-BA nameplate provenance
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2023-2024-eia860-capacity.yml'
+      - 'src/grid_resilience/paperc_year_specific_eia860_inventory.py'
+      - 'tests/test_paperc_year_specific_eia860_inventory.py'
+jobs:
+  compare-source-year-rosters:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test year-specific source and scope contract
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_year_specific_eia860_inventory.py
+      - name: Acquire both EIA official annual archives with exact SHA256
+        run: |
+          mkdir -p outputs/eia860_crossyear/raw outputs/eia860_crossyear/results
+          python - <<'PY'
+          from urllib.request import urlopen,Request
+          from pathlib import Path
+          import json,hashlib
+          raw=Path("outputs/eia860_crossyear/raw")
+          sources=[]
+          for year in (2023,2024):
+              url=f"https://www.eia.gov/electricity/data/eia860/archive/xls/eia860{year}.zip"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as response:
+                  data=response.read()
+                  final=response.geturl()
+              assert len(data)>1000000,year
+              (raw/f"eia860{year}.zip").write_bytes(data)
+              sources.append({"source_year":year,"original_url":url,"resolved_url":final,
+                              "sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data)})
+          (raw/"official_source_checksums.json").write_text(json.dumps(sources,indent=2)+chr(10))
+          print(json.dumps(sources,indent=2))
+          PY
+      - name: Compare 2023/2024 official Operable plant-BA single-fuel nameplate candidates
+        run: |
+          python -m grid_resilience.paperc_year_specific_eia860_inventory \
+            --archive2023 outputs/eia860_crossyear/raw/eia8602023.zip \
+            --archive2024 outputs/eia860_crossyear/raw/eia8602024.zip \
+            --output outputs/eia860_crossyear/results
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          root=Path("outputs/eia860_crossyear/results")
+          m=json.loads((root/"year_specific_capacity_scope.json").read_text())
+          x=pd.read_csv(root/"eia860_2023_vs_2024_fourba_nameplate_comparison.csv")
+          assert {e["source_year"] for e in m["source_manifests"]}=={2023,2024}
+          assert m["cross_year_model_results_still_use_frozen_2024_partial_fleet"]
+          assert not m["actual_intertie_ratings_calibrated"]
+          assert len(x)>0 and not x.estimated_hourly_firm_capacity.any()
+          print("SOURCE-VERIFIED YEAR-SPECIFIC NAMEPLATE, NOT MODEL CAPACITY CALIBRATION")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-eia860-official-2023-2024-fourba-nameplate-comparison
+          path: |
+            outputs/eia860_crossyear/raw/official_source_checksums.json
+            outputs/eia860_crossyear/results/
+          if-no-files-found: warn
