@@ -24,8 +24,6 @@ def _worksheet(archive, contains, tab):
             it=ws.iter_rows(values_only=True)
             next(it)
             headers=[str(x).strip() if x is not None else "" for x in next(it)]
-            if len(headers)!=len(set(headers)):
-                raise ValueError("Ambiguous official workbook headers")
             records=list(it)
             return headers,records
         finally:
