@@ -125,7 +125,8 @@ def main():
     result.to_csv(out,index=False)
     audit={"year":args.year,"start_utc":args.start,"hours_per_ba":168,
            "fuel_category_ba_groups":len(result),
-           "source_fuel_categories":sorted(result.fuel.unique().tolist()),\n           "fully_observed_fuel_groups":
+           "source_fuel_categories":sorted(result.fuel.unique().tolist()),
+           "fully_observed_fuel_groups":
            int(result.reported_hours.eq(168).sum()),
            "partially_or_entirely_blank_fuel_groups":int(result.reported_hours.lt(168).sum()),
            "observed_fuel_columns_not_imputed":True,
