@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 
 TARGET={"AZPS","BPAT","CISO","SRP"}
 REL_COL="BAs having a Pseudo-Tie or Dynamic Relationship"
+MECHANISM_LABELS={"PSEUDO TIE","DYNAMIC IMPORT","DYNAMIC EXPORT","DYNAMIC SCHEDULE"}
 GAS_CATEGORIES=("Natural Gas",)
 WIND_CATEGORIES=("Wind",)
 
@@ -86,7 +87,10 @@ def get_year(path,year):
                 if ba==partner:
                     raise ValueError("Self pseudo-tie / dynamic BA relation")
                 relations.append({"year":year,"schedule4_reporting_ba":ba,
-                    "declared_partner_ba":partner,
+                    "relationship_original_label":partner,
+                    "relationship_label_kind":"mechanism_category" if partner in MECHANISM_LABELS else "ba_identifier",
+                    "declared_partner_ba":None if partner in MECHANISM_LABELS else partner,
+                    "source_declares_mechanism_category":partner in MECHANISM_LABELS,
                     "plant_name":str(r.get("Plant Name") or "").strip(),
                     "eia_plant_id_or_fallback":plant,
                     "eia_generator_id_or_fallback":gen,
@@ -104,11 +108,11 @@ def get_year(path,year):
             recognized_eia860_identity_rows=("eia860_generator_id_recognized","sum"))
         group["year"]=year
         group["nameplate_is_available_generation_mw"]=False
-        pair=sch4.groupby(["schedule4_reporting_ba","declared_partner_ba"],as_index=False).agg(
+        pair=sch4.groupby(["schedule4_reporting_ba","relationship_original_label","relationship_label_kind"],as_index=False).agg(
             declared_generator_relation_rows=("plant_name","size"),
             nonnull_annual_nameplate_mw=("reported_annual_nameplate_mw","sum"))
         pair["year"]=year
-        pair["individual_relation_mechanism_identified"]=False
+        pair["specific_pair_discrepancy_cause_verified"]=False
         return sch2,sch4,group,pair
     finally:
         book.close()
@@ -130,7 +134,8 @@ def main():
             df.to_csv(out/f"eia930a_{year}_{label}.csv",index=False)
         reports.append({"year":year,"sch2_target_ba_generator_rows":len(sch2),
                        "sch4_relevant_relationship_rows":len(sch4),
-                       "sch4_ba_partner_groups":len(pairs),
+                       "sch4_relation_label_groups":len(pairs),
+                       "sch4_explicit_mechanism_category_rows":int(sch4.source_declares_mechanism_category.sum()),
                        "sch2_mapped_bas":sorted(sch2.ba.unique().tolist()),
                        "reporter_partner_not_verified_physical_tie":True,
                        "dynamic_vs_pseudotie_mechanism_not_separated":True,
