@@ -1,0 +1,73 @@
+name: Paper C July 2024 EIA930 bilateral pair reciprocity source audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-bilateral-reciprocity.yml'
+      - 'src/grid_resilience/paperc_eia930_2024_reciprocity.py'
+      - 'tests/test_paperc_eia930_2024_reciprocity.py'
+jobs:
+  source-reciprocity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit-test sign and missing-direction separation
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_eia930_2024_reciprocity.py
+      - name: Retrieve 2024 original EIA930 INTERCHANGE CSV twice with SHA256 provenance
+        run: |
+          mkdir -p outputs/reciprocity/raw outputs/reciprocity/results
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          import hashlib,json
+          root=Path("outputs/reciprocity/raw")
+          logs=[]
+          for name in ("Jan_Jun","Jul_Dec"):
+              url=f"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_INTERCHANGE_2024_{name}.csv"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as f:
+                  raw=f.read()
+                  final=f.geturl()
+              assert len(raw)>10000
+              (root/f"EIA930_INTERCHANGE_2024_{name}.csv").write_bytes(raw)
+              logs.append({"half":name,"original_url":url,"resolved_url":final,
+                           "sha256":hashlib.sha256(raw).hexdigest(),"bytes":len(raw)})
+          (root/"source_checksums.json").write_text(json.dumps(logs,indent=2)+"\n")
+          PY
+      - name: Compare reciprocal directed source values without claiming physical transfer
+        run: |
+          python -m grid_resilience.paperc_eia930_2024_reciprocity \
+            --jan-jun outputs/reciprocity/raw/EIA930_INTERCHANGE_2024_Jan_Jun.csv \
+            --jul-dec outputs/reciprocity/raw/EIA930_INTERCHANGE_2024_Jul_Dec.csv \
+            --output outputs/reciprocity/results
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          p=Path("outputs/reciprocity/results")
+          x=pd.read_csv(p/"july2024_reciprocal_directed_pair_hourly.csv")
+          s=pd.read_csv(p/"july2024_reciprocal_directed_pair_summary.csv")
+          m=json.loads((p/"july2024_reciprocity_source_scope.json").read_text())
+          assert len(x)>0 and len(s)>0
+          assert s.observed_pair_hour_keys.ge(s.both_directions_reported_hours).all()
+          assert s.observed_pair_hour_keys.eq(s.both_directions_reported_hours+s.only_one_direction_or_blank_hours).all()
+          assert m["missing_direction_never_converted_to_zero"]
+          assert not m["historical_eens_validated"]
+          assert x.loc[~x.both_direction_values_present,"signed_reciprocity_sum_mw"].isna().all()
+          print("RECIPROCITY SUMMARY:",s.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-2024-july-eia930-directed-reciprocity-by-counterparty
+          path: |
+            outputs/reciprocity/raw/source_checksums.json
+            outputs/reciprocity/results/
+          if-no-files-found: warn
