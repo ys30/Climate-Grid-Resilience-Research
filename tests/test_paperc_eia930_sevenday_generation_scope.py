@@ -67,3 +67,43 @@ def test_missing_modeled_hour_rejected(tmp_path):
     obs=extract(official_fixture(tmp_path),"2023-07-10T00:00:00Z")
     with pytest.raises(ValueError,match="complete"):
         model_comparison(obs,modeled_fixture().iloc[:-1],2023,"isolated")
+
+def test_2024_split_wind_hydro_storage_schema_preserved(tmp_path):
+    source=official_fixture(tmp_path)
+    old=["Net Generation (MW) from "+f for f in FUELS]
+    new=[
+        "Net Generation (MW) from Coal","Net Generation (MW) from Natural Gas",
+        "Net Generation (MW) from Nuclear","Net Generation (MW) from All Petroleum Products",
+        "Net Generation (MW) from Hydropower Excluding Pumped Storage",
+        "Net Generation (MW) from Pumped Storage",
+        "Net Generation (MW) from Solar without Integrated Battery Storage",
+        "Net Generation (MW) from Solar with Integrated Battery Storage",
+        "Net Generation (MW) from Wind without Integrated Battery Storage",
+        "Net Generation (MW) from Wind with Integrated Battery Storage",
+        "Net Generation (MW) from Battery Storage",
+        "Net Generation (MW) from Other Energy Storage",
+        "Net Generation (MW) from Unknown Energy Storage",
+        "Net Generation (MW) from Geothermal",
+        "Net Generation (MW) from Other Fuel Sources",
+        "Net Generation (MW) from Unknown Fuel Sources"]
+    import csv as csvmod
+    with source.open(newline="") as f:
+        original=list(csvmod.DictReader(f))
+    newpath=tmp_path/"split.csv"
+    with newpath.open("w",newline="") as f:
+        w=csvmod.DictWriter(f,fieldnames=[
+            "Balancing Authority","UTC Time at End of Hour","Net Generation (MW)"]+new)
+        w.writeheader()
+        for row in original:
+            out={k:row[k] for k in (
+                "Balancing Authority","UTC Time at End of Hour","Net Generation (MW)")}
+            out.update({key:"1" for key in new})
+            w.writerow(out)
+    x=extract(newpath,"2023-07-10T00:00:00Z")
+    assert len(x)==4*len(new)
+    assert "Pumped Storage" in set(x.fuel)
+    assert "Wind with Integrated Battery Storage" in set(x.fuel)
+    assert "Wind" not in set(x.fuel)
+    y=model_comparison(x,modeled_fixture(),2023,"isolated")
+    assert y.loc[y.fuel.eq("Wind with Integrated Battery Storage"),"modeled_baseline_mwh"].isna().all()
+    assert y.loc[y.fuel.eq("Wind without Integrated Battery Storage"),"modeled_baseline_mwh"].notna().all()
