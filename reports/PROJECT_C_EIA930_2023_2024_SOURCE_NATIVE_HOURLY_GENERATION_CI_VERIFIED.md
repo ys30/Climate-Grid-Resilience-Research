@@ -59,3 +59,10 @@ The source-admitted stable series permits a transparent **reported natural gas v
 3. Preserve EIA-930 reporting imbalance (BPAT and CISO), CISO missing Total Interchange and bilateral reciprocity differences as **independent accounting/source-quality limitations**, not events of actual energy shortage.
 
 **Publication status:** The 2023/2024 original BA fuel reporting panel and 22 source-admitted full-week stable-fuel totals are reproducible, source-hash versioned and independently regression-tested. Source-level reporting coverage is stronger; historical system adequacy and causal resilience claims remain uncalibrated.
+
+## New CI-verified, fully source-native natural-gas hourly time-series figure
+
+[Successful publication figure CI #42463070258](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42463070258) independently restored the original fuel hourly source cohort and generated a four-BA (AZPS, BPAT, CISO and SRP) 2×2 comparison of **168 reported hourly gas records for each 2023 and 2024 window**. [Download PDF, PNG, complete source hourly CSV and figure scope manifest (artifact 13610348554)](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42463070258/artifacts/13610348554). Four regression tests and original-source energy checks confirm 2023 CISO **2,090,547 MWh**, 2024 CISO **2,076,666 MWh**, and 2024 AZPS **203,967 MWh**.
+
+The plot uses **hours since each cohort's own week starts**, not falsely date-aligned hourly time series. As 2023 and 2024 cohorts are different July dates, neither a difference in shape nor in week-integrated MWh identifies a controlled historical climate effect. The figure reports BA-reported natural-gas generation, **not** model-predicted generation or firm available plant capacity; therefore it is a descriptive Supplementary Source Data figure rather than a physical model validation.
+
