@@ -14,7 +14,8 @@ import numpy as np
 from .eia930_fuel_decomposition import FMT,FUELS
 
 BAS=("AZPS","BPAT","CISO","SRP")
-MAPPING={"Natural Gas":"generic_thermal_proxy","Wind":"wind",\n         "Wind without Integrated Battery Storage":"wind"}
+MAPPING={"Natural Gas":"generic_thermal_proxy","Wind":"wind",
+         "Wind without Integrated Battery Storage":"wind"}
 SCENARIO="baseline"
 
 def extract(source, start, hours=168):
@@ -25,12 +26,20 @@ def extract(source, start, hours=168):
     expected=pd.date_range(first,periods=hours,freq="h")
     seen=set()
     rows=[]
-    fuelcols={fuel:"Net Generation (MW) from "+fuel for fuel in FUELS}
-    required={"Balancing Authority","UTC Time at End of Hour","Net Generation (MW)"}|set(fuelcols.values())
+    base_required={"Balancing Authority","UTC Time at End of Hour","Net Generation (MW)"}
     with Path(source).open(newline="",encoding="utf-8-sig") as f:
         reader=csv.DictReader(f)
-        if not required.issubset(reader.fieldnames or []):
-            raise ValueError(f"Missing official EIA930 fuel/net generation columns: {sorted(required-set(reader.fieldnames or []))}; official header={reader.fieldnames}")
+        headers=reader.fieldnames or []
+        if not base_required.issubset(headers):
+            raise ValueError("Missing EIA930 BA/time/net-generation keys")
+        prefix="Net Generation (MW) from "
+        fuelcols={col[len(prefix):]:col for col in headers
+                  if col.startswith(prefix) and not col.endswith((" (Imputed)"," (Adjusted)"))}
+        if (len(fuelcols)<len(FUELS) or
+            "Natural Gas" not in fuelcols or
+            not ({"Wind","Wind without Integrated Battery Storage"} & set(fuelcols))):
+            raise ValueError(f"Unrecognized official fuel schema: {list(fuelcols)}")
+        # Preserve 2024 split hydro/PS and solar/wind-plus-storage category identities.
         for raw in reader:
             ba=raw["Balancing Authority"].strip()
             if ba not in BAS:continue
@@ -89,7 +98,8 @@ def model_comparison(observed, modeled,year,variant):
         raise ValueError("Invalid modeled generation")
     model=a.groupby(["ba","technology"]).generation_mwh.sum()
     out=observed.copy()
-    out["model_technology_proxy"]=out.fuel.map(MAPPING)\n    out["modeled_wind_proxy_not_equivalent_to_integrated_storage_or_total_wind"]=True
+    out["model_technology_proxy"]=out.fuel.map(MAPPING)
+    out["modeled_wind_proxy_not_equivalent_to_integrated_storage_or_total_wind"]=True
     out["modeled_baseline_mwh"]=out.apply(
         lambda row:float(model.loc[(row.ba,row.model_technology_proxy)])
         if row.fuel in MAPPING else float("nan"),axis=1)
@@ -114,7 +124,8 @@ def main():
     out=Path(args.output);out.parent.mkdir(parents=True,exist_ok=True)
     result.to_csv(out,index=False)
     audit={"year":args.year,"start_utc":args.start,"hours_per_ba":168,
-           "fuel_category_ba_groups":len(result),\n           "source_fuel_categories":sorted(result.fuel.unique().tolist()),\n           "fully_observed_fuel_groups":
+           "fuel_category_ba_groups":len(result),
+           "source_fuel_categories":sorted(result.fuel.unique().tolist()),\n           "fully_observed_fuel_groups":
            int(result.reported_hours.eq(168).sum()),
            "partially_or_entirely_blank_fuel_groups":int(result.reported_hours.lt(168).sum()),
            "observed_fuel_columns_not_imputed":True,
