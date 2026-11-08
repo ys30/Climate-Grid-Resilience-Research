@@ -12,7 +12,7 @@ BAS=("AZPS","BPAT","CISO","SRP")
 
 
 def calculate(annual_summaries,monthly_summaries,source_meta):
-    if set(annual_summaries)!=set(monthly_summaries)!={2023,2024}:
+    if set(annual_summaries)!={2023,2024} or set(monthly_summaries)!={2023,2024}:
         raise ValueError("Both 2023 and 2024 source-year comparisons required")
     if {int(m["year"]) for m in source_meta}!={2023,2024} or any(m["actual_hourly_dispatch_or_EENS_calibrated"] for m in source_meta):
         raise ValueError("Missing audited original-source monthly manifest")
