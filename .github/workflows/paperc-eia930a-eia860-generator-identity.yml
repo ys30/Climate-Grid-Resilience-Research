@@ -1,0 +1,86 @@
+name: Paper C EIA930A versus annual EIA860 exact generator identity audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia930a-eia860-generator-identity.yml'
+      - 'src/grid_resilience/paperc_eia930a_eia860_generator_match.py'
+      - 'tests/test_paperc_eia930a_eia860_generator_match.py'
+jobs:
+  annual-identity-coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Regression-test exact identity, BA conflicts and fallback exclusion
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install openpyxl
+          python -m pytest -q tests/test_paperc_eia930a_eia860_generator_match.py
+      - name: Download original annual EIA860 and EIA930A official archives with SHA256
+        run: |
+          mkdir -p outputs/identity/raw outputs/identity/results
+          python - <<'PY'
+          from urllib.request import Request,urlopen
+          from pathlib import Path
+          import hashlib,json
+          root=Path("outputs/identity/raw")
+          manifest=[]
+          for year in (2023,2024):
+              sources=[
+                (f"eia860{year}.zip",f"https://www.eia.gov/electricity/data/eia860/archive/xls/eia860{year}.zip"),
+                (f"eia930a{year}.xlsx",f"https://www.eia.gov/electricity/930-content/EIA_930A_{year}_with%20layout.xlsx")]
+              for filename,url in sources:
+                  with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                      content=r.read()
+                      resolved=r.geturl()
+                  if len(content)<100000 or not content.startswith(b"PK"):
+                      raise ValueError("Invalid official annual source "+filename)
+                  (root/filename).write_bytes(content)
+                  manifest.append({"year":year,"filename":filename,"official_url":url,
+                                   "resolved_url":resolved,"sha256":hashlib.sha256(content).hexdigest(),
+                                   "source_bytes":len(content)})
+          (root/"official_source_provenance_sha256.json").write_text(json.dumps(manifest,indent=2)+"\n")
+          print(json.dumps(manifest,indent=2))
+          PY
+      - name: Match EIA930A Schedule 2 EIA-860 IDs to year-specific annual Operable inventory
+        run: |
+          python -m grid_resilience.paperc_eia930a_eia860_generator_match \
+            --archive2023 outputs/identity/raw/eia8602023.zip \
+            --archive2024 outputs/identity/raw/eia8602024.zip \
+            --roster2023 outputs/identity/raw/eia930a2023.xlsx \
+            --roster2024 outputs/identity/raw/eia930a2024.xlsx \
+            --output outputs/identity/results
+          python - <<'PY'
+          from pathlib import Path
+          import json,pandas as pd
+          root=Path("outputs/identity/results")
+          manifests=json.loads((root/"eia930a_860_generator_identity_scope.json").read_text())
+          assert {m["year"] for m in manifests}=={2023,2024}
+          for year,expected in ((2023,{"AZPS":131,"BPAT":300,"CISO":1619,"SRP":94}),
+                                (2024,{"AZPS":133,"BPAT":298,"CISO":1434,"SRP":95})):
+              x=pd.read_csv(root/f"eia930a_eia860_exact_generator_join_{year}.csv")
+              y=pd.read_csv(root/f"eia930a_eia860_fourba_match_summary_{year}.csv")
+              assert y.set_index("ba").eia930a_schedule2_rows.to_dict()==expected
+              assert not y.complete_generator_coverage_certified.any()
+              assert not y.hourly_firm_capacity_or_EENS_calibrated.any()
+              assert x.loc[x.eia860_generator_id_recognized.eq(False),
+                           "match_class"].eq("no_eia930a_source_identity").all()
+              assert y[["exact_identity_and_same_ba_rows","exact_identity_ba_conflict_rows",
+                        "sameyear_operable_unmatched_rows","source_identity_missing_rows"]].sum(axis=1).equals(
+                         y.eia930a_schedule2_rows)
+              print(f"YEAR {year} GENERATOR MATCH EVIDENCE:",y.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-2023-2024-eia930a-eia860-exact-generator-id-and-ba-match
+          path: |
+            outputs/identity/raw/official_source_provenance_sha256.json
+            outputs/identity/results/
+          if-no-files-found: warn
