@@ -79,7 +79,8 @@ jobs:
                   assert m["observed_fuel_columns_not_imputed"]
                   assert not m["historical_energy_not_served_estimated"]
                   assert not p.actual_generation_coverage_fraction_certified.any()
-                  assert (p.reported_hours+p.blank_hours).eq(168).all()
+                  assert (p.reported_hours+p.blank_hours+p.missing_entire_ba_hours).eq(168).all()
+                  assert p.loc[p.missing_entire_ba_hours.gt(0),"official_ba_net_generation_mwh"].isna().all()
                   assert p.loc[p.reported_hours.lt(168),"observed_full_period_mwh"].isna().all()
                   for fuel in ("Natural Gas", "Wind" if year==2023 else "Wind without Integrated Battery Storage"):
                       v=p.loc[p.fuel.eq(fuel)]
@@ -90,6 +91,8 @@ jobs:
                   records.append({"year":year,"variant":variant,
                       "fully_reported_fuel_groups":m["fully_observed_fuel_groups"],
                       "partially_or_entirely_blank_fuel_groups":m["partially_or_entirely_blank_fuel_groups"],
+                      "missing_source_ba_hours_total":m["missing_source_ba_hours_total"],
+                      "full_sevenday_source_generation_admitted":m["full_sevenday_observed_generation_sums_admitted"],
                       "observed_reported_fuel_is_not_model_equivalent":True,
                       "physical_reliability_calibrated":False})
           pd.DataFrame(records).to_csv(root/"year_network_eia930_fuel_scope_summary.csv",index=False)
