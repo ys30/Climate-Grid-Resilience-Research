@@ -1,0 +1,59 @@
+name: Paper C original EIA930 hourly natural gas four-BA two-cohort figure
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-eia930-original-hourly-gas-figure.yml'
+      - 'src/grid_resilience/paperc_eia930_hourly_gas_figure.py'
+      - 'tests/test_paperc_eia930_hourly_gas_figure.py'
+jobs:
+  source-hourly-gas-supplement:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate source-hourly reported gas and distinct UTC 2023/24 periods
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_eia930_hourly_gas_figure.py
+      - name: Restore source-audited original EIA930 2023/24 stable fuel hourly CSV
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/gasfigure/source outputs/gasfigure/results
+          gh run download 42462843256 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-official-eia930-2023-2024-stable-fuel-observed-168h-no-imputation \
+            --dir outputs/gasfigure/source
+      - name: Plot four independent BA source natural gas hourly curves and source values
+        run: |
+          python -m grid_resilience.paperc_eia930_hourly_gas_figure \
+            --source outputs/gasfigure/source/paperc_stable_category_two_cohorts_hourly.csv \
+            --manifest outputs/gasfigure/source/paperc_stable_category_source_scope.json \
+            --output outputs/gasfigure/results
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          root=Path("outputs/gasfigure/results")
+          x=pd.read_csv(root/"paperc_original_hourly_natural_gas_2023_2024_fourba.csv")
+          assert len(x)==1344 and x.groupby(["year","ba"]).size().eq(168).all()
+          totals=x.groupby(["year","ba"]).reported_fuel_mwh.sum()
+          assert totals.loc[(2023,"CISO")]==2090547.
+          assert totals.loc[(2024,"CISO")]==2076666.
+          assert totals.loc[(2024,"AZPS")]==203967.
+          scope=json.loads((root/"source_gas_hourly_figure_scope.json").read_text())
+          assert scope["generator_level_hourly_capacity_or_EENS_verified"] is False
+          for fmt in ("pdf","png"):
+              assert (root/f"fig_paperc_eia930_fourba_original_hourly_natural_gas.{fmt}").stat().st_size>10000
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-official-eia930-2023-2024-fourba-hourly-natural-gas-figure
+          path: outputs/gasfigure/results/
+          if-no-files-found: error
