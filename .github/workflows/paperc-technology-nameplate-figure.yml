@@ -1,0 +1,57 @@
+name: Paper C EIA930A monthly-roster nameplate BA technology supplemental figure
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-technology-nameplate-figure.yml'
+      - 'src/grid_resilience/paperc_technology_nameplate_figure.py'
+      - 'tests/test_paperc_technology_nameplate_figure.py'
+jobs:
+  source-scoped-technology-figure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test source-fraction and zero-denominator safety
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_technology_nameplate_figure.py
+      - name: Restore official-vintage matched BA technology inventory and original cohort
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/techfigure/source outputs/techfigure/figure
+          gh run download 42460680310 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-eia930a-2023-2024-fourba-technology-matched-vs-monthly-nameplate \
+            --dir outputs/techfigure/source
+      - name: Draw audit-scoped publication supplement with N/A for zero-capacity denominator
+        run: |
+          python -m grid_resilience.paperc_technology_nameplate_figure \
+            --source2023 outputs/techfigure/source/results/paperc_2023_ba_technology_nameplate.csv \
+            --source2024 outputs/techfigure/source/results/paperc_2024_ba_technology_nameplate.csv \
+            --manifest outputs/techfigure/source/results/paperc_year_specific_monthly_nameplate_scope.json \
+            --output outputs/techfigure/figure
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/techfigure/figure")
+          s=pd.read_csv(p/"source_only_technology_nameplate_matching_fraction_2024.csv")
+          c=s.loc[s["Unnamed: 0"].eq("CISO"),"battery_storage"].iloc[0]
+          assert .77<c<.79
+          m=json.loads((p/"source_scoped_figure_manifest.json").read_text())
+          assert m["physical_adequacy_or_EENS_calibrated"] is False
+          for extension in ("png","pdf"):
+              assert (p/f"fig_paperc_ba_technology_source_vintage_nameplate.{extension}").stat().st_size>10000
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2023-2024-ba-technology-monthly-roster-nameplate-heatmap
+          path: outputs/techfigure/figure/
+          if-no-files-found: error
