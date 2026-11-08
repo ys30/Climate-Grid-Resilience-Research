@@ -49,9 +49,13 @@ def test_missing_fuel_remains_missing_not_zero(tmp_path):
     assert z.signed_observed_mwh_reported_hours_only==1670
 
 
-def test_missing_ba_hour_fails_closed(tmp_path):
-    with pytest.raises(ValueError,match="Incomplete official"):
-        extract(official_fixture(tmp_path,missing=True),"2023-07-10T00:00:00Z")
+def test_missing_ba_hour_retained_as_null_and_ineligible_for_full_sum(tmp_path):
+    x=extract(official_fixture(tmp_path,missing=True),"2023-07-10T00:00:00Z")
+    z=x.loc[x.ba.eq("SRP") & x.fuel.eq("Natural Gas")].iloc[0]
+    assert z.source_ba_hours==167 and z.missing_entire_ba_hours==1
+    assert z.blank_hours==0 and z.reported_hours==167
+    assert np.isnan(z.observed_full_period_mwh)
+    assert np.isnan(z.official_ba_net_generation_mwh)
 
 
 def test_model_output_separate_from_observed_scope(tmp_path):
