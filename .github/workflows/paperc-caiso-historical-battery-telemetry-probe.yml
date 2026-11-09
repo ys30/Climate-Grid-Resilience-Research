@@ -1,0 +1,54 @@
+name: Paper C historical CAISO 5-minute battery telemetry endpoint audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-historical-battery-telemetry-probe.yml'
+jobs:
+  original-outlook-feed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit documented historical CAISO Today's Outlook raw CSV for sample cohort edge dates
+        run: |
+          mkdir -p outputs/caiso_telemetry_probe
+          python - <<'PY'
+          import hashlib,json,csv,io
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from urllib.error import URLError,HTTPError
+          probes=[]
+          for day in ("20230709","20230710","20240630","20240701","20240707"):
+              for base in ("https://www.caiso.com/outlook/SP/History",
+                           "https://www.caiso.com/outlook/history"):
+                  for category in ("storage.csv","fuelsource.csv"):
+                      url=f"{base}/{day}/{category}"
+                      item={"local_trade_date":day,"url":url}
+                      try:
+                          with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),
+                                       timeout=18) as r:
+                              content=r.read();item["http_status"]=r.status
+                              item["resolved_url"]=r.geturl()
+                          item["bytes"]=len(content)
+                          item["sha256"]=hashlib.sha256(content).hexdigest()
+                          first=content[:500].decode("utf-8-sig",errors="replace")
+                          item["first_500_text"]=first
+                          if r.status==200 and len(content)>300 and "<html" not in first.lower():
+                              reader=csv.reader(io.StringIO(content.decode("utf-8-sig",errors="replace")))
+                              item["first_3_csv_rows"]=[next(reader,None) for _ in range(3)]
+                              item["probably_valid_numeric_csv"]=True
+                      except Exception as e:item["error"]=f"{type(e).__name__}: {str(e)[:130]}"
+                      probes.append(item)
+                      print("CAISO HISTORICAL TELEMETRY PROBE",json.dumps(item))
+          Path("outputs/caiso_telemetry_probe/historical_five_minute_caiso_endpoint_availability.json").write_text(
+              json.dumps(probes,indent=2)+"\n")
+          assert len(probes)==20
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-caiso-historical-5min-2023-2024-outlook-endpoint-provenance
+          path: outputs/caiso_telemetry_probe/
+          if-no-files-found: error
