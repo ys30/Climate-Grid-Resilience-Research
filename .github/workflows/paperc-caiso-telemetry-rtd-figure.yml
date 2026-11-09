@@ -1,0 +1,63 @@
+name: Paper C CAISO 2023 2024 battery telemetry RTD market figure and lag sensitivity
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-telemetry-rtd-figure.yml'
+      - 'src/grid_resilience/paperc_caiso_telemetry_rtd_figure.py'
+      - 'tests/test_paperc_caiso_telemetry_rtd_figure.py'
+jobs:
+  source-signature-plot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test source presence, UTC time and exact offset sensitivity grid
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_caiso_telemetry_rtd_figure.py
+      - name: Restore independently authenticated five minute telemetry versus market cohort
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/caiso_compare/source outputs/caiso_compare/figure
+          gh run download 42672045610 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-caiso-2023-2024-five-minute-battery-telemetry-vs-market-RTD \
+            --dir outputs/caiso_compare/source
+      - name: Render independent-source five-minute profiles and five-offset sensitivity
+        run: |
+          python -m grid_resilience.paperc_caiso_telemetry_rtd_figure \
+            --source outputs/caiso_compare/source/ca_iso_telemetry_vs_preliminary_rtd_lesr_en.csv \
+            --manifest outputs/caiso_compare/source/ca_iso_telemetry_vs_rtd_scope.json \
+            --output outputs/caiso_compare/figure
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          root=Path("outputs/caiso_compare/figure")
+          s=pd.read_csv(root/"paperc_caiso_battery_rtd_5min_shift_sensitivity.csv")
+          m=json.loads((root/"paperc_battery_telemetry_market_figure_scope.json").read_text())
+          assert len(s)==10
+          assert set(s.rtd_market_utc_shift_minutes_for_sensitivity)=={-10,-5,0,5,10}
+          zero=s[s.rtd_market_utc_shift_minutes_for_sensitivity.eq(0)].set_index("year")
+          assert zero.loc[2023,"paired_source_five_minute_points"]==2004
+          assert zero.loc[2024,"paired_source_five_minute_points"]==2016
+          assert zero.loc[2023,"pearson_correlation_descriptive_only"]>.97
+          assert zero.loc[2024,"pearson_correlation_descriptive_only"]>.99
+          assert m["telemetry_and_market_not_same_resource_population"]
+          assert m["no_actual_hourly_available_capacity_or_EENS_claim"]
+          for ext in ("png","pdf"):
+              assert (root/f"fig_paperc_caiso_five_minute_battery_outlook_vs_rtd.{ext}").stat().st_size>10000
+          print("VERIFIED FIVE-MINUTE LAG SENSITIVITY",s.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-caiso-2023-2024-five-minute-battery-telemetry-RTD-profile-and-lag
+          path: outputs/caiso_compare/figure/
+          if-no-files-found: error
