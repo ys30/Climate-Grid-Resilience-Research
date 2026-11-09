@@ -101,11 +101,13 @@ def comparison(tele,market):
                  market.output_type.eq("EN")].copy()
     d["utc_5min_start"]=(
         pd.to_datetime(d.utc_hour_start_from_local_trade_date,utc=True)+
-        pd.to_timedelta((pd.to_numeric(d.interval_index)-1)*5,unit="min")).astype(str)
+        pd.to_timedelta((pd.to_numeric(d.interval_index)-1)*5,unit="min"))
     d=d.rename(columns={"eia930_study_year":"year",
                          "original_market_value":"rtd_lesr_en_preliminary_market_value"})
     if d.duplicated(["year","utc_5min_start"]).any():
         raise ValueError("Market RTD source has duplicate UTC five-minute interval")
+    tele=tele.copy()
+    tele["utc_5min_start"]=pd.to_datetime(tele.utc_5min_start,utc=True)
     pairs=tele.merge(d[["year","utc_5min_start",
                        "rtd_lesr_en_preliminary_market_value"]],
                     on=["year","utc_5min_start"],how="left",
