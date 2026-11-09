@@ -33,8 +33,8 @@ jobs:
       - name: Compute source-only signed power percentiles run lengths and UTC hourly cohorts
         run: |
           python -m grid_resilience.paperc_caiso_battery_observed_envelope \
-            --source outputs/caiso_observed/source/ca_iso_original_battery_telemetry_5min.csv \
-            --source-manifest outputs/caiso_observed/source/ca_iso_telemetry_vs_rtd_scope.json \
+            --source outputs/caiso_observed/source/results/ca_iso_original_battery_telemetry_5min.csv \
+            --source-manifest outputs/caiso_observed/source/results/ca_iso_telemetry_vs_rtd_scope.json \
             --output outputs/caiso_observed/results
           python - <<'PY'
           from pathlib import Path
