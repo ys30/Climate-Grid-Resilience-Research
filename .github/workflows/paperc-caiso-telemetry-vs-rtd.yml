@@ -1,0 +1,95 @@
+name: Paper C CAISO 2023-2024 5min batteries telemetry vs RTD market source audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-telemetry-vs-rtd.yml'
+      - 'src/grid_resilience/paperc_caiso_telemetry_vs_rtd.py'
+      - 'tests/test_paperc_caiso_telemetry_vs_rtd.py'
+jobs:
+  cross-source-5min-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 32
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test historical local-day-to-UTC and market source reporting differences
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_caiso_telemetry_vs_rtd.py
+      - name: Restore independent original CAISO market RTD source and interval ID audit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/caiso_cross/raw outputs/caiso_cross/market outputs/caiso_cross/results
+          gh run download 42511395768 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-caiso-2023-2024-utc-matched-storage-market-source-evidence \
+            --dir outputs/caiso_cross/market
+      - name: Fetch every original CAISO historical five-minute battery and fuel source local day
+        run: |
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          root=Path("outputs/caiso_cross/raw")
+          index=[];checksums=[]
+          for year,first,last in ((2023,"2023-07-09","2023-07-16"),
+                                   (2024,"2024-06-30","2024-07-07")):
+              import pandas as pd
+              for date in pd.date_range(first,last,freq="D"):
+                  day=date.strftime("%Y%m%d")
+                  local=date.strftime("%Y-%m-%d")
+                  paths={}
+                  for typ in ("storage","fuelsource"):
+                      url=f"https://www.caiso.com/outlook/history/{day}/{typ}.csv"
+                      with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=30) as r:
+                          data=r.read();resolved=r.geturl()
+                      if len(data)<500 or data.startswith(b"<"):
+                          raise ValueError("Unavailable historical CAISO source; do not impute "+url)
+                      name=f"{day}_{typ}.csv"
+                      path=root/name;path.write_bytes(data)
+                      paths[typ+"_csv"]=str(path)
+                      checksums.append({"year":year,"local_trade_date":local,
+                          "official_source":url,"resolved_source":resolved,
+                          "file_name":name,"sha256":hashlib.sha256(data).hexdigest(),
+                          "file_bytes":len(data)})
+                  index.append({"year":year,"local_date":local,**paths})
+          (root/"official_daily_telemetry_source_index.json").write_text(json.dumps(index,indent=2)+"\n")
+          (root/"original_ca_iso_daily_csv_sha256.json").write_text(json.dumps(checksums,indent=2)+"\n")
+          assert len(index)==16 and len(checksums)==32
+          PY
+      - name: Exact UTC five-minute join, no replacement of market missing intervals
+        run: |
+          python -m grid_resilience.paperc_caiso_telemetry_vs_rtd \
+            --index outputs/caiso_cross/raw/official_daily_telemetry_source_index.json \
+            --market outputs/caiso_cross/market/results/paperc_caiso_original_market_output_2023_2024_study_weeks.csv \
+            --output outputs/caiso_cross/results
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          root=Path("outputs/caiso_cross/results")
+          d=pd.read_csv(root/"ca_iso_telemetry_vs_preliminary_rtd_lesr_en.csv")
+          s=pd.read_csv(root/"ca_iso_market_vs_telemetry_descriptive_summary.csv")
+          meta=json.loads((root/"ca_iso_telemetry_vs_rtd_scope.json").read_text())
+          assert len(d)==4032
+          assert d.groupby("year").size().to_dict()=={2023:2016,2024:2016}
+          assert s.set_index("year").rtd_market_missing_intervals.to_dict()=={2023:12,2024:0}
+          assert d.loc[d.rtd_lesr_en_preliminary_market_value.isna(),
+                       "telemetry_minus_market_as_descriptive_gap_only"].isna().all()
+          assert meta["market_EN_is_preliminary_not_settlement_metering"]
+          assert not meta["no_reliability_or_EENS_calibration"] is False
+          print("CAISO 2023-2024 TELEMETRY VERSUS MARKET RTD:",s.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-caiso-2023-2024-five-minute-battery-telemetry-vs-market-RTD
+          path: |
+            outputs/caiso_cross/raw/original_ca_iso_daily_csv_sha256.json
+            outputs/caiso_cross/results/
+          if-no-files-found: warn
