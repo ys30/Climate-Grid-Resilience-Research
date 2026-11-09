@@ -1,0 +1,95 @@
+name: Paper C 2024 source-joined four BA historical baseline admission
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-baseline-admission.yml'
+      - 'src/grid_resilience/paperc_2024_baseline_admission.py'
+      - 'tests/test_paperc_2024_baseline_admission.py'
+jobs:
+  historical-baseline-data-eligibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 32
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Regression test original BA hour/category and fail-shut EENS admission
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_2024_baseline_admission.py
+      - name: Restore two audited original-source evidence archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/admission/fuel outputs/admission/battery outputs/admission/raw outputs/admission/balance outputs/admission/results
+          gh run download 42462457999 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-official-eia930-2023-2024-hourly-fuel-panel-original-schema \
+            --dir outputs/admission/fuel
+          gh run download 42674867012 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-caiso-2023-2024-observed-battery-five-minute-power-envelope \
+            --dir outputs/admission/battery
+      - name: Download original EIA 2024 first/second half source archives
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen,Request
+          import hashlib,json
+          out=Path("outputs/admission/raw")
+          manifest=[]
+          for part in ("Jan_Jun","Jul_Dec"):
+              url=f"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_{part}.csv"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  data=r.read()
+              assert len(data)>10000
+              (out/f"EIA930_BALANCE_2024_{part}.csv").write_bytes(data)
+              manifest.append({"partition":part,"original_url":url,
+                               "sha256":hashlib.sha256(data).hexdigest()})
+          (out/"original_eia_2024_sha256.json").write_text(json.dumps(manifest,indent=2)+"\n")
+          PY
+      - name: Independently re-audit source balance on exact 168-hour four BA period
+        run: |
+          python -m grid_resilience.paperc_eia930_2024_weekly_balance_gate \
+            --jan-jun outputs/admission/raw/EIA930_BALANCE_2024_Jan_Jun.csv \
+            --jul-dec outputs/admission/raw/EIA930_BALANCE_2024_Jul_Dec.csv \
+            --output outputs/admission/balance
+      - name: Exact original source hour-join and strict physical baseline/EENS exclusion
+        run: |
+          python -m grid_resilience.paperc_2024_baseline_admission \
+            --balance outputs/admission/balance/paper_c_july2024_168h_raw_ba_balance_hourly.csv \
+            --fuel outputs/admission/fuel/results/paperc_2023_2024_original_hourly_ba_fuel_labels.csv \
+            --balance-manifest outputs/admission/balance/paper_c_july2024_raw_ba_balance_manifest.json \
+            --fuel-manifest outputs/admission/fuel/results/paperc_2023_2024_original_fuel_reporting_scope.json \
+            --battery-manifest outputs/admission/battery/caiso_battery_observation_scope_and_reliability_gate.json \
+            --output outputs/admission/results
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          out=Path("outputs/admission/results")
+          d=pd.read_csv(out/"paper_c_2024_historical_baseline_source_admission_by_ba.csv")
+          f=pd.read_csv(out/"paper_c_2024_original_fuel_report_completeness_by_ba.csv")
+          m=json.loads((out/"paper_c_2024_historical_baseline_admission_scope.json").read_text())
+          assert len(d)==4 and len(f)==32
+          assert d.observed_utc_hour_start_count.eq(168).all()
+          assert d.hourly_original_demand_present_count.eq(168).all()
+          assert d.hourly_original_net_generation_present_count.eq(168).all()
+          assert d.loc[d.ba.eq("CISO"),"raw_total_interchange_missing_hours"].iloc[0]==144
+          assert d.loc[d.ba.eq("BPAT"),"raw_arithmetic_nonclosing_or_incomplete_hours"].iloc[0]==168
+          assert not d.historical_pypsa_four_ba_calibration_admissible.any()
+          assert not d.historical_EENS_or_shortage_inference_admissible.any()
+          assert d.modern_original_battery_reported_hours.eq(0).all()
+          assert m["no_historical_energy_not_served_calculated"]
+          print("2024 SOURCE-BASED PHYSICAL BASELINE ADMISSION GATES",d.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-2024-source-joined-fourba-historical-baseline-admission
+          path: |
+            outputs/admission/raw/original_eia_2024_sha256.json
+            outputs/admission/results/
+          if-no-files-found: warn
