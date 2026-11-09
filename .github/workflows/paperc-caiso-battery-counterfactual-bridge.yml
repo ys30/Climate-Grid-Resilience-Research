@@ -1,0 +1,63 @@
+name: Paper C CISO battery empirically scaled counterfactual StorageUnit inputs
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-battery-counterfactual-bridge.yml'
+      - 'src/grid_resilience/paperc_caiso_battery_counterfactual_bridge.py'
+      - 'tests/test_paperc_caiso_battery_counterfactual_bridge.py'
+jobs:
+  test-source-envelope-scenario-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test input dimensionality and reject falsely certified storage
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_caiso_battery_counterfactual_bridge.py
+      - name: Restore independently verified original source CAISO 5min observed envelopes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/ciso_bridge/source outputs/ciso_bridge/results
+          gh run download 42674867012 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-caiso-2023-2024-observed-battery-five-minute-power-envelope \
+            --dir outputs/ciso_bridge/source
+      - name: Generate conservative observed-scale but explicitly hypothetical PyPSA StorageUnit CSV grid
+        run: |
+          python -m grid_resilience.paperc_caiso_battery_counterfactual_bridge \
+            --source outputs/ciso_bridge/source/caiso_battery_observed_5min_power_envelope_summary.csv \
+            --output outputs/ciso_bridge/results
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          p=Path("outputs/ciso_bridge/results")
+          s=pd.read_csv(p/"paper_c_ciso_battery_counterfactual_storageunit_matrix.csv")
+          m=json.loads((p/"paper_c_ciso_battery_counterfactual_scenario_scope.json").read_text())
+          assert len(s)==32
+          assert len(list((p/"storageunit_csv").glob("*.csv")))==32
+          assert set(s.ba)=={"CISO"}
+          assert (s.power_mw>0).all()
+          assert s.energy_mwh.div(s.power_mw).isin([2.,4.]).all()
+          assert not s.historical_dispatch_reconstructed.any()
+          assert not s.observed_EENS_inferred.any()
+          assert m["no_historical_unserved_energy_or_EENS_claim"]
+          for year in (2023,2024):
+              t=s[(s.observed_source_data_year==year)&(s.source_series=="total")&
+                    (s.observed_percentile_positive_only==95)]
+              assert len(t)==4
+              print("SOURCE-SCALED HYPOTHETICAL CISO POWER",year,t.power_mw.iloc[0])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-ciso-battery-observed-scale-counterfactual-pypsa-storageunit-inputs
+          path: outputs/ciso_bridge/results/
+          if-no-files-found: error
