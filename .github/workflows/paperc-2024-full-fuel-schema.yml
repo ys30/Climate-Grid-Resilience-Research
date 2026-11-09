@@ -1,0 +1,63 @@
+name: Paper C 2024 161h complete original EIA930 fuel schema
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-full-fuel-schema.yml'
+      - 'src/grid_resilience/paperc_2024_full_fuel_schema_audit.py'
+      - 'tests/test_paperc_2024_full_fuel_schema_audit.py'
+jobs:
+  original-fuel-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify all category/source null and exact hour-join tests
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_2024_full_fuel_schema_audit.py
+      - name: Restore independently CI verified full original fuel and six-category panel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/fuel_all/source outputs/fuel_all/six outputs/fuel_all/results
+          gh run download 42462457999 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-official-eia930-2023-2024-hourly-fuel-panel-original-schema \
+            --dir outputs/fuel_all/source
+          gh run download 42704596752 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-2024-161h-original-six-fuel-observed-ba-hour-cohort \
+            --dir outputs/fuel_all/six
+      - name: Check source-admitted all labels on 161 original 2024 modern-schema hours
+        run: |
+          python -m grid_resilience.paperc_2024_full_fuel_schema_audit \
+            --fuel outputs/fuel_all/source/results/paperc_2023_2024_original_hourly_ba_fuel_labels.csv \
+            --six outputs/fuel_all/six/results/paperc_july2024_161h_ba_six_fuel_original_hourly.csv \
+            --manifest outputs/fuel_all/source/results/paperc_2023_2024_original_fuel_reporting_scope.json \
+            --output outputs/fuel_all/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/fuel_all/results")
+          x=pd.read_csv(p/"paper_c_2024_161h_full_original_fuel_hourly_completeness.csv")
+          s=pd.read_csv(p/"paper_c_2024_161h_full_original_fuel_ba_summary.csv")
+          m=json.loads((p/"paper_c_2024_161h_full_fuel_source_scope.json").read_text())
+          assert len(x)==644 and s.original_hours.eq(161).all()
+          assert len(m["original_category_labels"])>=12
+          assert x.groupby("ba").size().eq(161).all()
+          assert x.loc[~x.all_original_categories_numeric,
+                       "all_category_reported_mwh_only_if_complete"].isna().all()
+          assert not s.loc[s.ba.eq("BPAT"),"hours_all_original_categories_numeric"].iloc[0]
+          assert m["source_difference_not_physical_shortage_or_EENS"]
+          print("VERIFIED ORIGINAL SOURCE ALL-FUEL COMPLETENESS",s.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2024-161h-all-original-fuel-source-reporting-audit
+          path: outputs/fuel_all/results/
+          if-no-files-found: error
