@@ -2,7 +2,7 @@
 
 ## Verified original-source cohort and source provenance
 
-The exact original EIA-930 2024 first/second half-year raw BA hourly records, source-native hourly fuel data and independent CAISO five-minute storage-power provenance are now jointly audited by BA and UTC-hour key: [four-BA source-joined admission CI #42688609587 — SUCCESS](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42688609587), with four regression checks. [Download source-joined historical baseline eligibility CSV, 32 category-completeness records, source scope and EIA-930 SHA256 (artifact 13705937117)](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42688609587/artifacts/13705937117).
+The exact original EIA-930 2024 first/second half-year raw BA hourly records, source-native hourly fuel data and independent CAISO five-minute storage-power provenance are now jointly audited by BA and UTC-hour key: [four-BA source-joined admission CI #42688934228 — SUCCESS](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42688934228), with four regression checks. [Download source-joined historical baseline eligibility CSV, 32 category-completeness records, source scope and EIA-930 SHA256 (artifact 13705614098)](https://github.com/ys30/Climate-Grid-Resilience-Research/actions/runs/42688934228/artifacts/13705614098).
 
 The [audit implementation](../src/grid_resilience/paperc_2024_baseline_admission.py) performs:
 1. Exact **168 UTC start-hour × 4 BA = 672** joined original EIA-930 raw demand, net generation and interchange record keys, preserving 2024 July's **seven Jan–Jun + 161 Jul–Dec** original source partitions per BA.
