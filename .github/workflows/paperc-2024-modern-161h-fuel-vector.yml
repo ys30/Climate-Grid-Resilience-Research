@@ -1,0 +1,89 @@
+name: Paper C 2024 161h coherent original six-fuel observation vector
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-modern-161h-fuel-vector.yml'
+      - 'src/grid_resilience/paperc_2024_modern_161h_fuel_vector.py'
+      - 'tests/test_paperc_2024_modern_161h_fuel_vector.py'
+jobs:
+  source-coherent-fuel-reporting:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 26
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate no missing-as-zero or cross-schema 168h fuel total
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_2024_modern_161h_fuel_vector.py
+      - name: Restore independently archived original BA balance and EIA fuel source records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/coherent/source_balance outputs/coherent/source_fuel outputs/coherent/results
+          gh run download 42688609587 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-2024-source-joined-fourba-historical-baseline-admission \
+            --dir outputs/coherent/source_balance
+          gh run download 42462457999 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-official-eia930-2023-2024-hourly-fuel-panel-original-schema \
+            --dir outputs/coherent/source_fuel
+      - name: Download and re-audit official 2024 BA hourly demand and net generation
+        run: |
+          mkdir -p outputs/coherent/raw
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen,Request
+          import hashlib,json
+          out=Path("outputs/coherent/raw")
+          checks=[]
+          for part in ("Jan_Jun","Jul_Dec"):
+              url=f"https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2024_{part}.csv"
+              with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+                  data=r.read()
+              assert len(data)>10000
+              (out/f"original_EIA930_{part}.csv").write_bytes(data)
+              checks.append({"part":part,"sha256":hashlib.sha256(data).hexdigest(),
+                             "original_url":url})
+          (out/"source_sha256.json").write_text(json.dumps(checks,indent=2)+"\n")
+          PY
+          python -m grid_resilience.paperc_eia930_2024_weekly_balance_gate \
+            --jan-jun outputs/coherent/raw/original_EIA930_Jan_Jun.csv \
+            --jul-dec outputs/coherent/raw/original_EIA930_Jul_Dec.csv \
+            --output outputs/coherent/source_balance
+      - name: Produce actual original 161h fuel observations with strict completeness flags
+        run: |
+          python -m grid_resilience.paperc_2024_modern_161h_fuel_vector \
+            --balance outputs/coherent/source_balance/paper_c_july2024_168h_raw_ba_balance_hourly.csv \
+            --fuel outputs/coherent/source_fuel/results/paperc_2023_2024_original_hourly_ba_fuel_labels.csv \
+            --manifest outputs/coherent/source_fuel/results/paperc_2023_2024_original_fuel_reporting_scope.json \
+            --output outputs/coherent/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          out=Path("outputs/coherent/results")
+          d=pd.read_csv(out/"paperc_july2024_161h_ba_six_fuel_original_hourly.csv")
+          s=pd.read_csv(out/"paperc_july2024_161h_ba_six_fuel_source_summary.csv")
+          scope=json.loads((out/"paperc_july2024_161h_source_cohort_scope.json").read_text())
+          assert len(d)==644
+          assert d.groupby("ba").size().eq(161).all()
+          assert s.set_index("ba").loc["BPAT","hours_six_components_all_numeric"]==0
+          assert s.set_index("ba").loc["AZPS","hours_six_components_all_numeric"]==161
+          assert s.set_index("ba").loc["CISO","hours_six_components_all_numeric"]==161
+          assert s.set_index("ba").loc["SRP","hours_six_components_all_numeric"]==161
+          assert d.loc[d.ba.eq("BPAT"),"net_minus_six_source_category_arithmetic_mwh"].isna().all()
+          assert scope["no_real_EENS_or_plant_availability_calibration"]
+          print("SOURCE-COHERENT 161h ORIGINAL COMPONENTS",s.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2024-161h-original-six-fuel-observed-ba-hour-cohort
+          path: |
+            outputs/coherent/raw/source_sha256.json
+            outputs/coherent/results/
+          if-no-files-found: error
