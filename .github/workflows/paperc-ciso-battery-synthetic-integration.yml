@@ -1,0 +1,56 @@
+name: Paper C synthetic CISO battery StorageUnit PyPSA integration
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-ciso-battery-synthetic-integration.yml'
+      - 'src/grid_resilience/paperc_ciso_battery_synthetic_integration.py'
+      - 'tests/test_paperc_ciso_battery_synthetic_integration.py'
+jobs:
+  synthetic-pypsa-interface:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install source-validation and PyPSA HiGHS model runtime
+        run: |
+          python -m pip install -e '.[dev,model]'
+          python -m pytest -q tests/test_paperc_ciso_battery_synthetic_integration.py
+      - name: Restore independently audited CISO source-scale counterfactual case
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/pypsa_smoke/input outputs/pypsa_smoke/results
+          gh run download 42675256298 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-ciso-battery-observed-scale-counterfactual-pypsa-storageunit-inputs \
+            --dir outputs/pypsa_smoke/input
+      - name: Execute three-hour synthetic-only PyPSA CISO storage power and SOC interface
+        run: |
+          python -m grid_resilience.paperc_ciso_battery_synthetic_integration \
+            --storage outputs/pypsa_smoke/input/storageunit_csv/Y2024_total_p95_2h_soc25.csv \
+            --output outputs/pypsa_smoke/results
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          o=Path("outputs/pypsa_smoke/results")
+          d=json.loads((o/"synthetic_ciso_storageunit_integration_scope.json").read_text())
+          assert d["solver_zero_storage_synthetic_unserved_mwh"]==3000
+          assert d["solver_storage_synthetic_unserved_mwh"]<3000
+          assert d["hypothetical_storage_power_mw"]==4930
+          assert d["uses_real_historical_demand"] is False
+          assert d["synthetic_shortfall_is_not_observed_EENS"]
+          for file in ("storage_soc_mwh.csv","storage_charge_mw.csv","storage_discharge_mw.csv"):
+              assert (o/"synthetic_with_storage"/file).exists()
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paperc-ciso-battery-source-scaled-pypsa-synthetic-smoke-only
+          path: outputs/pypsa_smoke/results/
+          if-no-files-found: warn
