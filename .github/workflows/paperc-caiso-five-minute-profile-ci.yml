@@ -1,0 +1,46 @@
+name: Paper C CAISO battery independent-source profile
+on:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-five-minute-profile-ci.yml'
+      - 'src/grid_resilience/paperc_caiso_telemetry_rtd_figure.py'
+      - 'tests/test_paperc_caiso_telemetry_rtd_figure.py'
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test source-audited five-minute offset sensitivity
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install matplotlib
+          python -m pytest -q tests/test_paperc_caiso_telemetry_rtd_figure.py
+      - name: Restore primary telemetry and market join
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/plot/input outputs/plot/artifact
+          gh run download 42672045610 --repo ys30/Climate-Grid-Resilience-Research --name paperc-caiso-2023-2024-five-minute-battery-telemetry-vs-market-RTD --dir outputs/plot/input
+      - name: Render source-only plot and five-lag comparison
+        run: |
+          python -m grid_resilience.paperc_caiso_telemetry_rtd_figure --source outputs/plot/input/ca_iso_telemetry_vs_preliminary_rtd_lesr_en.csv --manifest outputs/plot/input/ca_iso_telemetry_vs_rtd_scope.json --output outputs/plot/artifact
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          p=Path("outputs/plot/artifact")
+          s=pd.read_csv(p/"paperc_caiso_battery_rtd_5min_shift_sensitivity.csv")
+          assert len(s)==10
+          assert s.loc[(s.year==2023)&s.rtd_market_utc_shift_minutes_for_sensitivity.eq(0),"paired_source_five_minute_points"].iloc[0]==2004
+          assert s.loc[(s.year==2024)&s.rtd_market_utc_shift_minutes_for_sensitivity.eq(0),"paired_source_five_minute_points"].iloc[0]==2016
+          assert (p/"fig_paperc_caiso_five_minute_battery_outlook_vs_rtd.png").stat().st_size>10000
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-caiso-battery-five-minute-source-market-profile-verified
+          path: outputs/plot/artifact/
+          if-no-files-found: error
