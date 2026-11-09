@@ -99,6 +99,18 @@ def evaluate(balance,fuels,raw_manifest,fuel_manifest,battery_manifest):
         x=report[report.ba.eq(ba)]
         missing_ti=int(p.net_interchange_mw.isna().sum())
         bad_close=int((~p.raw_arithmetic_closes.astype(bool)).sum())
+        blockers=[]
+        if missing_ti:
+            blockers.append(f"original total-interchange missing {missing_ti}/168 hours")
+        if bad_close-missing_ti:
+            blockers.append(f"raw accounting fails closure in {bad_close-missing_ti} complete hours")
+        blockers.extend([
+            "old/new fuel classification not certified comparable",
+            "technology-complete generator availability not source calibrated",
+            "hydro and battery SOC/energy budget not calibrated",
+            "physical BA intertie transfer limits not source verified"])
+        if ba=="CISO":
+            blockers.append("informational battery telemetry is not certified physical SOC")
         rows.append({
             "year":2024,"ba":ba,
             "observed_utc_hour_start_count":len(p),
@@ -119,11 +131,7 @@ def evaluate(balance,fuels,raw_manifest,fuel_manifest,battery_manifest):
             "hydro_energy_and_storage_constraints_verified":False,
             "historical_pypsa_four_ba_calibration_admissible":False,
             "historical_EENS_or_shortage_inference_admissible":False,
-            "reason_not_admissible":(
-                "Original BA source nonclosure/missing TI; unequal old/new fuel technology "
-                "reporting; unknown hourly plant availability; missing hydro/storage "
-                "energy constraints and verified intertie ratings; CAISO battery "
-                "informational telemetry does not establish SOC or system adequacy.")
+            "reason_not_admissible":"; ".join(blockers)
         })
     matrix=pd.DataFrame(rows)
     if len(report)!=4*(len(STABLE)+len(IMPORTANT_MODERN)):
