@@ -1,0 +1,61 @@
+name: Paper C CISO observed five minute battery power envelope
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-caiso-observed-battery-envelope.yml'
+      - 'src/grid_resilience/paperc_caiso_battery_observed_envelope.py'
+      - 'tests/test_paperc_caiso_battery_observed_envelope.py'
+jobs:
+  verify-observed-envelope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test empirical power envelope with original signed telemetry and no SOC
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_caiso_battery_observed_envelope.py
+      - name: Restore source-verified official CAISO 2023 2024 5min battery telemetry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/caiso_observed/source outputs/caiso_observed/results
+          gh run download 42672045610 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-caiso-2023-2024-five-minute-battery-telemetry-vs-market-RTD \
+            --dir outputs/caiso_observed/source
+      - name: Compute source-only signed power percentiles run lengths and UTC hourly cohorts
+        run: |
+          python -m grid_resilience.paperc_caiso_battery_observed_envelope \
+            --source outputs/caiso_observed/source/ca_iso_original_battery_telemetry_5min.csv \
+            --source-manifest outputs/caiso_observed/source/ca_iso_telemetry_vs_rtd_scope.json \
+            --output outputs/caiso_observed/results
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,json
+          o=Path("outputs/caiso_observed/results")
+          a=pd.read_csv(o/"caiso_battery_observed_5min_power_envelope_summary.csv")
+          h=pd.read_csv(o/"caiso_battery_observed_hourly_power_envelope.csv")
+          d=pd.read_csv(o/"caiso_battery_observed_utc_day_power_envelope.csv")
+          m=json.loads((o/"caiso_battery_observation_scope_and_reliability_gate.json").read_text())
+          assert len(a)==6 and len(h)==1008 and len(d)==42
+          assert a.groupby("year").source_points.sum().to_dict()=={2023:6048,2024:6048}
+          assert h.n_source_5min_points.eq(12).all()
+          assert d.groupby(["year","series"]).observed_five_minute_points.sum().eq(2016).all()
+          assert not a.certified_storage_power_rating_mw_inferred.any()
+          assert not a.matched_battery_soc_mwh_inferred.any()
+          assert m["no_storage_energy_mwh_initial_soc_or_efficiency_inferred"]
+          assert m["no_pypsa_historical_ens_or_reliability_calibrated"]
+          print("ORIGINAL POWER ENVELOPES",a.to_string(index=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-caiso-2023-2024-observed-battery-five-minute-power-envelope
+          path: outputs/caiso_observed/results/
+          if-no-files-found: error
