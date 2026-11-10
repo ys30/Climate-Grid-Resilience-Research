@@ -4,8 +4,8 @@ Increment a *synthetic* perfectly available generic thermal proxy in each BA
 by 0/25/50% of its JULY WEEK-ONE observed BA peak demand. Original source
 EIA-930/ERA5 input hours, originally frozen links and climate stress factors
 are held fixed; this is NOT additional observed EIA860 capacity or a real
-grid adequacy estimate. Week 1 and Week 3 are deliberately selected:
-local negative modeled BA interactions existed in the original linked model.
+grid adequacy estimate. All four non-overlapping July weeks are included to close the predeclared E2
+capacity-sensitivity scope. Adjacent weeks are not independent extreme events.
 """
 import argparse
 import json
@@ -16,7 +16,7 @@ from grid_resilience.research_run import run as run_factorial
 from grid_resilience.july2024_four_week_factorial_replication import CASES, BAS
 
 FRACTIONS=(0.0,0.25,0.50)
-WEEKS=(1,3)
+WEEKS=(1,2,3,4)
 VARIANTS=("isolated","links_10pct")
 TARGET_BAS=tuple(sorted(BAS))
 
@@ -62,7 +62,7 @@ def summarize(records):
               for network in VARIANTS for case in CASES for ba in TARGET_BAS}
     key=["fraction","week","network_variant","scenario","ba"]
     if f.duplicated(key).any() or set(map(tuple,f[key].itertuples(index=False,name=None))) != expected:
-        raise ValueError("Scenario coverage not exact 3x2x2x4x4")
+        raise ValueError("Scenario coverage not exact 3x4x2x4x4")
     f["unserved_energy_mwh"]=pd.to_numeric(f.unserved_energy_mwh,errors="raise")
     if not np.isfinite(f.unserved_energy_mwh).all() or (f.unserved_energy_mwh < -1e-5).any():
         raise ValueError("Nonfinite or invalid model shortage")
@@ -84,7 +84,7 @@ def summarize(records):
                 modeled_heat_wind_second_difference_mwh=interaction
             ))
     summary=pd.DataFrame(rows)
-    if len(summary)!=3*2*2*5:
+    if len(summary)!=3*4*2*5:
         raise ValueError("Wrong detailed stress result count")
     return summary
 
@@ -96,11 +96,11 @@ def validate_original_no_change(summary, original, tolerance=0.001):
     if not needed.issubset(original):
         raise ValueError("Original archived source summary missing")
     o=original.loc[original.event_id.isin([f"JULY2024_WEEK_{w}" for w in WEEKS])].copy()
-    if len(o)!=2*2*5:
+    if len(o)!=4*2*5:
         raise ValueError("Original archived BA/SYSTEM source keys incomplete")
     o["week"]=o.event_id.str.extract(r"WEEK_(\d+)").astype(int)
     compare=x.merge(o,on=["week","network_variant","ba"],how="outer",indicator=True,validate="one_to_one")
-    if not compare._merge.eq("both").all() or len(compare)!=20:
+    if not compare._merge.eq("both").all() or len(compare)!=40:
         raise ValueError("Original zero-add capacity model keys do not match")
     for current,old in [("baseline_modeled_gap_mwh","baseline_shortage_mwh"),
                         ("modeled_heat_wind_second_difference_mwh","modeled_factorial_interaction_mwh")]:
@@ -154,8 +154,8 @@ def main():
         climate_scenario_names=list(CASES),
         original_no_addition_matches_archive_within_mwh=0.001,
         maximum_original_anchor_difference_mwh=difference,
-        scenario_optimizations=48,ba_solver_records=192,
-        local_ba_plus_system_summaries=60,
+        scenario_optimizations=96,ba_solver_records=384,
+        local_ba_plus_system_summaries=120,
         source_2024_partial_fleet_not_complete=True,
         additional_firm_capacity_observed_or_eia860_verified=False,
         physical_network_ratings_calibrated=False,
