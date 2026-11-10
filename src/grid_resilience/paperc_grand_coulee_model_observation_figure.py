@@ -36,8 +36,12 @@ def verify(model, assumptions, observed):
     matches = []
     import re
     for k in keys:
-        numeric = [float(v) for v in re.findall(r"(?<![A-Za-z0-9])\d+(?:\.\d+)?", k)]
-        candidates = [i for i, mw in enumerate(expected_mw) if any(abs(x - mw) < 0.001 for x in numeric)]
+        # Parse only the MW part; the MWh field must not masquerade as a second MW setting.
+        match = re.fullmatch(r"PS_(\\d+)MW_\\d+MWh_eta\\d+", k)
+        if match is None:
+            raise ValueError(f"Malformed original PS scenario identifier: {k}")
+        value_mw = float(match.group(1))
+        candidates = [i for i, mw in enumerate(expected_mw) if abs(value_mw - mw) < 0.001]
         if len(candidates) != 1:
             raise ValueError(f"Ambiguous PS scenario naming: {k}")
         matches.append(candidates[0])
