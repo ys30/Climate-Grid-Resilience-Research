@@ -102,7 +102,7 @@ def reconcile(fuel: pd.DataFrame, six: pd.DataFrame):
         nonzero_eight_hours=("eight_hour_nonzero_difference",
                              lambda v: int(v.sum()) if v.notna().any() else None),
         max_abs_seven_hour_mwh=("seven_hour_abs_difference_mwh", "max"),
-        max_abs_eight_hour_mwh=("eight_hour_abs_difference_mwh", "max")))
+        max_abs_eight_hour_mwh=("eight_hour_abs_difference_mwh", "max"))
     return out, summary
 
 
