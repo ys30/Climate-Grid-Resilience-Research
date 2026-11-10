@@ -75,6 +75,12 @@ def reconcile(fuel: pd.DataFrame, six: pd.DataFrame):
         out.net_minus_six_mwh - out[OTHER]).where(out.seven_numeric)
     out["net_minus_six_plus_other_petroleum_mwh"] = (
         out.net_minus_six_plus_other_mwh - out[PETROLEUM]).where(out.eight_numeric)
+    # Avoid interpreting signed weekly cancellation as hourly reconciliation.
+    # Missing source hours stay null and are excluded from all discrepancy counts.
+    for level in ("seven", "eight"):
+        col = "net_minus_six_plus_other_mwh" if level == "seven" else "net_minus_six_plus_other_petroleum_mwh"
+        out[f"{level}_hour_abs_difference_mwh"] = out[col].abs()
+        out[f"{level}_hour_nonzero_difference"] = out[col].abs().gt(1e-9).where(out[col].notna())
     out["all_16_categories_certified_complete"] = False
     out["difference_is_not_unserved_energy_or_EENS"] = True
     summary = out.groupby("ba", as_index=False).agg(
@@ -89,7 +95,13 @@ def reconcile(fuel: pd.DataFrame, six: pd.DataFrame):
         signed_eight_difference_mwh=("net_minus_six_plus_other_petroleum_mwh",
                                      lambda v: v.sum(min_count=1)),
         abs_eight_difference_mwh=("net_minus_six_plus_other_petroleum_mwh",
-                                  lambda v: v.abs().sum(min_count=1)))
+                                  lambda v: v.abs().sum(min_count=1)),
+        nonzero_seven_hours=("seven_hour_nonzero_difference",
+                             lambda v: int(v.sum()) if v.notna().any() else None),
+        nonzero_eight_hours=("eight_hour_nonzero_difference",
+                             lambda v: int(v.sum()) if v.notna().any() else None),
+        max_abs_seven_hour_mwh=("seven_hour_abs_difference_mwh", "max"),
+        max_abs_eight_hour_mwh=("eight_hour_abs_difference_mwh", "max")))
     return out, summary
 
 
