@@ -1,0 +1,59 @@
+name: Paper C verified source EIA930 fuel reconciliation supplementary figure
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-fuel-reconciliation-suppfigure.yml'
+      - 'src/grid_resilience/paperc_2024_fuel_reconciliation_suppfigure.py'
+      - 'tests/test_paperc_2024_fuel_reconciliation_suppfigure.py'
+jobs:
+  source-supplement-figure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and run publication figure data-integrity tests
+        run: |
+          python -m pip install -e '.[dev]' matplotlib
+          python -m pytest -q tests/test_paperc_2024_fuel_reconciliation_suppfigure.py
+      - name: Download exactly audited successful 161-hour source results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/paperc_fuel_supp/source outputs/paperc_fuel_supp/figures
+          gh run download 42855419578 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-2024-161h-original-seven-eight-fuel-hourly-reconciliation \
+            --dir outputs/paperc_fuel_supp/source
+      - name: Render only from source-admitted original data and verify figure output
+        run: |
+          python -m grid_resilience.paperc_2024_fuel_reconciliation_suppfigure \
+            --hourly outputs/paperc_fuel_supp/source/paper_c_2024_161h_source_seven_eight_hourly.csv \
+            --summary outputs/paperc_fuel_supp/source/paper_c_2024_161h_source_seven_eight_summary.csv \
+            --output outputs/paperc_fuel_supp/figures
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          src=Path("outputs/paperc_fuel_supp/source")
+          h=pd.read_csv(src/"paper_c_2024_161h_source_seven_eight_hourly.csv")
+          s=pd.read_csv(src/"paper_c_2024_161h_source_seven_eight_summary.csv").set_index("ba")
+          assert len(h)==644 and s.loc["CISO","nonzero_eight_hours"]==78
+          assert s.loc["CISO","abs_eight_difference_mwh"]==85
+          assert s.loc["CISO","signed_eight_difference_mwh"]==-11
+          for f in Path("outputs/paperc_fuel_supp/figures").iterdir():
+              assert f.stat().st_size>1000
+          print("VALIDATED SUPPLEMENT FIGURE FROM ORIGINAL EIA930 AUDITED COHORT")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-original-2024-161h-fuel-reconciliation-png-pdf
+          path: |
+            outputs/paperc_fuel_supp/figures/
+            outputs/paperc_fuel_supp/source/paper_c_2024_161h_source_seven_eight_scope.json
+            outputs/paperc_fuel_supp/source/paper_c_2024_161h_source_seven_eight_summary.csv
+          if-no-files-found: error
