@@ -80,10 +80,11 @@ def draw(independent, contrasts, output):
     out = Path(output)
     out.mkdir(parents=True, exist_ok=True)
     colors = {"isolated": "#527f9a", "links_10pct": "#bb7455"}
-    fig = plt.figure(figsize=(9.4, 8.7), layout="constrained")
-    gs = fig.add_gridspec(3, 1, height_ratios=[1, 1.2, 0.22])
-    axes = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[1, 0])]
-    foot = fig.add_subplot(gs[2, 0])
+    # Explicit publication geometry avoids automatic layout collapse.
+    fig = plt.figure(figsize=(10.4, 9.2))
+    axes = [fig.add_axes([0.12, 0.60, 0.82, 0.32]),
+            fig.add_axes([0.12, 0.235, 0.82, 0.28])]
+    foot = fig.add_axes([0.12, 0.035, 0.82, 0.10])
     foot.axis("off")
     pos = np.arange(4)
     for delta, variant in [(-0.19, "isolated"), (+0.19, "links_10pct")]:
@@ -118,7 +119,7 @@ def draw(independent, contrasts, output):
     axes[1].legend(ncol=4, frameon=False, fontsize=9, loc="upper center")
     axes[1].grid(axis="y", alpha=0.2)
     axes[1].set_axisbelow(True)
-    foot.text(0.0, 0.65,
+    foot.text(0.0, 0.80,
              "I = U(heat + wind) − U(heat) − U(wind) + U(baseline). U is modeled unserved energy.\n"
              "Partial 2024 EIA860 capacity and hypothetical links; four adjacent weeks are NOT independent events.\n"
              "Not measured power shortages, actual outages, or probabilistic EENS.",
