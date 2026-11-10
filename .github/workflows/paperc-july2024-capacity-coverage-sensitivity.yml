@@ -39,12 +39,14 @@ jobs:
           p=Path("outputs/paperc_capacity/archived")
           assert (p/"inputs/week_1/demand.csv").is_file()
           assert (p/"inputs/week_3/weather.csv").is_file()
+          assert (p/"inputs/week_2/demand.csv").is_file()
+          assert (p/"inputs/week_4/weather.csv").is_file()
           assert (p/"results/july_four_week_factorial_interaction_by_ba.csv").is_file()
           pd.DataFrame(columns=["from_ba","to_ba","capacity_mw"]).to_csv(
               p/"inputs/isolated_ba_links.csv",index=False)
           print("Original 2024 July 168h input and baseline original model restored")
           PY
-      - name: Run 48 original-source PyPSA optimizations for missing-capacity stability
+      - name: Run 96 original-source PyPSA optimizations for missing-capacity stability
         run: |
           python -m grid_resilience.paperc_2024_capacity_coverage_sensitivity \
             --prepared outputs/paperc_capacity/archived/inputs \
@@ -57,17 +59,17 @@ jobs:
           p=Path("outputs/paperc_capacity/sensitivity")
           rows=pd.read_csv(p/"paperc_2024_capacity_coverage_model_interactions.csv")
           m=json.loads((p/"paperc_2024_capacity_coverage_scope.json").read_text())
-          assert len(rows)==60 and len(rows.loc[rows.ba=="SYSTEM"])==12
-          assert m["scenario_optimizations"]==48 and m["ba_solver_records"]==192
+          assert len(rows)==120 and len(rows.loc[rows.ba=="SYSTEM"])==24
+          assert m["scenario_optimizations"]==96 and m["ba_solver_records"]==384
           assert m["maximum_original_anchor_difference_mwh"]<0.001
           assert not m["additional_firm_capacity_observed_or_eia860_verified"]
           assert not m["actual_eens_or_blackouts_estimated"]
           print("ORIGINAL-SOLVER ANCHOR MATCHES AND ASSUMPTION SEPARATION VERIFIED")
           PY
-      - name: Upload compact science results not 48 transient solver folders
+      - name: Upload compact science results not 96 transient solver folders
         uses: actions/upload-artifact@v4
         with:
-          name: paperc-2024-week1-week3-hypothetical-firm-capacity-coverage-sensitivity
+          name: paperc-2024-all-four-weeks-hypothetical-firm-capacity-coverage-sensitivity
           path: |
             outputs/paperc_capacity/sensitivity/paperc_2024_capacity_coverage_model_interactions.csv
             outputs/paperc_capacity/sensitivity/paperc_2024_capacity_coverage_system_interactions.csv
