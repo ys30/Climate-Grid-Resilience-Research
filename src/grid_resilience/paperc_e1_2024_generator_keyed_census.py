@@ -20,6 +20,15 @@ REASONS=("admitted_single_fuel_nonstorage_candidate",
          "storage_excluded",
          "unmapped_primary_fuel")
 
+def storage_identity(frame):
+    """Identify EIA860 battery and pumped-storage reported technologies."""
+    tech=frame["reported_technology"].fillna("").astype(str)
+    mover=frame["prime_mover"].fillna("").astype(str).str.upper()
+    fuel=frame["energy_source_1"].fillna("").astype(str).str.upper()
+    return (tech.str.contains(r"Storage|Batter(?:y|ies)|Pumped",case=False,regex=True)
+            | mover.isin(("BA","PS")) | fuel.eq("MWH"))
+
+
 def census(archive):
     gh, rows=_worksheet(archive,"3_1_Generator","Operable")
     ph, plants=_worksheet(archive,"2___Plant","Plant")
@@ -54,7 +63,7 @@ def census(archive):
     fuel=x.energy_source_1.str.upper()
     second=x.energy_source_2.str.upper()
     multi=x.multiple_fuels.str.upper().isin(("Y","YES","1","TRUE"))|second.ne("")
-    storage=(x.reported_technology.str.contains(r"Storage|Batter(?:y|ies)|Pumped",case=False,regex=True)\n             | x.prime_mover.str.upper().isin(("BA","PS")) | fuel.eq("MWH"))
+    storage=storage_identity(x)
     power=pd.to_numeric(x.nameplate_capacity_mw,errors="coerce")
     valid=power.notna() & power.gt(0)
     supported=fuel.isin(FUEL_TO_TECH)
