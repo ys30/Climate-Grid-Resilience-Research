@@ -1,0 +1,73 @@
+name: Paper C Grand Coulee hypothetical model versus observed pumping figure
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-grand-coulee-model-observed-figure.yml'
+      - 'src/grid_resilience/paperc_grand_coulee_model_observation_figure.py'
+      - 'tests/test_paperc_grand_coulee_model_observation_figure.py'
+jobs:
+  source-separated-figure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate four model scope and original 31-day source data regressions
+        run: |
+          python -m pip install -e '.[dev]' numpy matplotlib
+          python -m pytest -q tests/test_paperc_grand_coulee_model_observation_figure.py
+      - name: Download independently CI-audited original model and USACE joint observational source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/paperc_grand_main/model outputs/paperc_grand_main/observed outputs/paperc_grand_main/figure
+          gh run download 42130327635 --repo ys30/Climate-Grid-Resilience-Research \
+            --name bpat-grand-coulee-314mw-irrigation-competing-ps-operating-availability-sensitivity \
+            --dir outputs/paperc_grand_main/model
+          gh run download 42332073470 --repo ys30/Climate-Grid-Resilience-Research \
+            --name grand-coulee-2024-july-real-pumping-28day-and-three-independent-water-source-reconciliation \
+            --dir outputs/paperc_grand_main/observed
+      - name: Render separated hypothetical model and historical pump observation panels
+        run: |
+          set -euo pipefail
+          find_unique() {
+            mapfile -t paths < <(find "$1" -type f -name "$2")
+            if [ "${#paths[@]}" -ne 1 ]; then
+              printf "Expected one %s, found %s\n" "$2" "${#paths[@]}" >&2
+              exit 2
+            fi
+            printf "%s" "${paths[0]}"
+          }
+          MROOT=outputs/paperc_grand_main/model
+          OROOT=outputs/paperc_grand_main/observed
+          MODEL=$(find_unique "$MROOT" grand_coulee_ps_2024_july_fractional_access_hypothetical_interaction.csv)
+          ASSUMPTIONS=$(find_unique "$MROOT" grand_coulee_irrigation_competition_assumptions.json)
+          OBSERVED=$(find_unique "$OROOT" grand_coulee_2024_july_31day_usace_usbr_usgs_pumping_lake_observation_reconciliation.csv)
+          python -m grid_resilience.paperc_grand_coulee_model_observation_figure \
+            --model "$MODEL" --assumptions "$ASSUMPTIONS" --observed "$OBSERVED" \
+            --output outputs/paperc_grand_main/figure
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path("outputs/paperc_grand_main/figure")
+          scope=json.loads((root/"paper_c_grand_coulee_model_observation_scope.json").read_text())
+          assert scope["model_baseline_reductions_mwh"][0]==0
+          assert abs(scope["model_baseline_reductions_mwh"][-1]-27641.637424)<0.001
+          assert scope["observed_project_pumping_july_1_28_mwh"]==169160
+          assert scope["observed_project_pumping_july_1_31_mwh"]==175641
+          assert not scope["historical_eens_calibrated"]
+          for ext in ("png","pdf"):
+              assert (root/f"paper_c_grand_coulee_model_vs_observed_context.{ext}").stat().st_size>1000
+          print("SOURCE SEPARATION + ORIGINAL MODEL/OBSERVATION FIGURE VERIFIED")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-grand-coulee-2024-model-vs-observed-separated-png-pdf
+          path: outputs/paperc_grand_main/figure/
+          if-no-files-found: error
