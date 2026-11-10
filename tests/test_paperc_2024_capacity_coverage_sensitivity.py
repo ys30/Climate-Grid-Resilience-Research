@@ -55,7 +55,7 @@ def test_fail_closed_source_coverage():
 
 def test_scenario_matrix_and_ba_system_reconcile():
     x=summarize(model_rows())
-    assert len(x)==60
+    assert len(x)==120
     assert x.loc[x.ba.eq("SYSTEM"),"modeled_heat_wind_second_difference_mwh"].eq(80).all()
     assert validate_original_no_change(x,original_summary())==0
 
