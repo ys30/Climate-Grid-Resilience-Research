@@ -37,7 +37,7 @@ def verify(model, assumptions, observed):
     import re
     for k in keys:
         # Parse only the MW part; the MWh field must not masquerade as a second MW setting.
-        match = re.fullmatch(r"PS_(\\d+)MW_\\d+MWh_eta\\d+", k)
+        match = re.fullmatch(r"PS_(\d+)MW_\d+MWh_eta\d+", k)
         if match is None:
             raise ValueError(f"Malformed original PS scenario identifier: {k}")
         value_mw = float(match.group(1))
