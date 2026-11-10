@@ -43,7 +43,7 @@ def test_missing_original_proxy_ba_is_rejected():
 
 def test_duplicate_annual_technology_is_rejected():
     a,b,c,d=fixtures()
-    with pytest.raises(ValueError,match="annual"):
+    with pytest.raises(ValueError,match="Annual"):
         reconcile(pd.concat([a,a.iloc[[0]]],ignore_index=True),b,c,d)
 
 
