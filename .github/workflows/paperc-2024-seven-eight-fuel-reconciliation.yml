@@ -1,0 +1,83 @@
+name: Paper C original EIA930 161h seven-eight category hourly reconciliation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-2024-seven-eight-fuel-reconciliation.yml'
+      - 'src/grid_resilience/paperc_2024_seven_eight_fuel_reconciliation.py'
+      - 'tests/test_paperc_2024_seven_eight_fuel_reconciliation.py'
+jobs:
+  original-hourly-reconciliation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run strict missingness and original-key synthetic regression tests
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_2024_seven_eight_fuel_reconciliation.py
+      - name: Restore previously audited official original EIA930 source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/fuel_78/source outputs/fuel_78/six outputs/fuel_78/results
+          gh run download 42462457999 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-official-eia930-2023-2024-hourly-fuel-panel-original-schema \
+            --dir outputs/fuel_78/source
+          gh run download 42704596752 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-2024-161h-original-six-fuel-observed-ba-hour-cohort \
+            --dir outputs/fuel_78/six
+      - name: Check original source flags and no missing equals zero provenance
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("outputs/fuel_78/source/results/paperc_2023_2024_original_fuel_reporting_scope.json")
+          d=json.loads(p.read_text())
+          assert d["blank_never_assumed_zero"]
+          assert d["2024_wind_hydro_solar_old_vs_new_not_assumed_equivalent"]
+          print("STRICT ORIGINAL EIA930 TAXONOMY/MISSINGNESS GATES PASSED")
+          PY
+      - name: Reconcile original signed fuel categories hour by hour
+        run: |
+          python -m grid_resilience.paperc_2024_seven_eight_fuel_reconciliation \
+            --fuel outputs/fuel_78/source/results/paperc_2023_2024_original_hourly_ba_fuel_labels.csv \
+            --six outputs/fuel_78/six/results/paperc_july2024_161h_ba_six_fuel_original_hourly.csv \
+            --output outputs/fuel_78/results
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          p=Path("outputs/fuel_78/results")
+          h=pd.read_csv(p/"paper_c_2024_161h_source_seven_eight_hourly.csv")
+          s=pd.read_csv(p/"paper_c_2024_161h_source_seven_eight_summary.csv").set_index("ba")
+          scope=json.loads((p/"paper_c_2024_161h_source_seven_eight_scope.json").read_text())
+          assert len(h)==644 and set(h.ba)=={"AZPS","BPAT","CISO","SRP"}
+          assert s.hours.eq(161).all()
+          for ba in ["AZPS","CISO","SRP"]:
+              assert s.loc[ba,"seven_numeric_hours"]==161
+          assert s.loc["BPAT","seven_numeric_hours"]==0
+          assert h.all_16_categories_certified_complete.eq(False).all()
+          assert h.difference_is_not_unserved_energy_or_EENS.eq(True).all()
+          assert scope["original_blanks_never_zero"] and scope["not_outages_or_EENS"]
+          # Upstream audited signed aggregate identities. Not hourly zero assertions:
+          # any signed cancellations remain visible in absolute-hour differences.
+          for ba in ["AZPS","SRP"]:
+              assert abs(s.loc[ba,"signed_seven_difference_mwh"])<1e-6
+          assert s.loc["CISO","eight_numeric_hours"]==161
+          assert abs(s.loc["CISO","signed_eight_difference_mwh"]+11)<1e-6
+          assert s.loc["CISO","abs_eight_difference_mwh"]>=11
+          print("VERIFIED REAL ORIGINAL SOURCE 7/8-CATEGORY HOURLY DIAGNOSTICS")
+          print(s.to_string())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2024-161h-original-seven-eight-fuel-hourly-reconciliation
+          path: outputs/fuel_78/results/
+          if-no-files-found: error
