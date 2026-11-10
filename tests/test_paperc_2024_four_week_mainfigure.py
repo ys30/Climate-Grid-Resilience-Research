@@ -1,6 +1,7 @@
 """Main-figure provenance and exact recomputation tests (synthetic)."""
 import pandas as pd
 import pytest
+import warnings
 
 from grid_resilience.july2024_four_week_factorial_replication import summarize
 from grid_resilience.paperc_2024_four_week_mainfigure import prepare, draw, REQUIRED_META
@@ -54,6 +55,9 @@ def test_figures_written_from_recomputed_model_results(tmp_path):
     pytest.importorskip("matplotlib")
     dispatch, ba, contrast, scope = sample()
     independent, system = prepare(dispatch, ba, contrast, scope)
-    draw(independent, system, tmp_path)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        draw(independent, system, tmp_path)
+    assert not [w for w in caught if "layout" in str(w.message).lower()], caught
     assert (tmp_path / "paper_c_july2024_four_week_factorial_main.png").stat().st_size > 1000
     assert (tmp_path / "paper_c_july2024_four_week_factorial_main.pdf").stat().st_size > 1000
