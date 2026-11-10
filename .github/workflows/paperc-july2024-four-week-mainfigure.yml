@@ -32,17 +32,27 @@ jobs:
             --dir outputs/paperc_fourweek_main/source
       - name: Recalculate all source-derived factorial responses and render paper figures
         run: |
+          SOURCE=outputs/paperc_fourweek_main/source
+          echo "Original archived source paths:"
+          find "$SOURCE" -type f | sort
+          DISPATCH=$(find "$SOURCE" -name july_four_week_four_scenario_ba_dispatch.csv -type f)
+          BY_BA=$(find "$SOURCE" -name july_four_week_factorial_interaction_by_ba.csv -type f)
+          CONTRAST=$(find "$SOURCE" -name july_four_week_isolated_vs_links_interaction.csv -type f)
+          SCOPE=$(find "$SOURCE" -name july_four_week_replication_scope.json -type f)
+          test -f "$DISPATCH" && test -f "$BY_BA" && test -f "$CONTRAST" && test -f "$SCOPE"
           python -m grid_resilience.paperc_2024_four_week_mainfigure \
-            --dispatch outputs/paperc_fourweek_main/source/july_four_week_four_scenario_ba_dispatch.csv \
-            --by-ba outputs/paperc_fourweek_main/source/july_four_week_factorial_interaction_by_ba.csv \
-            --contrast outputs/paperc_fourweek_main/source/july_four_week_isolated_vs_links_interaction.csv \
-            --scope outputs/paperc_fourweek_main/source/july_four_week_replication_scope.json \
+            --dispatch "$DISPATCH" \
+            --by-ba "$BY_BA" \
+            --contrast "$CONTRAST" \
+            --scope "$SCOPE" \
             --output outputs/paperc_fourweek_main/figures
           python - <<'PY'
           import pandas as pd
           from pathlib import Path
           p=Path("outputs/paperc_fourweek_main/source")
-          c=pd.read_csv(p/"july_four_week_isolated_vs_links_interaction.csv")
+          files=list(p.rglob("july_four_week_isolated_vs_links_interaction.csv"))
+          assert len(files)==1, files
+          c=pd.read_csv(files[0])
           assert len(c)==4
           assert abs(c.links_10pct.iloc[0]-22515.998)<0.02
           assert abs(c.links_10pct.iloc[1]-16204.695)<0.02
