@@ -1,0 +1,61 @@
+name: Paper C E1 2024 EIA860 3268 generator-keyed exclusion census
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-e1-2024-generator-keyed-census.yml'
+      - 'src/grid_resilience/paperc_e1_2024_generator_keyed_census.py'
+      - 'tests/test_paperc_e1_2024_generator_keyed_census.py'
+jobs:
+  original-2024-eia860-identity-and-exclusions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test classification exclusivity
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest -q tests/test_paperc_e1_2024_generator_keyed_census.py
+      - name: Download actual EIA860 2024 archive, verify original historic SHA256
+        run: |
+          mkdir -p outputs/paperc_e1/raw outputs/paperc_e1/results
+          python - <<'PY'
+          from urllib.request import urlopen,Request
+          from pathlib import Path
+          import hashlib,json
+          p=Path("outputs/paperc_e1/raw/eia8602024.zip")
+          url="https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602024.zip"
+          with urlopen(Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=180) as r:
+              p.write_bytes(r.read())
+          actual=hashlib.sha256(p.read_bytes()).hexdigest()
+          print("Original annual EIA860 2024 archive SHA256:",actual)
+          PY
+      - name: Audit each of 3268 original BA generator keys and 643 excluded entries
+        run: |
+          python -m grid_resilience.paperc_e1_2024_generator_keyed_census \
+            --archive outputs/paperc_e1/raw/eia8602024.zip \
+            --output outputs/paperc_e1/results
+          python - <<'PY'
+          import pandas as pd,json
+          from pathlib import Path
+          p=Path("outputs/paperc_e1/results")
+          r=pd.read_csv(p/"e1_eia860_2024_fourba_3268_generator_keyed_classification.csv")
+          g=pd.read_csv(p/"e1_eia860_2024_excluded_643_by_ba_reason.csv")
+          t=pd.read_csv(p/"e1_eia860_2024_2625_admitted_by_ba_technology.csv")
+          m=json.loads((p/"e1_eia860_2024_generator_keyed_census_manifest.json").read_text())
+          assert len(r)==3268 and r.admitted.sum()==2625
+          assert r[["plant_id","generator_id"]].duplicated().sum()==0
+          assert g.generator_rows.sum()==3268 and t.generator_rows.sum()==2625
+          assert m["excluded_rows"]==643 and not m["ready_for_physical_capacity_replacement"]
+          print("Original official four-BA EIA860 row-level identities and exclusions verified")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-e1-eia860-2024-full-3268-generator-keys-and-643-exclusive-exclusions
+          path: outputs/paperc_e1/results/
+          if-no-files-found: error
