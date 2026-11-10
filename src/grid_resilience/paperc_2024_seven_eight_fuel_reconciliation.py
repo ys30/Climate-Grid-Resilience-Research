@@ -7,6 +7,7 @@ Scope: 161 UTC hours in the 2024 Jul-Dec modern fuel taxonomy.
 from pathlib import Path
 import argparse
 import json
+import hashlib
 import pandas as pd
 
 from grid_resilience.paperc_2024_full_fuel_schema_audit import BAS, N, START
@@ -116,11 +117,30 @@ def main():
     dest.mkdir(parents=True, exist_ok=True)
     hourly.to_csv(dest / "paper_c_2024_161h_source_seven_eight_hourly.csv", index=False)
     summary.to_csv(dest / "paper_c_2024_161h_source_seven_eight_summary.csv", index=False)
+    def file_sha256(path):
+        digest = hashlib.sha256()
+        with Path(path).open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    provenance = {
+        "source": "original EIA-930 2024 Jul-Dec modern fuel taxonomy",
+        "start_utc": START.isoformat(), "hours_per_BA": N,
+        "ba_list": list(BAS),
+        "source_input_sha256": {
+            "original_full_fuel_csv": file_sha256(args.fuel),
+            "source_admitted_six_fuel_csv": file_sha256(args.six)
+        },
+        "coverage_by_BA": summary[["ba", "hours", "six_numeric_hours",
+                                  "seven_numeric_hours", "eight_numeric_hours"]].to_dict("records"),
+        "original_blanks_never_zero": True,
+        "full_16_fuel_closure_certified": False,
+        "not_outages_or_EENS": True,
+        "hourly_vs_signed_aggregate_differences_retained": True,
+        "data_status": "source-reported accounting diagnostic only"
+    }
     (dest / "paper_c_2024_161h_source_seven_eight_scope.json").write_text(
-        json.dumps({"source": "original EIA-930 2024 Jul-Dec modern fuel taxonomy",
-                    "hours_per_BA": N, "original_blanks_never_zero": True,
-                    "full_16_fuel_closure_certified": False,
-                    "not_outages_or_EENS": True}, indent=2) + "\n")
+        json.dumps(provenance, indent=2) + "\n")
     print(summary.to_string(index=False))
 
 
