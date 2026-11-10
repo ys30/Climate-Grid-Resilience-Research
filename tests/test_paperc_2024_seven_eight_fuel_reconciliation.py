@@ -69,3 +69,19 @@ def test_reject_duplicate_source_hour_category():
     fuel, six = fixtures()
     with pytest.raises(ValueError, match="Duplicate"):
         reconcile(pd.concat([fuel, fuel.iloc[:1]], ignore_index=True), six)
+
+
+def test_signed_cancellation_still_records_hourly_absolute_disagreement():
+    fuel, six = fixtures()
+    # Make a two-hour AZPS offsetting residual without changing the weekly signed total.
+    mask = (six.ba == "AZPS")
+    two = six.index[mask][:2]
+    six.loc[two[0], "net_generation_mw"] += 5.0
+    six.loc[two[1], "net_generation_mw"] -= 5.0
+    _, summary = reconcile(fuel, six)
+    az = summary.set_index("ba").loc["AZPS"]
+    assert az.signed_seven_difference_mwh == pytest.approx(0)
+    assert az.abs_seven_difference_mwh == pytest.approx(10)
+    assert az.nonzero_seven_hours == 2
+    assert az.max_abs_seven_hour_mwh == pytest.approx(5)
+    assert pd.isna(summary.set_index("ba").loc["BPAT", "nonzero_seven_hours"])
