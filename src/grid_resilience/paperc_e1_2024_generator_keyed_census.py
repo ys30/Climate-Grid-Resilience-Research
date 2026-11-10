@@ -54,7 +54,7 @@ def census(archive):
     fuel=x.energy_source_1.str.upper()
     second=x.energy_source_2.str.upper()
     multi=x.multiple_fuels.str.upper().isin(("Y","YES","1","TRUE"))|second.ne("")
-    storage=x.reported_technology.str.contains("Storage|Battery|Pumped",case=False,regex=True)
+    storage=(x.reported_technology.str.contains(r"Storage|Batter(?:y|ies)|Pumped",case=False,regex=True)\n             | x.prime_mover.str.upper().isin(("BA","PS")) | fuel.eq("MWH"))
     power=pd.to_numeric(x.nameplate_capacity_mw,errors="coerce")
     valid=power.notna() & power.gt(0)
     supported=fuel.isin(FUEL_TO_TECH)
