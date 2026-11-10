@@ -29,9 +29,9 @@ def verify(model, assumptions, observed):
         raise ValueError("Historical PS model source/scope not admitted")
     if len(model.resource_scenario.unique()) != 4:
         raise ValueError("Model scenario keys not unique")
-    # The scenario is named by assumed PS MW; permit documented suffixes,
+    # The 78.5 MW fraction is rounded to PS_78MW in archived scenario names.\n    # The scenario is named by assumed PS MW; permit documented suffixes,
     # but require an unambiguous 0 / 78.5 / 157 / 314 MW mapping.
-    expected_mw = (0, 78.5, 157, 314)
+    expected_mw = (0, 78, 157, 314)
     keys = model.resource_scenario.astype(str).tolist()
     matches = []
     import re
