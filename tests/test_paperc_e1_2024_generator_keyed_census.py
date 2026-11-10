@@ -19,3 +19,14 @@ def test_disjoint_reason_labels_have_a_single_member():
     ])
     actual=select([~x.valid,x.multi,x.storage,~x.supported],list(REASONS)[1:],default=REASONS[0])
     assert list(actual)==list(REASONS)[1:]+list(REASONS)[:1]
+
+
+def test_eia860_plural_batteries_and_mwh_ba_are_storage_not_unmapped():
+    from grid_resilience.paperc_e1_2024_generator_keyed_census import storage_identity
+    frame=pd.DataFrame([
+       dict(reported_technology="Batteries",prime_mover="BA",energy_source_1="MWH"),
+       dict(reported_technology="Conventional Hydroelectric",prime_mover="HY",energy_source_1="WAT"),
+       dict(reported_technology="Hydroelectric Pumped Storage",prime_mover="PS",energy_source_1="WAT"),
+       dict(reported_technology="Natural Gas Fired Combined Cycle",prime_mover="CT",energy_source_1="NG")
+    ])
+    assert storage_identity(frame).tolist()==[True,False,True,False]
