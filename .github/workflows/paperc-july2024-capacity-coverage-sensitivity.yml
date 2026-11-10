@@ -1,0 +1,76 @@
+name: Paper C July 2024 missing-capacity interaction sensitivity
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-july2024-capacity-coverage-sensitivity.yml'
+      - 'src/grid_resilience/paperc_2024_capacity_coverage_sensitivity.py'
+      - 'tests/test_paperc_2024_capacity_coverage_sensitivity.py'
+jobs:
+  source-gated-capacity-stress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test original-model capacity response and exact scenario gates
+        run: |
+          python -m pip install -e '.[model,dev]'
+          python -m pytest -q tests/test_paperc_2024_capacity_coverage_sensitivity.py
+      - name: Retrieve original immutable 2024 July four-week source/model archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/paperc_capacity/archived outputs/paperc_capacity/sensitivity
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research \
+            --name july2024-4-disjoint-real-week-factorial-source-results \
+            --dir outputs/paperc_capacity/archived
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path("outputs/paperc_capacity/archived")
+          assert (p/"inputs/week_1/demand.csv").is_file()
+          assert (p/"inputs/week_3/weather.csv").is_file()
+          assert (p/"results/july_four_week_factorial_interaction_by_ba.csv").is_file()
+          pd.DataFrame(columns=["from_ba","to_ba","capacity_mw"]).to_csv(
+              p/"inputs/isolated_ba_links.csv",index=False)
+          print("Original 2024 July 168h input and baseline original model restored")
+          PY
+      - name: Run 48 original-source PyPSA optimizations for missing-capacity stability
+        run: |
+          python -m grid_resilience.paperc_2024_capacity_coverage_sensitivity \
+            --prepared outputs/paperc_capacity/archived/inputs \
+            --original-ba outputs/paperc_capacity/archived/results/july_four_week_factorial_interaction_by_ba.csv \
+            --output outputs/paperc_capacity/sensitivity
+          python - <<'PY'
+          import pandas as pd
+          import json
+          from pathlib import Path
+          p=Path("outputs/paperc_capacity/sensitivity")
+          rows=pd.read_csv(p/"paperc_2024_capacity_coverage_model_interactions.csv")
+          m=json.loads((p/"paperc_2024_capacity_coverage_scope.json").read_text())
+          assert len(rows)==60 and len(rows.loc[rows.ba=="SYSTEM"])==12
+          assert m["scenario_optimizations"]==48 and m["ba_solver_records"]==192
+          assert m["maximum_original_anchor_difference_mwh"]<0.001
+          assert not m["additional_firm_capacity_observed_or_eia860_verified"]
+          assert not m["actual_eens_or_blackouts_estimated"]
+          print("ORIGINAL-SOLVER ANCHOR MATCHES AND ASSUMPTION SEPARATION VERIFIED")
+          PY
+      - name: Upload compact science results not 48 transient solver folders
+        uses: actions/upload-artifact@v4
+        with:
+          name: paperc-2024-week1-week3-hypothetical-firm-capacity-coverage-sensitivity
+          path: |
+            outputs/paperc_capacity/sensitivity/paperc_2024_capacity_coverage_model_interactions.csv
+            outputs/paperc_capacity/sensitivity/paperc_2024_capacity_coverage_system_interactions.csv
+            outputs/paperc_capacity/sensitivity/paperc_2024_capacity_coverage_scope.json
+            outputs/paperc_capacity/sensitivity/capacity_plus_*pct.csv
+          if-no-files-found: error
