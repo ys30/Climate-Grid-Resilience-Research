@@ -1,0 +1,77 @@
+name: Paper C cross-year and four-week 2024 shared-anchor evidence bridge
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-crossyear-fourweek-anchor.yml'
+      - 'src/grid_resilience/paperc_crossyear_fourweek_bridge.py'
+      - 'tests/test_paperc_crossyear_fourweek_bridge.py'
+jobs:
+  independent-source-archive-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test fail-shut shared-year source and physical-admission gates
+        run: |
+          python -m pip install -e '.[dev]' numpy
+          python -m pytest -q tests/test_paperc_crossyear_fourweek_bridge.py
+      - name: Restore previously CI verified crossyear and four-week independent archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p outputs/paperc_anchor/source_crossyear outputs/paperc_anchor/source_fourweek outputs/paperc_anchor/results
+          gh run download 42419234209 --repo ys30/Climate-Grid-Resilience-Research \
+            --name paperc-2023-summer-crossyear-source-heat-active-conditional-model \
+            --dir outputs/paperc_anchor/source_crossyear
+          gh run download 42104106361 --repo ys30/Climate-Grid-Resilience-Research \
+            --name july2024-4-disjoint-real-week-factorial-source-results \
+            --dir outputs/paperc_anchor/source_fourweek
+      - name: Independently check same 2024 source-model anchor and record non-independence
+        run: |
+          set -euo pipefail
+          find_unique() {
+            mapfile -t paths < <(find "$1" -type f -name "$2")
+            if [ "${#paths[@]}" -ne 1 ]; then
+              printf "Expected exactly one %s in %s, got %s\n" "$2" "$1" "${#paths[@]}" >&2
+              exit 2
+            fi
+            printf "%s" "${paths[0]}"
+          }
+          CROOT=outputs/paperc_anchor/source_crossyear
+          FROOT=outputs/paperc_anchor/source_fourweek
+          CROSS=$(find_unique "$CROOT" crossyear_2023_2024_factorial_model_comparison.csv)
+          CGATE=$(find_unique "$CROOT" crossyear_source_admission.json)
+          FSYS=$(find_unique "$FROOT" july_four_week_isolated_vs_links_interaction.csv)
+          FBA=$(find_unique "$FROOT" july_four_week_factorial_interaction_by_ba.csv)
+          FGATE=$(find_unique "$FROOT" july_four_week_replication_scope.json)
+          python -m grid_resilience.paperc_crossyear_fourweek_bridge \
+            --cross "$CROSS" --four-system "$FSYS" --four-ba "$FBA" \
+            --cross-gate "$CGATE" --four-gate "$FGATE" \
+            --output outputs/paperc_anchor/results
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          p=Path("outputs/paperc_anchor/results")
+          x=pd.read_csv(p/"paper_c_crossyear_fourweek_shared_2024_anchor.csv")
+          m=json.loads((p/"paper_c_crossyear_fourweek_common_anchor_scope.json").read_text())
+          assert len(x)==2
+          assert x.crossyear_minus_fourweek_interaction_mwh.abs().max()<0.001
+          assert x.crossyear_minus_fourweek_baseline_mwh.abs().max()<0.001
+          assert m["shared_2024_week1_is_same_original_model_anchor"]
+          assert m["crossyear_and_fourweek_2024_results_not_independent_replications"]
+          assert m["number_of_independent_physical_adequacy_validations"]==0
+          print("SOURCE-VERIFIED SAME-WEEK 2024 MODEL ANCHOR AGREEMENT")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-c-crossyear-fourweek-common-2024-model-anchor
+          path: outputs/paperc_anchor/results/
+          if-no-files-found: error
