@@ -1,6 +1,6 @@
 # Paper C-1 — frozen research archive and access
 
-**Paper:** *When Capacity Representation Changes Compound Heat–Wind Stress Interactions: A Source-Audited Power-System Screening Study*.
+**Paper:** *Modeled compound heat and low-wind stress depends on resource representation: a reserve-margin explanation for four western US balancing authorities*.
 
 **Author:** Yu Song (sole author).
 
@@ -44,6 +44,6 @@ GitHub Actions execution artifacts and logs can expire; archived Git commit URLs
 
 ## Suggested citation (until DOI publication)
 
-Song, Y. (2026). *When Capacity Representation Changes Compound Heat–Wind Stress Interactions: A Source-Audited Power-System Screening Study* [research software and data, unpublished]. Source commit `6b549a6612f280646389f87bfc35453dd0e5d7dc`. https://github.com/ys30/Climate-Grid-Resilience-Research
+Song, Y. (2026). *Modeled compound heat and low-wind stress depends on resource representation: a reserve-margin explanation for four western US balancing authorities* [research software and data, unpublished]. Source commit `6b549a6612f280646389f87bfc35453dd0e5d7dc`. https://github.com/ys30/Climate-Grid-Resilience-Research
 
 Replace this provisional reference with the permanent dataset/software DOI citations after actual Zenodo publication.
