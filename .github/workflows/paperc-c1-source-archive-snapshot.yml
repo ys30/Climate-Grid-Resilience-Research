@@ -1,0 +1,36 @@
+name: Paper C-1 archival source code snapshot (no new experiments)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/paperc-c1-source-archive-snapshot.yml'
+jobs:
+  archive-fixed-code:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6b549a6612f280646389f87bfc35453dd0e5d7dc
+          persist-credentials: false
+      - name: Create immutable tracked-source snapshot from the original frozen commit
+        run: |
+          mkdir -p package
+          git archive --format=zip --prefix=Climate-Grid-Resilience-Research_C1_6b549a6/ \
+            6b549a6612f280646389f87bfc35453dd0e5d7dc \
+            -o package/Climate_Grid_C1_Source_6b549a6.zip
+          sha256sum package/Climate_Grid_C1_Source_6b549a6.zip > package/SOURCE_ZIP_SHA256.txt
+          printf '%s\n' \
+            'C1 frozen source SHA: 6b549a6612f280646389f87bfc35453dd0e5d7dc' \
+            'Exact git-tracked repository content, including project A/B/C scripts as of pinned commit; C1 relevant workflows and code identified in separate dataset deposit.' \
+            'This code snapshot is not a historical dependency lock or proof of numerical bitwise reproduction.' \
+            'Original repository has no detected LICENSE file. Reuse permissions require author licensing decision.' \
+            > package/SOURCE_SCOPE.txt
+          unzip -t package/Climate_Grid_C1_Source_6b549a6.zip | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paperc-c1-immutable-git-source-snapshot-6b549a6
+          path: package/
+          if-no-files-found: error
