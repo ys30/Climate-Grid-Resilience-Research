@@ -1,6 +1,6 @@
 # Paper C-1 — Industry-facing results and provenance brief
 
-**Study (solo author: Yu Song):** *When Capacity Representation Changes Compound Heat–Wind Stress Interactions: A Source-Audited Power-System Screening Study*. Current manuscript v13; research preparation, **not yet published**.
+**Study (solo author: Yu Song):** *Modeled compound heat and low-wind stress depends on resource representation: a reserve-margin explanation for four western US balancing authorities*. Current sole-author manuscript v13, updated title and reserve-margin framing; research preparation, **not yet published**.
 
 **Purpose:** Test whether climate-driven stress interactions are robust to partial generation-resource coverage, rather than assuming outputs of a simplified power model represent actual outages. Designed for climate-risk analytics, grid scenario evaluation, data engineering, and model-risk communication.
 
@@ -46,4 +46,4 @@ The 672-hour Grand Coulee example is a **separate** isolated-BA, energy-limited 
 
 The project demonstrates auditable source-to-simulation pipelines, factorial scenario design, optimization-backed sensitivity testing, and explicit model governance. Its highest-confidence finding is a **structural modeling sensitivity**: the same weather shocks can appear more or less nonadditive as the represented resource margin moves. It does not quantify real Western US outage risk.
 
-*Latest manuscript: author-supplied v13 final submission draft (13 November 2026); numerical results unchanged and E1–E3 frozen. No new experiments were run for this overview.*
+*Latest source of record: author-uploaded v13 submission package with its final title, sole-author declaration, four main tables and five main figures. The manuscript and cover letter name Yu Song as sole author, University of New Mexico as the affiliated institution. Numerical results remain unchanged and E1–E3 are frozen. No new experiments were run for this overview.*
